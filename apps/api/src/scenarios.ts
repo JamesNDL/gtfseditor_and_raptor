@@ -337,6 +337,23 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
 
   const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
 
+  // Typical end-to-end speed of a mode in the published timetable (metres per second, stops included):
+  // the median over that day's trips of path length divided by scheduled time.
+  const speedCache = new Map<string, number>();
+  async function typicalSpeed(tx: Tx, baselineId: number, modeId: string, fallback: number): Promise<number> {
+    const key = `${baselineId}|${modeId}`;
+    const cached = speedCache.get(key);
+    if (cached) return cached;
+    const [row] = await tx`
+      select percentile_cont(0.5) within group (order by sh.length_m / (t.end_secs - t.start_secs)) as speed
+      from trips t join routes r on r.id = t.route_id join shapes sh on sh.id = t.shape_id
+      where t.baseline_id = ${baselineId} and t.scenario_id is null and r.mode_id = ${modeId}
+        and t.end_secs > t.start_secs + 120 and sh.length_m > 500`;
+    const speed = row?.speed && row.speed > 1 && row.speed < 40 ? Number(row.speed) : fallback;
+    speedCache.set(key, speed);
+    return speed;
+  }
+
   /**
    * Creates a new line through existing stops, with a timetable in both directions.
    * The path is drawn straight from stop to stop and run times come from a typical speed for the
@@ -388,6 +405,8 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       returning id`;
 
     const tripIds: number[] = [];
+    let outboundLine: [number, number][] | null = null;
+    const timing = { learned: 0, estimated: 0, speed: 0 };
     for (const direction of [0, 1]) {
       const order = direction === 0 ? stops : [...stops].reverse();
       // The path: along roads for road vehicles where it can be found, otherwise straight between stops.
@@ -395,7 +414,14 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       if (followRoads) {
         const found = await roadPath(tx, sc.baselineId, order.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat })));
         line = found.coords;
-        if (direction === 0) pathMethod = found.method;
+        if (direction === 0) {
+          pathMethod = found.method;
+          outboundLine = found.coords;
+        } else if (found.method !== 'roads' && outboundLine) {
+          // Without a routing server there is rarely a published path for the way back, so the
+          // return trip runs back along the outbound path rather than cutting straight across.
+          line = [...outboundLine].reverse();
+        }
       }
       const lineDist: number[] = [0];
       for (let i = 1; i < line.length; i++) lineDist.push(lineDist[i - 1] + distanceM(line[i - 1][0], line[i - 1][1], line[i][0], line[i][1]));
@@ -419,10 +445,32 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         dist.push(lineDist[at]);
       });
       // Arrival and departure at each stop, as seconds after the trip starts.
+      // Run time for each section. Best evidence first:
+      //   1. published trips that already run between these two stops: their median time;
+      //   2. otherwise the section's length at the typical speed of this mode on this day's timetable.
+      const speed = await typicalSpeed(tx, sc.baselineId, body.modeId, model.speed);
+      timing.speed = speed;
       const arr: number[] = [0];
       const dep: number[] = [0];
       for (let i = 1; i < order.length; i++) {
-        arr.push(dep[i - 1] + Math.max(30, Math.round((dist[i] - dist[i - 1]) / model.speed / 10) * 10));
+        const from = platform(order[i - 1], direction);
+        const to = platform(order[i], direction);
+        const [seen] = await tx`
+          select count(*)::int as n, percentile_cont(0.5) within group (order by b.arr - a.dep) as median
+          from stop_times a
+          join stop_times b on b.trip_id = a.trip_id and b.seq > a.seq and b.stop_id = ${to}
+          join trips t on t.id = a.trip_id
+          where a.stop_id = ${from} and t.scenario_id is null`;
+        let secs: number;
+        if (seen.n >= 3 && seen.median > 0) {
+          secs = Math.round(seen.median / 10) * 10;
+          timing.learned++;
+        } else {
+          // The typical speed already includes time spent at stops, so take the stop time back out.
+          secs = Math.max(30, Math.round(((dist[i] - dist[i - 1]) / speed - model.dwell) / 10) * 10);
+          timing.estimated++;
+        }
+        arr.push(dep[i - 1] + Math.max(20, secs));
         dep.push(i === order.length - 1 ? arr[i] : arr[i] + model.dwell);
       }
       const stopIds = order.map((s) => platform(s, direction));
@@ -458,7 +506,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     }
     const fleet = await assignVehicles(tx, sc, seq, tripIds);
     return {
-      summary: `New line ${name}: ${stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}${fleetNote(fleet)}`,
+      summary: `New line ${name}: ${stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}; run times: ${timing.learned} section${timing.learned === 1 ? '' : 's'} from published trips, ${timing.estimated} at the typical ${Math.round(timing.speed * 3.6)} km/h for this mode${fleetNote(fleet)}`,
       idMap: {},
       routeId: route.id,
     };
@@ -962,7 +1010,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const rows = await sql`
       select r.id, coalesce(r.short_name, '') as name, r.mode_id, coalesce(r.color, m.color) as color, ST_AsGeoJSON(s.geom) as geometry
       from routes r join modes m on m.id = r.mode_id
-      join patterns p on p.route_id = r.id and p.direction_id = 0
+      join patterns p on p.route_id = r.id
       join shapes s on s.id = p.shape_id
       where r.scenario_id = ${sc.id} and r.created_edit <= ${sc.head}`;
     return {

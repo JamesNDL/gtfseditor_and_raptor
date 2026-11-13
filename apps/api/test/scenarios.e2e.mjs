@@ -199,16 +199,56 @@ try {
   assert.ok((await get(`/api/baselines/${baseline.id}/routes${q}`)).some((r) => r.id === made.body.routeId && r.isNew));
   assert.ok(!(await get(`/api/baselines/${baseline.id}/routes`)).some((r) => r.id === made.body.routeId), 'not in the published list');
   const drawn = (await get(`/api/scenarios/${S}/lines`)).features;
-  assert.equal(drawn.length, 1);
-  // These stops are served in this order by a published bus route, so the path should follow it.
-  assert.ok(drawn[0].geometry.coordinates.length > picked.length, 'the path follows the road rather than cutting straight between stops');
+  assert.equal(drawn.length, 2, 'both directions are drawn');
+  // These stops are served in this order by a published bus route, so the path should follow it, both ways.
+  for (const d of drawn) assert.ok(d.geometry.coordinates.length > picked.length, 'each direction follows the road rather than cutting straight between stops');
+  // Run times come from the published trips between these stops, so they should match that trip's.
+  const src = (await get(`/api/trips/${busTrip.id}`)).stopTimes;
+  const published = src[src.length - 1].arr - src[0].dep;
+  const outbound = newTrips.find((t) => t.direction === 0);
+  const ours = outbound.endSecs - outbound.startSecs;
+  assert.ok(Math.abs(ours - published) < published * 0.35 + 120, `run time ${ours}s should be close to the published ${published}s`);
   assert.ok(oneNew.stopTimes[2].dist > oneNew.stopTimes[1].dist && oneNew.stopTimes[1].dist > 0, 'stops sit in order along the path');
   await get(`/api/patterns/${newRoute.patterns[0].id}/stringline${q}&others=0`);
+  // The moving dots must stay on the drawn path, in both directions, for the whole trip.
+  const { decodePack, tripPosition } = await import('../../../packages/core/src/pack.ts');
+  const packBuffer = await (await fetch(`${API}/api/scenarios/${S}/pack`)).arrayBuffer();
+  const mapPack = decodePack(packBuffer);
+  const metres = (a, b) => Math.hypot((a[0] - b[0]) * 111320 * Math.cos((a[1] * Math.PI) / 180), (a[1] - b[1]) * 110540);
+  const toSegment = (p, a, b) => {
+    const ax = (a[0] - p[0]) * 111320 * Math.cos((p[1] * Math.PI) / 180), ay = (a[1] - p[1]) * 110540;
+    const bx = (b[0] - p[0]) * 111320 * Math.cos((p[1] * Math.PI) / 180), by = (b[1] - p[1]) * 110540;
+    const dx = bx - ax, dy = by - ay;
+    const f = dx * dx + dy * dy > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0;
+    return Math.hypot(ax + f * dx, ay + f * dy);
+  };
+  let worst = 0;
+  let sampled = 0;
+  const directionsSeen = new Set();
+  for (let i = 0; i < mapPack.meta.tripCount; i++) {
+    if (mapPack.tripRoute[i] !== made.body.routeId) continue;
+    const info = newTrips.find((t) => t.id === mapPack.tripId[i]);
+    if (!info || directionsSeen.has(info.direction)) continue;
+    directionsSeen.add(info.direction);
+    const out = new Float64Array(2);
+    for (let k = 0; k <= 40; k++) {
+      const secs = mapPack.tripStart[i] + ((mapPack.tripEnd[i] - mapPack.tripStart[i]) * k) / 40;
+      assert.ok(tripPosition(mapPack, i, secs, out, 0));
+      const here = [out[0], out[1]];
+      const off = Math.min(...drawn.map((d) => Math.min(...d.geometry.coordinates.slice(1).map((c, n) => toSegment(here, d.geometry.coordinates[n], c)))));
+      worst = Math.max(worst, off);
+      sampled++;
+    }
+  }
+  assert.equal(directionsSeen.size, 2, 'checked a trip in each direction');
+  assert.ok(metres([0, 0], [0, 0]) === 0 && worst < 25, `a vehicle strayed ${worst.toFixed(0)} m from the drawn path`);
+  step(`vehicles stay on the drawn path both ways (${sampled} positions checked, furthest ${worst.toFixed(0)} m off)`);
+
   const fleetNow = (await get(`/api/scenarios/${S}`)).impact.find((i) => i.routeId === made.body.routeId);
   assert.ok(fleetNow.vehiclesAfter < 96 / 2, 'buses run out and back rather than one per trip');
   step(`new line: ${made.body.summary}`);
   await send('POST', `/api/scenarios/${S}/undo`);
-  assert.equal((await get(`/api/scenarios/${S}/lines`)).features.length, 0);
+  assert.equal((await get(`/api/scenarios/${S}/lines`)).features.length, 0, 'undo removes the drawn line');
   assert.ok(!(await get(`/api/baselines/${baseline.id}/routes${q}`)).some((r) => r.id === made.body.routeId));
   await send('POST', `/api/scenarios/${S}/redo`);
   step('undo removes the new line and redo brings it back');

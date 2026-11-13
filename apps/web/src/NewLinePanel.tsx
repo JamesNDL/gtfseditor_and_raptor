@@ -54,7 +54,9 @@ export function NewLinePanel() {
       <div className="inspector-body">
         <p className="note">
           Click stops on the map in the order the line calls at them. {roadMode ? 'Zoom in until bus stops appear. ' : 'Click a station to stop there. '}
-          {roadMode ? 'Run times use a typical bus speed along the path.' : 'The line is drawn straight between stops, and run times use a typical speed for the mode.'}
+          {roadMode ? '' : 'The line is drawn straight between stops. '}
+          Run times are taken from published trips wherever they already run between two of your stops; other sections use the typical speed of
+          this mode in the day's timetable.
         </p>
 
         <div className="form">
