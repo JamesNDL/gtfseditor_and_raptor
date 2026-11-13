@@ -404,11 +404,38 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
               ${model.routeType}, ${body.modeId}, ${color}, ${sc.id}, ${seq})
       returning id`;
 
+    // Road vehicles stop on the left, so the way back uses the stop across the road. A stop's partner
+    // is found from the published timetable: among the lines that call at it, the stop within 150 m
+    // that their opposite direction calls at most often. Stops with no partner (termini, one-way
+    // streets, loops) are used both ways.
+    const returnStops = [...stops];
+    let swapped = 0;
+    if (ROAD_MODES.has(body.modeId)) {
+      for (let i = 0; i < stops.length; i++) {
+        const s = stops[i];
+        if (s.location_type !== 0) continue;
+        const [partner] = await tx`
+          select o.id, o.name, o.location_type, ST_X(o.geom) as lon, ST_Y(o.geom) as lat, '{}'::bigint[] as platforms,
+                 count(*) as uses, min(ST_Distance(o.geom::geography, s.geom::geography)) as metres
+          from stops s
+          join patterns p on p.baseline_id = s.baseline_id and p.scenario_id is null and p.stop_ids @> array[s.id]
+          join patterns q on q.route_id = p.route_id and q.scenario_id is null and q.direction_id is distinct from p.direction_id
+          join stops o on o.id = any(q.stop_ids) and o.id <> s.id and not (o.id = any(p.stop_ids))
+            and ST_DWithin(o.geom::geography, s.geom::geography, 150)
+          where s.id = ${s.id}
+          group by o.id order by uses desc, metres limit 1`;
+        if (partner) {
+          returnStops[i] = partner as unknown as (typeof stops)[number];
+          swapped++;
+        }
+      }
+    }
+
     const tripIds: number[] = [];
     let outboundLine: [number, number][] | null = null;
     const timing = { learned: 0, estimated: 0, speed: 0 };
     for (const direction of [0, 1]) {
-      const order = direction === 0 ? stops : [...stops].reverse();
+      const order = direction === 0 ? stops : [...returnStops].reverse();
       // The path: along roads for road vehicles where it can be found, otherwise straight between stops.
       let line: [number, number][] = order.map((s) => [s.lon, s.lat]);
       if (followRoads) {
@@ -417,7 +444,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         if (direction === 0) {
           pathMethod = found.method;
           outboundLine = found.coords;
-        } else if (found.method !== 'roads' && outboundLine) {
+        } else if (found.method === 'straight' && outboundLine) {
           // Without a routing server there is rarely a published path for the way back, so the
           // return trip runs back along the outbound path rather than cutting straight across.
           line = [...outboundLine].reverse();
@@ -506,7 +533,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     }
     const fleet = await assignVehicles(tx, sc, seq, tripIds);
     return {
-      summary: `New line ${name}: ${stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}; run times: ${timing.learned} section${timing.learned === 1 ? '' : 's'} from published trips, ${timing.estimated} at the typical ${Math.round(timing.speed * 3.6)} km/h for this mode${fleetNote(fleet)}`,
+      summary: `New line ${name}: ${stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}; run times: ${timing.learned} section${timing.learned === 1 ? '' : 's'} from published trips, ${timing.estimated} at the typical ${Math.round(timing.speed * 3.6)} km/h for this mode${swapped ? `; the way back uses the stop across the road at ${swapped} of ${stops.length} stops` : ''}${fleetNote(fleet)}`,
       idMap: {},
       routeId: route.id,
     };

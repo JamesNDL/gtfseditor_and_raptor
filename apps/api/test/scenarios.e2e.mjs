@@ -210,6 +210,13 @@ try {
   assert.ok(Math.abs(ours - published) < published * 0.35 + 120, `run time ${ours}s should be close to the published ${published}s`);
   assert.ok(oneNew.stopTimes[2].dist > oneNew.stopTimes[1].dist && oneNew.stopTimes[1].dist > 0, 'stops sit in order along the path');
   await get(`/api/patterns/${newRoute.patterns[0].id}/stringline${q}&others=0`);
+  // The way back should use the stops across the road, not the same ones.
+  const backTrip = await get(`/api/trips/${newTrips.find((t) => t.direction === 1).id}${q}`);
+  const outStops = new Set(oneNew.stopTimes.map((s) => s.stopId));
+  const acrossTheRoad = backTrip.stopTimes.filter((s) => !outStops.has(s.stopId)).length;
+  step(`the way back uses ${acrossTheRoad} of ${backTrip.stopTimes.length} stops from the other side of the road`);
+  assert.ok(made.body.summary.includes('across the road') === acrossTheRoad > 0);
+
   // The moving dots must stay on the drawn path, in both directions, for the whole trip.
   const { decodePack, tripPosition } = await import('../../../packages/core/src/pack.ts');
   const packBuffer = await (await fetch(`${API}/api/scenarios/${S}/pack`)).arrayBuffer();

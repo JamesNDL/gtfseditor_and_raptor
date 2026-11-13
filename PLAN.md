@@ -221,6 +221,8 @@ Built:
 Limits of this first tool:
 
 - New bus and coach lines follow roads ("Follow roads", on by default, with a live preview while drawing). With a routing server set in `ROUTER_URL` (anything that speaks the OSRM route API) the path comes from the road network, each direction routed separately. Without one, the path reuses published bus routes wherever one already runs between two consecutive stops, and is straight elsewhere; the return direction runs back along the outbound path. Vehicles are checked by a test to stay within 25 m of the drawn path in both directions.
+- The way back uses the stop across the road. A stop's partner is taken from the published timetable: among the lines calling at it, the stop within 150 m that their opposite direction calls at most often. Stops with no partner are used both ways. This avoids the loops a routing server makes when sent back to a stop on the wrong side.
+- One-way loop lines (out and round, never back the same way) cannot be drawn yet.
 - Rail, light rail and ferry lines are still straight from stop to stop.
 - Run times for a new line are learned from the timetable, section by section. Where at least three published trips already run from one stop to the next, their median time is used. Otherwise the section's length is divided by the typical speed of that mode on that day (the median over published trips of path length divided by scheduled time; 22 km/h for buses on the imported weekday). The change summary says how many sections used each.
 - What the run times do not know: time of day (one figure is used all day, so peaks are not slower), traffic, speed limits, and turns. The routing server's own drive times are for cars and are not used.
