@@ -16,6 +16,7 @@ export function NewLinePanel() {
 
   // Work out the road path a moment after the stops change, and show it on the map.
   useEffect(() => {
+    if (builder?.reshape) return; // the reshaping panel works out its own path
     set({ builderPath: null });
     if (!wantsRoads || !builder || builder.stops.length < 2 || baselineId === null) return;
     const controller = new AbortController();
@@ -35,9 +36,9 @@ export function NewLinePanel() {
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stopKey, wantsRoads, baselineId]);
+  }, [stopKey, wantsRoads, baselineId, !!builder?.reshape]);
 
-  if (!builder) return null;
+  if (!builder || builder.reshape) return null;
 
   const update = (patch: Partial<typeof builder>) => set({ builder: { ...builder, ...patch } });
   const ready = builder.name.trim() !== '' && builder.stops.length >= 2 && builder.headwayMin >= 1;

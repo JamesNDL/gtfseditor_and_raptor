@@ -260,6 +260,129 @@ try {
   await send('POST', `/api/scenarios/${S}/redo`);
   step('undo removes the new line and redo brings it back');
 
+  // Reshape an existing line: cut it short, extend it again, add a stop, and undo.
+  {
+    const preview = (body) => send('POST', `/api/reshape-preview${q}`, body);
+    const reshape = (body) => send('POST', `/api/scenarios/${S}/edits`, { kind: 'reshape', ...body });
+    const inOrder = (trip) => {
+      for (let i = 1; i < trip.stopTimes.length; i++) {
+        assert.ok(trip.stopTimes[i].arr >= trip.stopTimes[i - 1].dep, 'times must stay in order');
+        assert.ok(trip.stopTimes[i].dist >= trip.stopTimes[i - 1].dist, 'stops must stay in order along the path');
+      }
+      assert.equal(trip.stopTimes[0].dep, trip.startSecs);
+      assert.equal(trip.stopTimes[trip.stopTimes.length - 1].arr, trip.endSecs);
+    };
+    // A two-way bus line whose main stop pattern is long enough to cut.
+    let line = null;
+    for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 40).slice(0, 40)) {
+      const d = await get(`/api/routes/${r.id}${q}`);
+      if (d.directions.length === 2 && d.patterns[0].stopCount >= 10) {
+        line = d;
+        break;
+      }
+    }
+    assert.ok(line, 'found a two-way bus line to reshape');
+    const main = line.patterns[0];
+    const published = (await get(`/api/patterns/${main.id}/stops`)).stops;
+    const ids = published.map((s) => s.id);
+    const tripsWere = (await get(`/api/routes/${line.id}/trips${q}`)).filter((t) => t.patternId === main.id);
+    const sampleWas = await get(`/api/trips/${tripsWere[0].id}${q}`);
+    const headBefore = (await get(`/api/scenarios/${S}`)).head;
+
+    assert.equal((await preview({ patternId: main.id, stopIds: ids })).status, 400, 'an unchanged line is refused');
+    assert.equal((await preview({ patternId: main.id, stopIds: ids.slice(0, 1) })).status, 400, 'a line needs two stops');
+
+    // Cut the last two stops off, both directions.
+    const cutPreview = await preview({ patternId: main.id, stopIds: ids.slice(0, -2) });
+    assert.equal(cutPreview.status, 200, JSON.stringify(cutPreview.body));
+    assert.equal(cutPreview.body.removed, 2);
+    assert.equal(cutPreview.body.trips, tripsWere.length);
+    assert.equal((await get(`/api/routes/${line.id}/trips${q}`)).filter((t) => t.edited && t.patternId === main.id).length, tripsWere.filter((t) => t.edited).length, 'a preview changes nothing');
+    const cut = await reshape({ patternId: main.id, stopIds: ids.slice(0, -2) });
+    assert.equal(cut.status, 200, JSON.stringify(cut.body));
+    const afterCut = await get(`/api/routes/${line.id}${q}`);
+    assert.equal(afterCut.tripCount, line.tripCount, 'reshaping keeps every trip');
+    assert.ok(!afterCut.patterns.some((p) => p.id === main.id), 'the replaced stop pattern is no longer listed');
+    const tripsCut = (await get(`/api/routes/${line.id}/trips${q}`)).filter((t) => t.edited && t.stopCount === ids.length - 2 && t.direction === tripsWere[0].direction);
+    assert.equal(tripsCut.length, tripsWere.length);
+    assert.deepEqual(tripsCut.map((t) => t.startSecs), tripsWere.map((t) => t.startSecs), 'cutting the end leaves every departure where it was');
+    assert.ok(tripsCut.every((t, i) => t.endSecs <= tripsWere[i].endSecs && t.vehicleDayId === tripsWere[i].vehicleDayId), 'trips end sooner and keep their vehicles');
+    const sampleCut = await get(`/api/trips/${cut.body.idMap[sampleWas.id]}${q}`);
+    inOrder(sampleCut);
+    assert.deepEqual(sampleCut.stopTimes.map((s) => [s.stopId, s.arr, s.dep]), sampleWas.stopTimes.slice(0, -2).map((s) => [s.stopId, s.arr, s.dep]), 'the stops that remain keep their times');
+    const cutPattern = sampleCut.patternId;
+    const otherWayCut = cutPreview.body.otherWay && cutPreview.body.otherWay.coords ? cutPreview.body.otherWay.trips : 0;
+    assert.equal(Object.keys(cut.body.idMap).length, tripsWere.length + otherWayCut, 'the other direction changes with it');
+    assert.ok((await get(`/api/scenarios/${S}/lines`)).features.some((f) => f.properties.route_id === line.id), 'the new path is drawn on the map');
+    step(`cut short: ${cut.body.summary}`);
+
+    // Put the two stops back on the end: run times come from published trips, so the trip is as long as it was.
+    const extended = await reshape({ patternId: cutPattern, stopIds: ids, bothWays: false });
+    assert.equal(extended.status, 200, JSON.stringify(extended.body));
+    assert.ok(extended.body.summary.includes('2 stops added'));
+    const sampleBack = await get(`/api/trips/${extended.body.idMap[sampleCut.id]}${q}`);
+    inOrder(sampleBack);
+    assert.equal(sampleBack.stopTimes.length, ids.length);
+    assert.equal(sampleBack.startSecs, sampleWas.startSecs);
+    const was = sampleWas.endSecs - sampleWas.startSecs;
+    const now = sampleBack.endSecs - sampleBack.startSecs;
+    assert.ok(Math.abs(now - was) <= was * 0.2 + 120, `an extended trip takes ${now}s, close to the published ${was}s`);
+    assert.equal(sampleBack.stopTimes[ids.length - 3].pickupType, 0, 'the old last stop takes passengers again');
+    step(`extended: ${extended.body.summary}`);
+
+    // The moving dot follows the reshaped path.
+    {
+      const { decodePack, tripPosition } = await import('../../../packages/core/src/pack.ts');
+      const mapPack = decodePack(await (await fetch(`${API}/api/scenarios/${S}/pack`)).arrayBuffer());
+      const paths = (await get(`/api/scenarios/${S}/lines`)).features.filter((f) => f.properties.route_id === line.id).map((f) => f.geometry.coordinates);
+      const off = (p, a, b) => {
+        const k = 111320 * Math.cos((p[1] * Math.PI) / 180);
+        const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * 110540, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * 110540;
+        const dx = bx - ax, dy = by - ay;
+        const f = dx * dx + dy * dy > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0;
+        return Math.hypot(ax + f * dx, ay + f * dy);
+      };
+      const i = mapPack.tripId.indexOf(sampleBack.id);
+      assert.ok(i >= 0, 'the reshaped trip is in the map data');
+      let worst = 0;
+      const out = new Float64Array(2);
+      for (let k = 0; k <= 40; k++) {
+        assert.ok(tripPosition(mapPack, i, mapPack.tripStart[i] + ((mapPack.tripEnd[i] - mapPack.tripStart[i]) * k) / 40, out, 0));
+        worst = Math.max(worst, Math.min(...paths.map((c) => Math.min(...c.slice(1).map((pt, n) => off([out[0], out[1]], c[n], pt))))));
+      }
+      assert.ok(worst < 25, `a vehicle strayed ${worst.toFixed(0)} m from the reshaped path`);
+      step(`vehicles follow the reshaped path (furthest ${worst.toFixed(0)} m off)`);
+    }
+
+    // Add a stop in the middle: one from the other direction, which is just across the road.
+    const backPattern = (await get(`/api/routes/${line.id}${q}`)).patterns.find((p) => p.direction !== main.direction);
+    const backStops = (await get(`/api/patterns/${backPattern.id}/stops`)).stops.filter((s) => !ids.includes(s.id));
+    const mid = published[Math.floor(ids.length / 2)];
+    const near = backStops.sort((a, b) => Math.hypot(a.lon - mid.lon, a.lat - mid.lat) - Math.hypot(b.lon - mid.lon, b.lat - mid.lat))[0];
+    if (near) {
+      const at = Math.floor(ids.length / 2) + 1;
+      const withStop = [...ids.slice(0, at), near.id, ...ids.slice(at)];
+      const added = await reshape({ patternId: sampleBack.patternId, stopIds: withStop, bothWays: false });
+      assert.equal(added.status, 200, JSON.stringify(added.body));
+      const sampleAdded = await get(`/api/trips/${added.body.idMap[sampleBack.id]}${q}`);
+      inOrder(sampleAdded);
+      assert.deepEqual(sampleAdded.stopTimes.map((s) => s.stopId), withStop);
+      assert.deepEqual(sampleAdded.stopTimes.slice(0, at).map((s) => s.dep), sampleBack.stopTimes.slice(0, at).map((s) => s.dep), 'stops before the new one keep their times');
+      assert.ok(sampleAdded.stopTimes[at].dep > sampleAdded.stopTimes[at].arr, 'the vehicle waits at the new stop');
+      step(`stop added: ${added.body.summary}`);
+    }
+
+    // Undo it all: the published stop patterns and trips come back.
+    const headNow = (await get(`/api/scenarios/${S}`)).head;
+    for (let i = headBefore; i < headNow; i++) await send('POST', `/api/scenarios/${S}/undo`);
+    const restored = await get(`/api/routes/${line.id}${q}`);
+    assert.deepEqual(restored.patterns.map((p) => [p.id, p.tripCount]), line.patterns.map((p) => [p.id, p.tripCount]));
+    assert.ok(!(await get(`/api/scenarios/${S}/lines`)).features.some((f) => f.properties.route_id === line.id), 'undo removes the reshaped path');
+    for (let i = headBefore; i < headNow; i++) await send('POST', `/api/scenarios/${S}/redo`);
+    assert.ok(!(await get(`/api/routes/${line.id}${q}`)).patterns.some((p) => p.id === main.id));
+    step('undo restores the published line and redo reshapes it again');
+  }
+
   // Vehicle types: put one trip on a bigger train, then set a fleet size the scenario exceeds.
   const types = await get(`/api/vehicle-types?baseline=${baseline.id}&s=${S}`);
   const tripNow = (await get(`/api/routes/${t1.id}/trips${q}`)).find((t) => !t.edited);

@@ -7,6 +7,7 @@ import { liveStats } from './liveStats.ts';
 import { MapView } from './MapView.tsx';
 import { ModePanel } from './ModePanel.tsx';
 import { NewLinePanel } from './NewLinePanel.tsx';
+import { ReshapePanel } from './ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { useStore } from './store.ts';
@@ -146,6 +147,7 @@ export function App() {
       <TimelinePanel />
       <Inspector />
       <NewLinePanel />
+      <ReshapePanel />
       <TimeBar />
       <FleetPanel />
     </div>

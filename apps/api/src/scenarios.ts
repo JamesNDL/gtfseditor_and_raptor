@@ -15,6 +15,19 @@ import {
 } from '@gtfs-editor/core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
+import {
+  acrossTheRoad,
+  applyReshape,
+  describeChange,
+  describeNewStretches,
+  describeStops,
+  planOtherWay,
+  planReshape,
+  publishedRunSecs,
+  ROAD_MODES,
+  typicalChange,
+  type ReshapeDeps,
+} from './reshape.ts';
 import { describeMethod, roadPath, type PathMethod } from './roads.ts';
 
 export interface Scenario {
@@ -88,7 +101,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     seq: number,
     tripIds: number[],
     delta: number,
-    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean },
+    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean },
   ): Promise<Record<number, number>> {
     if (!tripIds.length) return {};
     const pinned = options.pinnedIds ?? [];
@@ -108,12 +121,15 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const idMap: Record<number, number> = {};
     for (const row of created) idMap[row.cloned_from] = row.id;
     const newIds = Object.values(idMap);
-    await tx`
-      insert into stop_times (trip_id, seq, stop_id, arr, dep, dist, pickup_type, drop_off_type, timepoint, headsign, note)
-      select n.id, st.seq, st.stop_id, st.arr + ${delta}, st.dep + ${delta}, st.dist, st.pickup_type, st.drop_off_type,
-             st.timepoint, st.headsign, st.note
-      from trips n join stop_times st on st.trip_id = n.cloned_from
-      where n.id = any(${newIds})`;
+    // A caller that rebuilds the stop times itself (reshaping a line) asks for them not to be copied.
+    if (options.stopTimes !== false) {
+      await tx`
+        insert into stop_times (trip_id, seq, stop_id, arr, dep, dist, pickup_type, drop_off_type, timepoint, headsign, note)
+        select n.id, st.seq, st.stop_id, st.arr + ${delta}, st.dep + ${delta}, st.dist, st.pickup_type, st.drop_off_type,
+               st.timepoint, st.headsign, st.note
+        from trips n join stop_times st on st.trip_id = n.cloned_from
+        where n.id = any(${newIds})`;
+    }
     if (options.replace) await removeTrips(tx, sc, seq, tripIds);
     return idMap;
   }
@@ -335,8 +351,6 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     school_bus: { speed: 6.5, dwell: 20, routeType: 712 },
   };
 
-  const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
-
   // Typical end-to-end speed of a mode in the published timetable (metres per second, stops included):
   // the median over that day's trips of path length divided by scheduled time.
   const speedCache = new Map<string, number>();
@@ -414,16 +428,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       for (let i = 0; i < stops.length; i++) {
         const s = stops[i];
         if (s.location_type !== 0) continue;
-        const [partner] = await tx`
-          select o.id, o.name, o.location_type, ST_X(o.geom) as lon, ST_Y(o.geom) as lat, '{}'::bigint[] as platforms,
-                 count(*) as uses, min(ST_Distance(o.geom::geography, s.geom::geography)) as metres
-          from stops s
-          join patterns p on p.baseline_id = s.baseline_id and p.scenario_id is null and p.stop_ids @> array[s.id]
-          join patterns q on q.route_id = p.route_id and q.scenario_id is null and q.direction_id is distinct from p.direction_id
-          join stops o on o.id = any(q.stop_ids) and o.id <> s.id and not (o.id = any(p.stop_ids))
-            and ST_DWithin(o.geom::geography, s.geom::geography, 150)
-          where s.id = ${s.id}
-          group by o.id order by uses desc, metres limit 1`;
+        const partner = await acrossTheRoad(tx, s.id);
         if (partner) {
           returnStops[i] = partner as unknown as (typeof stops)[number];
           swapped++;
@@ -482,12 +487,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       for (let i = 1; i < order.length; i++) {
         const from = platform(order[i - 1], direction);
         const to = platform(order[i], direction);
-        const [seen] = await tx`
-          select count(*)::int as n, percentile_cont(0.5) within group (order by b.arr - a.dep) as median
-          from stop_times a
-          join stop_times b on b.trip_id = a.trip_id and b.seq > a.seq and b.stop_id = ${to}
-          join trips t on t.id = a.trip_id
-          where a.stop_id = ${from} and t.scenario_id is null`;
+        const seen = await publishedRunSecs(tx, from, to);
         let secs: number;
         if (seen.n >= 3 && seen.median > 0) {
           secs = Math.round(seen.median / 10) * 10;
@@ -612,6 +612,45 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     return {
       summary: `${route.name}: new frequency in ${bands.length} time band${bands.length === 1 ? '' : 's'}, both directions (${createdIds.length} trips, replacing ${replacedCount}${keptPinned ? `, keeping ${keptPinned} placed by hand` : ''})${fleetNote(fleet)}`,
       idMap: {},
+    };
+  }
+
+  const reshapeDeps: ReshapeDeps = { cloneTrips, typicalSpeed, newLine: NEW_LINE, skipPenalty: SKIP_PENALTY };
+
+  interface ReshapeBody {
+    patternId: number;
+    stopIds: number[];
+    followRoads?: boolean;
+    direct?: boolean;
+    bothWays?: boolean;
+  }
+  const reshapeOptions = (body: ReshapeBody) => ({ followRoads: body.followRoads !== false, direct: body.direct === true, platformIndex: 0 });
+
+  /**
+   * Gives one of a line's stop patterns a new list of stops and rebuilds every trip that uses it:
+   * extending, cutting short, re-routing, adding or removing a stop. Unless told otherwise the
+   * line's other direction is changed to match.
+   */
+  async function editReshape(tx: Tx, sc: Scenario, seq: number, body: ReshapeBody) {
+    const options = reshapeOptions(body);
+    const plan = await planReshape(tx, sc, Number(body.patternId), body.stopIds ?? [], options, reshapeDeps);
+    const other = body.bothWays === false ? null : await planOtherWay(tx, sc, plan, options, reshapeDeps);
+    const done = await applyReshape(tx, sc, seq, plan, 0, reshapeDeps);
+    const idMap = { ...done.idMap };
+    let otherNote = '';
+    if (other && 'plan' in other) {
+      const back = await applyReshape(tx, sc, seq, other.plan, 1, reshapeDeps);
+      Object.assign(idMap, back.idMap);
+      otherNote = `. The other direction changed to match: ${describeStops(other.plan)}, ${back.trips} trip${back.trips === 1 ? '' : 's'}, ${describeChange(back.changeSecs)}`;
+    } else if (other && 'reason' in other) {
+      otherNote = `. The other direction is unchanged: ${other.reason}`;
+    }
+    const stretches = describeNewStretches(plan);
+    const towards = plan.stops[plan.stops.length - 1].name.replace(/,.*$/, '').replace(/ Station$/, '');
+    return {
+      summary: `${plan.routeName} towards ${towards}: ${describeStops(plan)} on ${done.trips} trip${done.trips === 1 ? '' : 's'}, ${describeChange(done.changeSecs)}${stretches ? `; ${stretches}` : ''}${otherNote}`,
+      idMap,
+      routeId: plan.routeId,
     };
   }
 
@@ -1012,6 +1051,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       setVehicleType: editSetVehicleType,
       lineFrequency: editLineFrequency,
       createLine: editCreateLine,
+      reshape: editReshape,
     }[body.kind] as
       | ((tx: Tx, sc: Scenario, seq: number, body: never) => Promise<EditResult>)
       | undefined;
@@ -1031,7 +1071,44 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     return { coords: found.coords, method: found.method, description: describeMethod(found.method) };
   });
 
-  /** Lines this scenario created, as GeoJSON for the map. */
+  /** The stops of one stop pattern, in calling order, for the reshaping tool. */
+  app.get('/api/patterns/:id/stops', async (req) => {
+    const id = Number((req.params as { id: string }).id);
+    if (!Number.isInteger(id)) throw fail(400, 'Bad pattern id');
+    const [pattern] = await sql`
+      select p.id, p.route_id as "routeId", coalesce(p.direction_id, 0) as direction, p.headsign from patterns p where p.id = ${id}`;
+    if (!pattern) throw fail(404, 'Stop pattern not found');
+    const stops = await sql`
+      select s.id, s.name, s.parent_id as "parentId", ST_X(s.geom) as lon, ST_Y(s.geom) as lat
+      from patterns p cross join unnest(p.stop_ids) with ordinality as o(stop_id, n)
+      join stops s on s.id = o.stop_id where p.id = ${id} order by o.n`;
+    return { ...pattern, stops };
+  });
+
+  /** What a reshape would do, for the preview while the stops are being changed. Changes nothing. */
+  app.post('/api/reshape-preview', async (req) => {
+    const body = req.body as ReshapeBody;
+    const sc = await scenarioOf(req, sql);
+    const options = reshapeOptions(body);
+    const plan = await planReshape(sql, sc, Number(body.patternId), body.stopIds ?? [], options, reshapeDeps);
+    const other = body.bothWays === false ? null : await planOtherWay(sql, sc, plan, options, reshapeDeps);
+    const side = async (p: typeof plan) => ({
+      coords: p.coords,
+      added: p.added,
+      removed: p.removed,
+      trips: p.tripIds.length,
+      change: describeChange(await typicalChange(sql, p)),
+      what: describeStops(p),
+    });
+    return {
+      ...(await side(plan)),
+      stretches: describeNewStretches(plan),
+      stops: plan.stops.map((s) => ({ id: s.id, name: s.name, lon: s.lon, lat: s.lat, parentId: s.parentId })),
+      otherWay: !other ? null : 'plan' in other ? await side(other.plan) : 'reason' in other ? { reason: other.reason } : { same: true },
+    };
+  });
+
+  /** Lines this scenario created or reshaped, as GeoJSON for the map. */
   app.get('/api/scenarios/:id/lines', async (req) => {
     const sc = await loadScenario(idParam(req));
     const rows = await sql`
@@ -1039,7 +1116,9 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       from routes r join modes m on m.id = r.mode_id
       join patterns p on p.route_id = r.id
       join shapes s on s.id = p.shape_id
-      where r.scenario_id = ${sc.id} and r.created_edit <= ${sc.head}`;
+      where p.scenario_id = ${sc.id} and p.created_edit <= ${sc.head}
+        -- A reshaped pattern that has since been reshaped again has no trips left and is not drawn.
+        and (r.scenario_id = ${sc.id} or exists (select 1 from trips t where t.pattern_id = p.id and ${visible(sql, 't', sc)}))`;
     return {
       type: 'FeatureCollection',
       features: rows.map((r) => ({

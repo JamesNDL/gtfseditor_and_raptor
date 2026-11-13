@@ -5,6 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef } from 'react';
+import { describePick, pickStop } from './builder.ts';
 import { clock } from './clock.ts';
 import { useStore } from './store.ts';
 import { computeFrame, vehicleData } from './vehicles.ts';
@@ -162,14 +163,10 @@ export function MapView({ onVehicleCount }: Props) {
 
     map.on('click', (e) => {
       const { open, close, openTimeline } = useStore.getState();
-      // While a new line is being drawn, clicks pick its stops and nothing else.
-      const { builder, set } = useStore.getState();
-      if (builder) {
+      // While a line is being drawn or reshaped, clicks pick its stops and nothing else.
+      if (useStore.getState().builder) {
         const stop = stopAt(e.point.x, e.point.y);
-        const last = builder.stops[builder.stops.length - 1];
-        if (stop && stop.id !== last?.id) {
-          set({ builder: { ...builder, stops: [...builder.stops, { id: stop.id, name: stop.name, lon: stop.lon, lat: stop.lat }] } });
-        }
+        if (stop) pickStop(stop);
         return;
       }
       const target = targetAt(e.point.x, e.point.y);
@@ -203,7 +200,7 @@ export function MapView({ onVehicleCount }: Props) {
           text = route ? `${route.shortName ?? route.longName ?? 'Vehicle'} vehicle` : 'Vehicle';
         }
       } else if (target?.kind === 'stop') {
-        text = drawing ? `${target.name} · click to add to the new line` : `${target.name} · click for ${target.isStation ? 'platforms' : 'timetable'}`;
+        text = drawing ? `${target.name} · ${describePick(target)}` : `${target.name} · click for ${target.isStation ? 'platforms' : 'timetable'}`;
       } else if (target?.kind === 'routes') {
         const ids = target.ids;
         const names = ids.slice(0, 4).map((id) => routes.get(id)?.shortName ?? routes.get(id)?.longName ?? '?');
@@ -391,7 +388,13 @@ export function MapView({ onVehicleCount }: Props) {
         type: 'circle',
         source: 'builder',
         filter: ['==', ['geometry-type'], 'Point'],
-        paint: { 'circle-radius': 7, 'circle-color': '#ffffff', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 3 },
+        // Stops being added are large; stops a reshaped line keeps are small; stops taken off it are hollow.
+        paint: {
+          'circle-radius': ['match', ['get', 'kind'], 'new', 7, 'gone', 5, 4],
+          'circle-color': ['match', ['get', 'kind'], 'gone', '#0e1116', '#ffffff'],
+          'circle-stroke-color': ['match', ['get', 'kind'], 'gone', '#8b96a3', ['get', 'color']],
+          'circle-stroke-width': ['match', ['get', 'kind'], 'new', 3, 2],
+        },
       });
     };
     whenLoaded(add);
@@ -424,16 +427,24 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map) return;
     const stops = builder?.stops ?? [];
     const color = `#${builder?.color ?? 'ffffff'}`;
-    const features: GeoJSON.Feature[] = stops.map((s) => ({
+    const reshape = builder?.reshape;
+    const original = new Set(reshape?.original.map((s) => s.id));
+    const current = new Set(stops.map((s) => s.id));
+    const point = (s: { lon: number; lat: number }, kind: string): GeoJSON.Feature => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-      properties: { color },
-    }));
-    if (stops.length >= 2) {
-      // The worked-out road path when there is one, otherwise straight between the stops.
-      const coordinates = builderPath?.coords ?? stops.map((s) => [s.lon, s.lat]);
-      features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: { color } });
-    }
+      properties: { color, kind },
+    });
+    const features: GeoJSON.Feature[] = [
+      ...(reshape?.original.filter((s) => !current.has(s.id)).map((s) => point(s, 'gone')) ?? []),
+      ...stops.map((s) => point(s, !reshape || !original.has(s.id) ? 'new' : 'kept')),
+    ];
+    const line = (coordinates: number[][]) => features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: { color } });
+    // The worked-out path when there is one. A new line falls back to straight between its stops;
+    // a reshaped line shows nothing until its path is known, since the published line is still drawn.
+    if (builderPath) line(builderPath.coords);
+    else if (!reshape && stops.length >= 2) line(stops.map((s) => [s.lon, s.lat]));
+    if (builderPath?.otherCoords) line(builderPath.otherCoords);
     whenLoaded(() => (map.getSource('builder') as maplibregl.GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features }));
     map.getCanvas().style.cursor = builder ? 'crosshair' : '';
   }, [builder, builderPath]);

@@ -184,7 +184,11 @@ app.get('/api/routes/:id', async (req) => {
     from patterns p
     join stops f on f.id = p.stop_ids[1]
     join stops l on l.id = p.stop_ids[cardinality(p.stop_ids)]
-    where p.route_id = ${id} order by 4 desc`;
+    where p.route_id = ${id}
+      and (p.scenario_id is null or ${sc ? sql`(p.scenario_id = ${sc.id} and p.created_edit <= ${sc.head})` : sql`false`})
+      -- Patterns a scenario has replaced (a reshaped line) have no trips left and are not listed.
+      and exists (select 1 from trips t where t.pattern_id = p.id and ${vis})
+    order by 4 desc`;
 
   // Departures of the main stopping pattern in each direction, for the frequency card.
   const mainDepartures = await sql`

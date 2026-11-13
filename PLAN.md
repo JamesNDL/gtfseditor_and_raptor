@@ -6,7 +6,7 @@ The build goes in seven phases, each ending in something usable: a read-only vie
 
 ## Where we are (13 Nov 2026)
 
-**Next step: reshape existing lines** (extend, cut short, re-route, add or remove a stop from a line). This is the rest of phase 4.
+**Next step: new stops, stations and platforms**, so that a line can be extended to somewhere nothing stops today. Reshaping existing lines (extend, cut short, re-route, add or remove a stop) is now built.
 
 Status by phase; details are under "Phases" below.
 
@@ -16,7 +16,7 @@ Status by phase; details are under "Phases" below.
 | 1. Import and viewer | Built |
 | 2. Timeline views | Built |
 | 3. Scenarios and schedule editing | Built, with gaps listed in the phase |
-| 4. Network editing | First tool only: draw a new line through existing stops, with bus lines following roads |
+| 4. Network editing | Two tools: draw a new line through existing stops, and change the route of an existing line. Bus lines follow roads |
 | 5. Fleet and capacity | First slice built |
 | 6. Export and deployment | GTFS export built and verified against the feed; deployment not started |
 
@@ -24,7 +24,7 @@ Everything is committed to git on `master`. Tests: `npm test`, `npm run test:e2e
 
 Remaining work, roughly in order:
 
-1. Route editing: reshape existing lines; new stops, stations and platforms; one-way loop lines; rail, light rail and ferry paths that follow track or water; road closures; cutting a rail line.
+1. Route editing: new stops, stations and platforms; reshaping gaps (see phase 4); one-way loop lines; rail, light rail and ferry paths that follow track or water; road closures; cutting a rail line.
 2. Timings for new lines: by time of day, a learned stop time, better estimates where no bus runs today.
 3. Schedule editing gaps: choosing a free platform, platform clashes that count waiting vehicles, whole-line frequency on branching lines, vehicle planning across lines, adding a stop to one trip, creating a trip from nothing, dragging in the platform and vehicle charts.
 4. Usability: station details in the right-hand panel, goals and scoring, showing edits on the map, watching real people use it.
@@ -39,6 +39,7 @@ Things a new session needs to know:
 - The "Decisions made" and "Architecture" sections below were written before the build. Two have since changed: the validity rules run on the server only, not also in the browser, and timeline dragging exists only on the trip diagram.
 - The interface has been driven by a scripted browser (`npm run test:ui`), not yet by a person other than the developer. The untested parts are listed under "Testing status".
 - Lines drawn before the road-following and opposite-stop fixes keep their old paths and should be redrawn.
+- Reshaping a line is one edit kind, `reshape`, in `apps/api/src/reshape.ts`; the parts that need no database (which stops are kept, trip times, the other direction) are in `packages/core/src/reshape.ts` with unit tests.
 
 ## Decisions made
 
@@ -223,12 +224,12 @@ Not built yet:
 
 ### Testing status
 
-- `npm test`: unit tests for the shared logic.
-- `npm run test:e2e`: the scenario engine through the API.
+- `npm test`: unit tests for the shared logic, including the route-change rules.
+- `npm run test:e2e`: the scenario engine through the API, including cutting a bus line short, extending it again, adding a stop, and checking that vehicles follow the new path.
 - `npm run export:check`: a GTFS export against the source feed.
-- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, and runs "Fix all". All twelve steps pass with no browser errors.
+- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, changes that line's route by clicking a third station, and runs "Fix all". All thirteen steps pass with no browser errors.
 
-Not covered by any test: the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
+Not covered by any test: the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, changing a bus route in the browser (the browser test changes a train line), export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
 
 ### Usability pass (after a review of how easy the editor is to pick up)
 
@@ -247,14 +248,27 @@ Still open from the review:
 - No goals or scoring, and the map shows changes only as a white edge on changed vehicles and the colour of new lines.
 - Nobody other than the developer has been watched using it.
 
-### 4. Network editing (first tool built; needs hands-on testing)
+### 4. Network editing (two tools built; needs hands-on testing)
 
 Built:
 
 - Draw a new line: "Draw a new line" in the left panel, then click existing stops or stations on the map in order. Choose a name, mode, colour and how often it runs. Creating it adds the line, a timetable in both directions from 06:00 to 22:00, and the vehicles to run it, as one undoable change.
 - New lines appear on the map in their colour, in the line search, in the impact list, and can be edited like any other line (frequency, trips, vehicle type).
 
-Limits of this first tool:
+- Change the route of an existing line: "Change route" on a line's panel. The line's stops are listed and marked on the map. Click a stop on the map to add it, click one already on the line (or "Remove" in the list) to take it off. That covers extending, cutting short, sending the line a different way, and adding or removing a stop. A clicked stop joins where it adds the least distance, or at the end or start if chosen. The panel shows what the change does before it is applied: stops added and removed, how many trips, and how much longer or shorter they become. It is one undoable change.
+- What a route change keeps: stretches between stops that did not change keep the published path and each trip's own times, so peak and off-peak differences survive. Each trip still leaves the first unchanged stop at its published time, so adding stops at the start makes trips begin earlier and adding them at the end makes them finish later. Trips keep their vehicles.
+- What a route change works out: new stretches get a path (along roads for buses, straight for other modes) and a run time learned from published trips between the two stops, or estimated from the mode's typical speed, as for new lines. A removed stop saves its stop time plus a small allowance, and the vehicle keeps to its path; for buses, "take the direct road" re-routes between the neighbouring stops instead.
+- The other direction changes to match by default: removed stops are matched to the platform at the same station or the nearest stop within 150 m, and added stops use the stop across the road. If the two directions do not line up, the other one is left alone and the change summary says so.
+
+Limits of changing a route:
+
+- It changes one stop pattern (and its opposite) at a time. A line with branches or short workings needs each pattern changed separately; the panel lists them.
+- Trips that end somewhere new are not re-planned onto vehicles. A vehicle whose next trip now leaves before it arrives is flagged as a clash, but a vehicle left at the wrong end of the line is not.
+- The published path of a re-routed line is still drawn faintly underneath the new one, because other stop patterns may still use it.
+- A stop cannot be moved up or down the list; take it off and click it again with "at the end" or "at the start".
+- At a station the platform is the one the line already uses in that direction, otherwise picked automatically.
+
+Limits of drawing a new line:
 
 - New bus and coach lines follow roads ("Follow roads", on by default, with a live preview while drawing). With a routing server set in `ROUTER_URL` (anything that speaks the OSRM route API) the path comes from the road network, each direction routed separately. Without one, the path reuses published bus routes wherever one already runs between two consecutive stops, and is straight elsewhere; the return direction runs back along the outbound path. Vehicles are checked by a test to stay within 25 m of the drawn path in both directions.
 - The way back uses the stop across the road. A stop's partner is taken from the published timetable: among the lines calling at it, the stop within 150 m that their opposite direction calls at most often. Stops with no partner are used both ways. This avoids the loops a routing server makes when sent back to a stop on the wrong side.
@@ -268,7 +282,6 @@ Limits of this first tool:
 
 Not built yet:
 
-- Changing an existing line's path: extending it, cutting it short, re-routing it, adding or removing a stop from the pattern.
 - New stops, stations and platforms.
 - The road network and routing engine, snapping bus lines to roads, and road closures.
 - New lines are not in the map tiles; they are drawn as a separate layer.

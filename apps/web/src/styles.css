@@ -1354,3 +1354,17 @@ select.cell {
 .skip-button.always {
   opacity: 1;
 }
+
+/* reshaping a line */
+.reshape-preview p {
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+
+.stop-name .tag {
+  margin-left: 6px;
+}
+
+.title-row .badge {
+  flex: none;
+}

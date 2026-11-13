@@ -1,6 +1,7 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useApi, type RouteDetail, type RouteTrip } from '../api.ts';
+import { startReshape } from '../builder.ts';
 import { useStore } from '../store.ts';
 import { VehicleTypePicker } from '../FleetPanel.tsx';
 import { FrequencyEditor } from './FrequencyEditor.tsx';
@@ -77,6 +78,15 @@ export function RoutePanel({ routeId }: { routeId: number }) {
         <button className="button" onClick={() => openTimeline({ tab: 'vehicles', routeId: r.id })}>
           Vehicle chart
         </button>
+        {editing && r.patterns.length > 0 && (
+          <button
+            className="button"
+            title="Extend the line, cut it short, send it a different way, or add and remove stops"
+            onClick={() => void startReshape({ id: r.id, name: r.shortName ?? r.longName ?? 'Line', modeId: r.modeId, color: r.color }, r.patterns[0].id)}
+          >
+            Change route
+          </button>
+        )}
       </div>
 
       {editing && <FrequencyEditor key={r.id} route={r} />}

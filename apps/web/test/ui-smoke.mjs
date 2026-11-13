@@ -292,6 +292,29 @@ try {
   await waitFor(`!document.querySelector('.fleet')`, 'the catalogue to close');
   step('fleet screen opens and closes with Escape');
 
+  // 11b. Change the route of the line just drawn: add a third station by clicking it, then take a stop off again.
+  await click('.inspector .button', 'Change route');
+  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Change the route'`, 'the route-changing panel');
+  await waitFor(`document.querySelectorAll('.inspector .stops li').length === 2`, 'the line\'s two stops');
+  // The map has zoomed to fit the line's two stations; zoom out a step so that their neighbours are in view.
+  await click('.maplibregl-ctrl-zoom-out');
+  await sleep(1500);
+  const third = await findOnMap(/click to add to the line/, { x0: 380, x1: 1100, y0: 150, y1: 760 });
+  assert.ok(third, 'found a station that is not on the line yet');
+  await clickAt(third.x, third.y);
+  await waitFor(`document.querySelectorAll('.inspector .stops li').length === 3`, 'the added stop to be listed');
+  await waitFor(`document.querySelector('.reshape-preview')?.textContent.includes('1 stop added')`, 'the preview of the change', 30000);
+  const previewText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
+  await shot('reshaping');
+  await mouse('mouseMoved', third.x, third.y, { buttons: 0 });
+  await sleep(200);
+  assert.match(await text('.map-tooltip'), /click to take it off the line/, 'a stop on the line offers to come off');
+  await click('.inspector .button', 'trips');
+  await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('6 changes')`, 'the route change to apply', 60000);
+  await waitFor(`document.querySelector('.inspector h2') && document.querySelector('.inspector .badge')?.textContent === 'UI1'`, 'the line to reopen');
+  await shot('reshaped');
+  step(`route changed by clicking ${third.tip.split(' · ')[0]}: ${previewText.slice(0, 160)}`);
+
   // 12. Clashes and "Fix all".
   const clashes = Number((await js(`[...document.querySelectorAll('.scenario-stat')].find((s) => s.textContent.includes('clashes'))?.querySelector('.stat-value')?.textContent ?? '0'`)).replace(/,/g, ''));
   if (clashes > 0) {

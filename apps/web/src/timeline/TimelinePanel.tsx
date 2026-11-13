@@ -42,7 +42,8 @@ export function TimelinePanel() {
   const r = route.data;
   // Longest stopping pattern first: it makes the most complete station axis.
   const patterns = r ? [...r.patterns].sort((a, b) => b.stopCount - a.stopCount || b.tripCount - a.tripCount) : [];
-  const patternId = timeline.patternId ?? patterns[0]?.id ?? null;
+  // A remembered pattern may be gone: reshaping a line replaces its stop patterns.
+  const patternId = (patterns.some((p) => p.id === timeline.patternId) ? timeline.patternId : null) ?? patterns[0]?.id ?? null;
   const others = timeline.showOthers ?? (r ? RAIL_MODES.has(r.modeId) : false);
 
   const aroundNow = (hours: number) => {

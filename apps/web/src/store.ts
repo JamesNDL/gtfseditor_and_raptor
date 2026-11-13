@@ -10,6 +10,16 @@ export type Selection =
 
 export const SPEEDS = [1, 10, 60, 300, 900];
 
+/** A stop picked for a line being drawn or reshaped. */
+export interface BuilderStop {
+  id: number;
+  name: string;
+  lon: number;
+  lat: number;
+  /** The station a platform belongs to, where known. */
+  parentId?: number | null;
+}
+
 export type TimelineTab = 'stringline' | 'platforms' | 'vehicles';
 
 export interface TimelineState {
@@ -68,10 +78,23 @@ interface AppState {
     headwayMin: number;
     /** Road vehicles only: follow roads rather than running straight between stops. */
     followRoads: boolean;
-    stops: { id: number; name: string; lon: number; lat: number }[];
+    stops: BuilderStop[];
+    /** Set when an existing line's stops are being changed rather than a new line drawn. */
+    reshape?: {
+      routeId: number;
+      patternId: number;
+      /** The stop pattern as it is now. */
+      original: BuilderStop[];
+      /** Where a stop clicked on the map joins the line. */
+      insertAt: 'best' | 'end' | 'start';
+      /** Where stops are removed, take the direct road rather than driving past them. */
+      direct: boolean;
+      /** Change the line's other direction to match. */
+      bothWays: boolean;
+    };
   } | null;
   /** The path the line being drawn would take, once worked out. */
-  builderPath: { coords: [number, number][]; description: string } | null;
+  builderPath: { coords: [number, number][]; description: string; otherCoords?: [number, number][] | null } | null;
   /** Whether skipping a stop changes one trip or every trip with the same stopping pattern. */
   stopScope: 'trip' | 'pattern';
 
