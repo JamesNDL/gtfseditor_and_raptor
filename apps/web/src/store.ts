@@ -6,6 +6,7 @@ export type Selection =
   | { kind: 'route'; id: number }
   | { kind: 'trip'; id: number }
   | { kind: 'vehicleDay'; id: number }
+  | { kind: 'station'; id: number }
   | { kind: 'routeList'; ids: number[] };
 
 export const SPEEDS = [1, 10, 60, 300, 900];
@@ -18,6 +19,16 @@ export interface BuilderStop {
   lat: number;
   /** The station a platform belongs to, where known. */
   parentId?: number | null;
+}
+
+/** A closure being set up: a stretch of road around a point, or a line between two stations. */
+export interface Closing {
+  /** 'road', or the mode whose line is closed. */
+  what: string;
+  radiusM: number;
+  point: { lon: number; lat: number } | null;
+  from: BuilderStop | null;
+  to: BuilderStop | null;
 }
 
 export type TimelineTab = 'stringline' | 'platforms' | 'vehicles';
@@ -66,6 +77,10 @@ interface AppState {
   dataVersion: number;
   /** Which other trips move along with a retimed trip. */
   ripple: 'none' | 'vehicle' | 'line';
+  /** Outline on the map the lines the scenario has changed. */
+  showChanged: boolean;
+  /** The dark or the light version of the interface. */
+  theme: 'dark' | 'light';
   editBusy: boolean;
   editError: string | null;
   /** The vehicle catalogue screen. */
@@ -76,8 +91,10 @@ interface AppState {
     modeId: string;
     color: string;
     headwayMin: number;
-    /** Road vehicles only: follow roads rather than running straight between stops. */
+    /** Follow roads, or the track and ferry routes published services use, rather than running straight between stops. */
     followRoads: boolean;
+    /** A new line that runs one way round and back to its first stop, with no return direction. */
+    loop?: boolean;
     stops: BuilderStop[];
     /** Set when an existing line's stops are being changed rather than a new line drawn. */
     reshape?: {
@@ -95,6 +112,12 @@ interface AppState {
   } | null;
   /** The path the line being drawn would take, once worked out. */
   builderPath: { coords: [number, number][]; description: string; otherCoords?: [number, number][] | null } | null;
+  /** A road or line being closed, or null. */
+  closing: Closing | null;
+  /** What the closure being set up would do, for the map. */
+  closingPreview: { zone: GeoJSON.Geometry; paths: [number, number][][] } | null;
+  /** A new stop that has been named and is waiting for a click on the map to place it. */
+  placing: { name: string; pair: boolean; platforms: number } | null;
   /** Whether skipping a stop changes one trip or every trip with the same stopping pattern. */
   stopScope: 'trip' | 'pattern';
 
@@ -140,11 +163,22 @@ export const useStore = create<AppState>((set) => ({
   scenarioInfo: null,
   dataVersion: 0,
   ripple: 'none',
+  showChanged: true,
+  theme: (() => {
+    try {
+      return localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
+    } catch {
+      return 'dark';
+    }
+  })(),
   editBusy: false,
   editError: null,
   fleetOpen: false,
   builder: null,
   builderPath: null,
+  closing: null,
+  closingPreview: null,
+  placing: null,
   stopScope: 'trip',
   timeline: CLOSED_TIMELINE,
   view: [6 * 3600, 10 * 3600],

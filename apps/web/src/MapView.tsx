@@ -5,15 +5,19 @@ import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef } from 'react';
-import { describePick, pickStop } from './builder.ts';
+import { describePick, pickClosurePoint, pickClosureStop, pickStop, placeStop } from './builder.ts';
 import { clock } from './clock.ts';
 import { useStore } from './store.ts';
+import { MAP_PALETTE, type MapPalette } from './theme.ts';
 import { computeFrame, vehicleData } from './vehicles.ts';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-const BASEMAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const SYDNEY: [number, number] = [151.12, -33.87];
+// The colours in use, set each time the map is built for a theme.
+let P: MapPalette = MAP_PALETTE.dark;
+// Where the map was looking, so that rebuilding it for another theme does not lose the place.
+let lastView: { center: [number, number]; zoom: number } | null = null;
 
 // Drawn bottom to top.
 const MODE_ORDER = ['school_bus', 'bus', 'coach', 'ferry', 'light_rail', 'metro', 'train'];
@@ -59,6 +63,7 @@ export function MapView({ onVehicleCount }: Props) {
     else map.once('style.load', fn);
   };
 
+  P = MAP_PALETTE[useStore((s) => s.theme)];
   const baselineId = useStore((s) => s.baselineId);
   const enabledModes = useStore((s) => s.enabledModes);
   const loadedModes = useStore((s) => s.loadedModes);
@@ -66,14 +71,16 @@ export function MapView({ onVehicleCount }: Props) {
   const highlightTripId = useStore((s) => s.highlightTripId);
   const fitBounds = useStore((s) => s.fitBounds);
   const dataVersion = useStore((s) => s.dataVersion);
+  const scenarioInfo = useStore((s) => s.scenarioInfo);
+  const showChanged = useStore((s) => s.showChanged);
 
   // Create the map once.
   useEffect(() => {
     const map = new maplibregl.Map({
       container: containerRef.current!,
-      style: BASEMAP_STYLE,
-      center: SYDNEY,
-      zoom: 10.2,
+      style: P.basemap,
+      center: lastView?.center ?? SYDNEY,
+      zoom: lastView?.zoom ?? 10.2,
       minZoom: 4,
       maxPitch: 0,
       dragRotate: false,
@@ -113,7 +120,7 @@ export function MapView({ onVehicleCount }: Props) {
     // Stops are small, so they get a generous target: the nearest station, platform or stop within
     // STOP_REACH pixels of the pointer.
     const STOP_REACH = 14;
-    const STOP_LAYERS = ['stop-station', 'stop-platform', 'stop-road'];
+    const STOP_LAYERS = ['stop-station', 'stop-platform', 'stop-road', 'stop-new', 'stop-new-platform'];
     const stopAt = (x: number, y: number): { id: number; name: string; isStation: boolean; lon: number; lat: number } | null => {
       const layers = STOP_LAYERS.filter((id) => map.getLayer(id));
       if (!layers.length) return null;
@@ -159,12 +166,23 @@ export function MapView({ onVehicleCount }: Props) {
       if (id === hoveredStop || !map.getLayer('stop-hover')) return;
       hoveredStop = id;
       map.setFilter('stop-hover', ['==', ['get', 'stop_id'], id]);
+      if (map.getLayer('stop-hover-new')) map.setFilter('stop-hover-new', ['==', ['get', 'stop_id'], id]);
     };
 
     map.on('click', (e) => {
       const { open, close, openTimeline } = useStore.getState();
+      // While a closure is being set up, clicks say where it is.
+      const closing = useStore.getState().closing;
+      if (closing) {
+        if (closing.what === 'road') return pickClosurePoint(e.lngLat.lng, e.lngLat.lat);
+        const stop = stopAt(e.point.x, e.point.y);
+        if (stop) pickClosureStop(stop);
+        return;
+      }
       // While a line is being drawn or reshaped, clicks pick its stops and nothing else.
       if (useStore.getState().builder) {
+        // A named new stop is waiting: this click says where it goes.
+        if (useStore.getState().placing) return void placeStop(e.lngLat.lng, e.lngLat.lat);
         const stop = stopAt(e.point.x, e.point.y);
         if (stop) pickStop(stop);
         return;
@@ -172,7 +190,11 @@ export function MapView({ onVehicleCount }: Props) {
       const target = targetAt(e.point.x, e.point.y);
       if (target?.kind === 'vehicle') return open({ kind: 'trip', id: target.tripId }, { replace: true });
       if (target?.kind === 'stop') {
-        return openTimeline({ tab: 'platforms', stationId: target.id, focusStopId: target.isStation ? null : target.id });
+        // Details open on the right, like a line or a trip. An open platform chart follows along.
+        if (useStore.getState().timeline.open && useStore.getState().timeline.tab === 'platforms') {
+          openTimeline({ tab: 'platforms', stationId: target.id, focusStopId: target.isStation ? null : target.id });
+        }
+        return open({ kind: 'station', id: target.id }, { replace: true });
       }
       const routeIds = target?.kind === 'routes' ? target.ids : [];
       if (routeIds.length === 1) return open({ kind: 'route', id: routeIds[0] }, { replace: true });
@@ -188,7 +210,27 @@ export function MapView({ onVehicleCount }: Props) {
       const tooltip = tooltipRef.current!;
       const { routes } = useStore.getState();
       let text = '';
+      const closing = useStore.getState().closing;
+      if (closing) {
+        const stop = closing.what === 'road' ? null : stopAt(e.point.x, e.point.y);
+        setHoveredStop(stop ? stop.id : -1);
+        const hint = closing.what === 'road' ? 'Click where the road is closed' : stop ? `${stop.name} · click: the closure is ${closing.from && !closing.to ? 'between here and ' + closing.from.name : 'on one side of here'}` : '';
+        map.getCanvas().style.cursor = closing.what === 'road' ? 'crosshair' : stop ? 'pointer' : '';
+        tooltip.style.display = hint ? 'block' : 'none';
+        tooltip.textContent = hint;
+        tooltip.style.transform = `translate(${e.point.x + 14}px, ${e.point.y + 14}px)`;
+        return;
+      }
       const drawing = useStore.getState().builder !== null;
+      const placing = drawing ? useStore.getState().placing : null;
+      if (placing) {
+        setHoveredStop(-1);
+        map.getCanvas().style.cursor = 'crosshair';
+        tooltip.style.display = 'block';
+        tooltip.textContent = `Click to place ${placing.name} here`;
+        tooltip.style.transform = `translate(${e.point.x + 14}px, ${e.point.y + 14}px)`;
+        return;
+      }
       const drawStop = drawing ? stopAt(e.point.x, e.point.y) : null;
       const target: Target | null = drawing ? (drawStop ? { kind: 'stop', ...drawStop } : null) : targetAt(e.point.x, e.point.y);
       setHoveredStop(target?.kind === 'stop' ? target.id : -1);
@@ -200,7 +242,7 @@ export function MapView({ onVehicleCount }: Props) {
           text = route ? `${route.shortName ?? route.longName ?? 'Vehicle'} vehicle` : 'Vehicle';
         }
       } else if (target?.kind === 'stop') {
-        text = drawing ? `${target.name} · ${describePick(target)}` : `${target.name} · click for ${target.isStation ? 'platforms' : 'timetable'}`;
+        text = drawing ? `${target.name} · ${describePick(target)}` : `${target.name} · click for ${target.isStation ? 'station details' : 'stop details'}`;
       } else if (target?.kind === 'routes') {
         const ids = target.ids;
         const names = ids.slice(0, 4).map((id) => routes.get(id)?.shortName ?? routes.get(id)?.longName ?? '?');
@@ -216,12 +258,24 @@ export function MapView({ onVehicleCount }: Props) {
     map.on('mouseout', () => (tooltipRef.current!.style.display = 'none'));
 
     return () => {
+      const c = map.getCenter();
+      lastView = { center: [c.lng, c.lat], zoom: map.getZoom() };
       map.remove();
       mapRef.current = null;
       overlayRef.current = null;
       loadedRef.current = false;
     };
   }, []);
+
+  // Outline the lines the scenario has touched.
+  useEffect(() => {
+    whenLoaded(() => {
+      const map = mapRef.current;
+      if (!map?.getLayer('sel-changed')) return;
+      const ids = showChanged ? (scenarioInfo?.impact ?? []).map((i) => i.routeId).slice(0, 400) : [];
+      map.setFilter('sel-changed', ids.length ? ['in', ['get', 'route_id'], ['literal', ids]] : ['==', ['get', 'route_id'], -1]);
+    });
+  }, [scenarioInfo, showChanged, baselineId]);
 
   // Network lines and stops for the chosen baseline.
   useEffect(() => {
@@ -237,6 +291,16 @@ export function MapView({ onVehicleCount }: Props) {
         tiles: [`${location.origin}/api/baselines/${baselineId}/tiles/{z}/{x}/{y}`],
         minzoom: 4,
         maxzoom: 14,
+      });
+      // Lines the scenario has changed, outlined so that edits can be seen on the map. Drawn under the lines themselves, so their colours still show.
+      map.addLayer({
+        id: 'sel-changed',
+        type: 'line',
+        source: 'network',
+        'source-layer': 'lines',
+        filter: ['==', ['get', 'route_id'], -1],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffd60a', 'line-opacity': 0.7, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 15, 13], 'line-blur': 1.5 },
       });
       const enabled = useStore.getState().enabledModes;
       for (const mode of MODE_ORDER) {
@@ -263,7 +327,7 @@ export function MapView({ onVehicleCount }: Props) {
         'source-layer': 'lines',
         filter: ['==', ['get', 'route_id'], -1],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#ffffff', 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 6, 15, 11] },
+        paint: { 'line-color': P.casing, 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 6, 15, 11] },
       });
       map.addLayer({
         id: 'sel-line',
@@ -283,8 +347,8 @@ export function MapView({ onVehicleCount }: Props) {
         filter: ['all', ['!=', ['get', 'station'], true], ['!=', ['get', 'rail'], true]],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 3.5, 17, 6.5],
-          'circle-color': '#0e1116',
-          'circle-stroke-color': '#b6c0cc',
+          'circle-color': P.ink,
+          'circle-stroke-color': P.soft,
           'circle-stroke-width': 1.5,
         },
       });
@@ -296,8 +360,8 @@ export function MapView({ onVehicleCount }: Props) {
         filter: ['==', ['get', 'station'], true],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 12, 5, 16, 9],
-          'circle-color': '#f4f6f8',
-          'circle-stroke-color': '#0e1116',
+          'circle-color': P.paper,
+          'circle-stroke-color': P.ink,
           'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.8, 14, 2],
         },
       });
@@ -311,8 +375,8 @@ export function MapView({ onVehicleCount }: Props) {
         filter: ['all', ['!=', ['get', 'station'], true], ['==', ['get', 'rail'], true]],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.5, 5, 18, 10],
-          'circle-color': '#1c2027',
-          'circle-stroke-color': '#f4f6f8',
+          'circle-color': P.panel,
+          'circle-stroke-color': P.paper,
           'circle-stroke-width': 1.5,
         },
       });
@@ -329,7 +393,7 @@ export function MapView({ onVehicleCount }: Props) {
           'text-size': 10,
           'text-allow-overlap': true,
         },
-        paint: { 'text-color': '#f4f6f8' },
+        paint: { 'text-color': P.paper },
       });
       // Ring around whichever stop the pointer is near, so it is clear what a click will open.
       map.addLayer({
@@ -360,11 +424,13 @@ export function MapView({ onVehicleCount }: Props) {
           'text-anchor': 'top',
           'text-max-width': 8,
         },
-        paint: { 'text-color': '#dfe5ec', 'text-halo-color': '#0e1116', 'text-halo-width': 1.4 },
+        paint: { 'text-color': P.label, 'text-halo-color': P.ink, 'text-halo-width': 1.4 },
       });
       const empty = { type: 'FeatureCollection' as const, features: [] };
-      for (const id of ['scenario-lines', 'builder']) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
-      for (const id of ['builder-line', 'builder-points']) if (map.getLayer(id)) map.removeLayer(id);
+      for (const id of ['scenario-lines', 'scenario-stops', 'scenario-closures', 'closing', 'builder']) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
+      for (const id of ['builder-line', 'builder-points', 'closure-fill', 'closure-edge', 'closing-fill', 'closing-edge', 'closing-paths', 'closing-points']) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
       map.addLayer(
         {
           id: 'line-scenario',
@@ -375,6 +441,76 @@ export function MapView({ onVehicleCount }: Props) {
         },
         'stop-road',
       );
+      // Stops the scenario has added. They are few, so they show at every zoom, in the accent colour.
+      map.addLayer({
+        id: 'stop-new',
+        type: 'circle',
+        source: 'scenario-stops',
+        filter: ['!=', ['get', 'platform'], true],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 6, 17, 9],
+          'circle-color': P.ink,
+          'circle-stroke-color': '#4cc2ff',
+          'circle-stroke-width': 2.5,
+        },
+      });
+      map.addLayer({
+        id: 'stop-new-platform',
+        type: 'circle',
+        source: 'scenario-stops',
+        minzoom: 14.5,
+        filter: ['==', ['get', 'platform'], true],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.5, 5, 18, 10],
+          'circle-color': P.panel,
+          'circle-stroke-color': '#4cc2ff',
+          'circle-stroke-width': 1.5,
+        },
+      });
+      map.addLayer({
+        id: 'stop-hover-new',
+        type: 'circle',
+        source: 'scenario-stops',
+        filter: ['==', ['get', 'stop_id'], -1],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 8, 16, 14],
+          'circle-color': 'rgba(76, 194, 255, 0.18)',
+          'circle-stroke-color': '#4cc2ff',
+          'circle-stroke-width': 2,
+        },
+      });
+      // Closed roads and lines: those the scenario has made, and the one being set up.
+      for (const [id, source, opacity] of [['closure', 'scenario-closures', 0.45], ['closing', 'closing', 0.45]] as const) {
+        map.addLayer({
+          id: `${id}-fill`,
+          type: 'fill',
+          source,
+          filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+          paint: { 'fill-color': '#ff3b30', 'fill-opacity': opacity },
+        });
+        map.addLayer({
+          id: `${id}-edge`,
+          type: 'line',
+          source,
+          filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+          paint: { 'line-color': '#ff3b30', 'line-width': 3 },
+        });
+      }
+      map.addLayer({
+        id: 'closing-paths',
+        type: 'line',
+        source: 'closing',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffd60a', 'line-width': 3, 'line-opacity': 0.8, 'line-dasharray': [1.5, 1.2] },
+      });
+      map.addLayer({
+        id: 'closing-points',
+        type: 'circle',
+        source: 'closing',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: { 'circle-radius': 7, 'circle-color': '#ff3b30', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
+      });
       map.addLayer({
         id: 'builder-line',
         type: 'line',
@@ -391,7 +527,7 @@ export function MapView({ onVehicleCount }: Props) {
         // Stops being added are large; stops a reshaped line keeps are small; stops taken off it are hollow.
         paint: {
           'circle-radius': ['match', ['get', 'kind'], 'new', 7, 'gone', 5, 4],
-          'circle-color': ['match', ['get', 'kind'], 'gone', '#0e1116', '#ffffff'],
+          'circle-color': ['match', ['get', 'kind'], 'gone', P.ink, '#ffffff'],
           'circle-stroke-color': ['match', ['get', 'kind'], 'gone', '#8b96a3', ['get', 'color']],
           'circle-stroke-width': ['match', ['get', 'kind'], 'new', 3, 2],
         },
@@ -406,14 +542,16 @@ export function MapView({ onVehicleCount }: Props) {
     const map = mapRef.current;
     if (!map) return;
     let cancelled = false;
-    const show = (data: GeoJSON.FeatureCollection) =>
-      whenLoaded(() => (map.getSource('scenario-lines') as maplibregl.GeoJSONSource | undefined)?.setData(data));
-    if (scenarioId === null) show({ type: 'FeatureCollection', features: [] });
-    else
-      fetch(`/api/scenarios/${scenarioId}/lines`)
-        .then((r) => r.json())
-        .then((data) => !cancelled && show(data))
-        .catch(() => {});
+    const show = (source: string, data: GeoJSON.FeatureCollection) =>
+      whenLoaded(() => (map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data));
+    for (const [source, what] of [['scenario-lines', 'lines'], ['scenario-stops', 'stops'], ['scenario-closures', 'closures']]) {
+      if (scenarioId === null) show(source, { type: 'FeatureCollection', features: [] });
+      else
+        fetch(`/api/scenarios/${scenarioId}/${what}`)
+          .then((r) => r.json())
+          .then((data) => !cancelled && show(source, data))
+          .catch(() => {});
+    }
     return () => {
       cancelled = true;
     };
@@ -443,11 +581,29 @@ export function MapView({ onVehicleCount }: Props) {
     // The worked-out path when there is one. A new line falls back to straight between its stops;
     // a reshaped line shows nothing until its path is known, since the published line is still drawn.
     if (builderPath) line(builderPath.coords);
-    else if (!reshape && stops.length >= 2) line(stops.map((s) => [s.lon, s.lat]));
+    else if (!reshape && stops.length >= 2) line([...stops, ...(builder?.loop && stops.length >= 3 ? [stops[0]] : [])].map((s) => [s.lon, s.lat]));
     if (builderPath?.otherCoords) line(builderPath.otherCoords);
     whenLoaded(() => (map.getSource('builder') as maplibregl.GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features }));
     map.getCanvas().style.cursor = builder ? 'crosshair' : '';
   }, [builder, builderPath]);
+
+  // The closure being set up: where it is, the area it covers, and where the traffic would go instead.
+  const closing = useStore((s) => s.closing);
+  const closingPreview = useStore((s) => s.closingPreview);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const features: GeoJSON.Feature[] = [];
+    const point = (p: { lon: number; lat: number }) => features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: {} });
+    if (closing) {
+      if (closingPreview) features.push({ type: 'Feature', geometry: closingPreview.zone, properties: {} });
+      for (const coordinates of closingPreview?.paths ?? []) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: {} });
+      if (closing.what === 'road' && closing.point) point(closing.point);
+      if (closing.what !== 'road') for (const stop of [closing.from, closing.to]) if (stop) point(stop);
+    }
+    whenLoaded(() => (map.getSource('closing') as maplibregl.GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features }));
+    if (!closing && !useStore.getState().builder) map.getCanvas().style.cursor = '';
+  }, [closing, closingPreview]);
 
   // Show or hide each mode's lines.
   useEffect(() => {
@@ -531,7 +687,7 @@ export function MapView({ onVehicleCount }: Props) {
             radiusMinPixels: style.minPx,
             radiusMaxPixels: style.maxPx,
             stroked: true,
-            getLineColor: edited ? [255, 255, 255, 255] : [8, 10, 14, 255],
+            getLineColor: edited ? P.bright : P.outline,
             lineWidthUnits: 'pixels',
             getLineWidth: edited ? 1.5 : 1,
             pickable: true,
@@ -552,7 +708,7 @@ export function MapView({ onVehicleCount }: Props) {
             radiusUnits: 'pixels',
             filled: false,
             stroked: true,
-            getLineColor: [255, 255, 255, 255],
+            getLineColor: P.bright,
             lineWidthUnits: 'pixels',
             getLineWidth: 3,
             updateTriggers: { getPosition: secs },

@@ -6,7 +6,7 @@ The build goes in seven phases, each ending in something usable: a read-only vie
 
 ## Where we are (13 Nov 2026)
 
-**Next step: new stops, stations and platforms**, so that a line can be extended to somewhere nothing stops today. Reshaping existing lines (extend, cut short, re-route, add or remove a stop) is now built.
+**Next step: dragging in the platform and vehicle charts, then goals and scoring**, and the journey router planned in `docs/router-plan.md`. Run times by time of day, the schedule editing gaps (free platforms, re-planning a line's vehicles, a stop added to one trip, a trip added to a line, whole-line frequency across branches), station details on the right, a light version of the interface and the pinned tool buttons are now built; what they leave out is listed under phases 3 and 4.
 
 Status by phase; details are under "Phases" below.
 
@@ -15,8 +15,8 @@ Status by phase; details are under "Phases" below.
 | 0. Data audit | Done |
 | 1. Import and viewer | Built |
 | 2. Timeline views | Built |
-| 3. Scenarios and schedule editing | Built, with gaps listed in the phase |
-| 4. Network editing | Two tools: draw a new line through existing stops, and change the route of an existing line. Bus lines follow roads |
+| 3. Scenarios and schedule editing | Built; the remaining gaps (dragging in two charts, vehicle planning across lines) are listed in the phase |
+| 4. Network editing | Four tools: draw a new line (two-way or a one-way loop), change the route of an existing line, add a stop or station where there is none, and close a road or a line. Bus lines follow roads; trains, trams and ferries follow the track and routes that published services use |
 | 5. Fleet and capacity | First slice built |
 | 6. Export and deployment | GTFS export built and verified against the feed; deployment not started |
 
@@ -24,10 +24,10 @@ Everything is committed to git on `master`. Tests: `npm test`, `npm run test:e2e
 
 Remaining work, roughly in order:
 
-1. Route editing: new stops, stations and platforms; reshaping gaps (see phase 4); one-way loop lines; rail, light rail and ferry paths that follow track or water; road closures; cutting a rail line.
-2. Timings for new lines: by time of day, a learned stop time, better estimates where no bus runs today.
-3. Schedule editing gaps: choosing a free platform, platform clashes that count waiting vehicles, whole-line frequency on branching lines, vehicle planning across lines, adding a stop to one trip, creating a trip from nothing, dragging in the platform and vehicle charts.
-4. Usability: station details in the right-hand panel, goals and scoring, showing edits on the map, watching real people use it.
+1. Route editing: the gaps listed in phase 4 (reshaping, new stops, closures); a routing server that can be told a road is closed; a closure for part of the day; re-planning vehicles across lines after a line is cut.
+2. Schedule editing: dragging in the platform and vehicle charts (the edits behind them, `setPlatform` and `moveToVehicle`, exist); vehicle planning across lines rather than one line at a time.
+3. Usability: goals and scoring, watching real people use it.
+4. The journey router: a standalone Java RAPTOR service, capacity aware with a switch, with bulk and road-routing endpoints. Planned in `docs/router-plan.md`; nothing is built. It has 16 questions for the owner, each with a default.
 5. Data: real vehicle capacities (all are placeholders), transfers between nearby stops, capacity on the map.
 6. Export and deployment: MobilityData validator, export progress, a self-hosted routing server, AWS, logins, shrinking the vehicle data, updating to a new feed while keeping scenarios.
 7. Later, as planned: the passenger simulator, the interchange file, track-level conflicts.
@@ -40,6 +40,14 @@ Things a new session needs to know:
 - The interface has been driven by a scripted browser (`npm run test:ui`), not yet by a person other than the developer. The untested parts are listed under "Testing status".
 - Lines drawn before the road-following and opposite-stop fixes keep their old paths and should be redrawn.
 - Reshaping a line is one edit kind, `reshape`, in `apps/api/src/reshape.ts`; the parts that need no database (which stops are kept, trip times, the other direction) are in `packages/core/src/reshape.ts` with unit tests.
+- New stops are rows in `stops` owned by the scenario (`apps/api/src/stops.ts`). They are not in the map tiles; the map draws them from `/api/scenarios/:id/stops`.
+- Paths for trains, trams and ferries come from `apps/api/src/tracks.ts`: a network of station-to-station links built from the published stop patterns, once per day and mode, kept in memory. There is no track or water map behind it.
+- Closures are one edit kind, `close`, in `apps/api/src/closures.ts`. It finds every stop pattern whose path enters the closed area and changes each with the route-change code (`planReshape`, `applyReshape`). The closed areas are rows in `scenario_closures`, used only to draw them.
+- The public routing server cannot be told a road is closed. `routedAround` in `apps/api/src/roads.ts` finds a way round by asking it for the road distances between a ring of points and searching those; every path is checked to stay out of the closure before it is used. Requests to the routing server take turns, two at a time.
+- Run times for new stretches come from `apps/api/src/timings.ts`, for five parts of the day (`DAY_BANDS` in `packages/core/src/time.ts`). A trip uses the times of the part of the day it sets out in.
+- The schedule edits added last (`setPlatform`, `replan`, `moveToVehicle`, `addTrip`, `addCall`) are in `apps/api/src/schedule.ts`. New trips are moved off a busy platform automatically by `settlePlatforms` there.
+- The light version is a second set of CSS variables under `:root[data-theme='light']`; the map and the timeline charts take their colours from `apps/web/src/theme.ts` and are rebuilt when the theme changes.
+- `npm run export:check` gives up if the download is silent for five minutes, and a full weekday export now takes about that long on the development machine. It timed out twice on 13 Nov; the export itself had not failed.
 
 ## Decisions made
 
@@ -209,27 +217,33 @@ Built:
 - Every view (map, inspector, all three timelines) shows the scenario; the scenario panel shows trips, vehicles and conflicts against the published timetable.
 - Vehicles for new trips: a copy or a frequency change gives each new trip a vehicle in the same edit. A vehicle already on the line takes it if it is free and in the right place before and after; otherwise a new vehicle is added. A trip can also be put on its own new vehicle by hand.
 - Before and after: the scenario panel lists each touched line with trips and vehicles before and after; the line inspector shows "was" figures and the published departures as an outline on the hourly chart; the stringline draws changed trips with a white core and a dashed grey line where they were; the vehicle chart lists added vehicles first, named in blue.
+- Platforms: a trip's call can be moved to another platform at the same station ("change" beside the platform in the trip's stop list), with each platform marked free or busy for the time the trip is there. New trips (a copy, a frequency change, a new line, an added trip) that land on an occupied platform are moved to a free one the line already uses, and the change summary says how many. A platform clash offers "Use platform N instead" as a fix where one is free.
+- Platform clashes count a waiting vehicle: a vehicle that ends a trip at a platform and starts its next from the same one within an hour holds it in between, and a trip calling there meanwhile is a clash. It is reported only where a trip the scenario made, moved or re-assigned is involved.
+- Work out a line's vehicles again ("Work out the vehicles again" under Vehicles used): every trip on the line comes off its vehicle and the trips are chained afresh, both directions together. On the test line this took a line from 82 vehicles to 57.
+- Add a trip to a line at a typed time and direction (above the trip list). It is timed like the nearest trip of the most-used stop pattern; a line whose trips were all deleted falls back to the published ones.
+- Add a stop to one trip ("Add a stop" in the trip's edit tools): a stop the trip runs through, or one beside its path that is not in its stop pattern. Only that trip changes, and later stops are later by the stop time plus an allowance.
+- Whole-line frequency on a line with branches: "Change the whole line, shared between all its stop patterns" spaces departures evenly across the line and deals them out to each stop pattern in the share it has in that part of the day.
+- Changes on the map: lines the scenario has touched are outlined in yellow (switch beside "What changed, by line"). The top bar shows the scenario's own trip and vehicle counts.
 - `npm run test:e2e` exercises all of the above through the API.
 
 Not built yet:
 
-- Smarter vehicle use. New trips only look at vehicles already running the same line, and a frequency change in one direction adds a vehicle per trip because nothing brings them back. Re-planning a whole line's vehicles, and fleet-size caps, are not built.
-- Showing changes on the map itself beyond the white edge on changed vehicles (for example highlighting touched lines).
-- Adding a stop to a trip, and creating a trip from nothing (today a new trip is a copy of an existing one).
-- Dragging in the platform and vehicle charts.
-- The live scoreboard beyond the three numbers in the scenario panel; the top bar and the line search still show published-timetable counts.
-- Platform conflicts compare calls only, not a vehicle waiting between trips.
+- Dragging in the platform and vehicle charts. The edits a drag would make exist (`setPlatform`, `moveToVehicle`, `shift`); only the pointer handling is missing.
+- Vehicle planning across lines. Working out a line's vehicles again treats that line alone: a vehicle that also ran other lines keeps those trips, so the total across the network can go up even though the line's own count goes down. Fleet-size caps are not enforced, only reported.
+- Moving a trip to another vehicle has no control in the interface yet (it will be the vertical drag in the vehicle chart).
+- A free platform is judged by time only. Whether the track layout lets a train reach it is not known, which is why only platforms the line already uses are chosen automatically.
+- An added stop's time is an estimate: the published stop time there, plus 20 to 120 seconds by mode for slowing and starting.
+- The line search still shows published-timetable counts.
 - The rules run on the server only, not also in the browser as first planned.
-- Scenario changes are not in any export (Phase 6).
 
 ### Testing status
 
 - `npm test`: unit tests for the shared logic, including the route-change rules.
-- `npm run test:e2e`: the scenario engine through the API, including cutting a bus line short, extending it again, adding a stop, and checking that vehicles follow the new path.
+- `npm run test:e2e`: the scenario engine through the API, including cutting a bus line short, extending it again, adding a stop, checking that vehicles follow the new path, adding a bus stop with its partner across the road and extending a line to it, adding a station and running a new train line to it, a one-way loop, a train line that follows the track between two distant stations, cutting a train line between two stations and undoing it, closing a road on a bus line (every new path is checked to stay out of the closed stretch), run times that differ by time of day, a trip added to a line, a line's vehicles worked out again, a trip moved between vehicles, a stop put back on one trip and a stop added to one trip, whole-line frequency shared between stop patterns, a platform change, and the free-platform fix offered for clashes.
 - `npm run export:check`: a GTFS export against the source feed.
-- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, changes that line's route by clicking a third station, and runs "Fix all". All thirteen steps pass with no browser errors.
+- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, changes that line's route by clicking a third station, names a new station and places it with a click, ticks the one-way loop option, closes a train line between two stations clicked on the map and undoes it, runs "Fix all", checks that the two tool buttons stay in view when the scenario panel is scrolled, adds a trip from the line panel at a typed time, and switches the light version on and off. A station click now opens the station panel, and the platform chart from there.
 
-Not covered by any test: the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, changing a bus route in the browser (the browser test changes a train line), export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
+Not covered by any test: the platform picker, "Add a stop" and "Work out the vehicles again" in the browser (all three are tested through the API), the outline of changed lines on the map, the light version beyond the panels turning white, the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, changing a bus route or placing a bus stop in the browser (the browser test uses a train line), a GTFS export containing new stops (checked against the database only, because the export check timed out), drawing a whole loop or closing a road in the browser (both are tested through the API), a GTFS export after a closure, export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
 
 ### Usability pass (after a review of how easy the editor is to pick up)
 
@@ -243,12 +257,17 @@ Done:
 
 Still open from the review:
 
-- Station details open in the bottom panel while everything else opens on the right.
-- New trips reuse the copied trip's platforms, so a frequency change or a new line still creates many platform clashes; picking a free platform automatically is not built.
-- No goals or scoring, and the map shows changes only as a white edge on changed vehicles and the colour of new lines.
+- No goals or scoring.
 - Nobody other than the developer has been watched using it.
 
-### 4. Network editing (two tools built; needs hands-on testing)
+Done since:
+
+- A station or stop clicked on the map opens on the right like a line or a trip: calls a day, calls per hour, platforms, and the lines that call there, with the platform chart one click away.
+- "Draw a new line" and "Close a road or a line" stay at the top of the left panel however far it is scrolled, and on a short window the panel gives up its lower part before the buttons. (They used to scroll out of sight once a scenario had clashes and changes listed.)
+- A light version of the interface ("Light" in the top bar), remembered between visits. The base map, the network colours and the three timeline charts change with it.
+- New trips are moved to a free platform where the line has one, and clashes offer one as a fix (see phase 3).
+
+### 4. Network editing (four tools built; needs hands-on testing)
 
 Built:
 
@@ -259,6 +278,47 @@ Built:
 - What a route change keeps: stretches between stops that did not change keep the published path and each trip's own times, so peak and off-peak differences survive. Each trip still leaves the first unchanged stop at its published time, so adding stops at the start makes trips begin earlier and adding them at the end makes them finish later. Trips keep their vehicles.
 - What a route change works out: new stretches get a path (along roads for buses, straight for other modes) and a run time learned from published trips between the two stops, or estimated from the mode's typical speed, as for new lines. A removed stop saves its stop time plus a small allowance, and the vehicle keeps to its path; for buses, "take the direct road" re-routes between the neighbouring stops instead.
 - The other direction changes to match by default: removed stops are matched to the platform at the same station or the nearest stop within 150 m, and added stops use the stop across the road. If the two directions do not line up, the other one is left alone and the change summary says so.
+
+- Add a stop that does not exist yet: "Add a stop that does not exist yet" at the bottom of the line-drawing and route-changing panels. Name it, click "Place it on the map", then click where it goes. It joins the line being worked on straight away, and is its own undoable change. New stops are drawn on the map ringed in blue at every zoom, belong to the scenario, and are in its GTFS export.
+- For buses and coaches the stop across the road is added with it (on by default), and lines use it on the way back. The road is found through the routing server: a click beside the road puts the partner the same distance on the other side; a click on the road puts the pair 6 m either side.
+- For trains, metro, light rail and ferries the new stop is a station with one to four platforms (two by default), named the way the feed names them. Lines use a different platform each way.
+
+- One-way loops: "One-way loop, back to the first stop" in the drawing panel. The line runs round in one direction and returns to its first stop; there is no return direction, and a vehicle that finishes a lap starts the next. A loop needs at least three stops.
+- Train, metro, light rail and ferry lines follow the track or the ferry routes ("Follow existing track", on by default, with a live preview). The path between two stations is the shortest way over the links that published services of that mode already run, so a new train line between two distant stations runs along the railway through the stations between them. The same applies to new stretches when a route is changed.
+- Close a road or a line: "Close a road or a line" in the left panel. For a road, click the map and choose how far the closure reaches (50 to 400 m each way). For a train, metro, light rail or ferry line, click the station on each side. The panel lists every line affected and what happens to its trips before anything changes; applying it is one undoable change, and the closed area is drawn in red on the map.
+- A closed road: every bus and coach stop pattern whose path enters the closed area is sent another way between the last stop before it and the first stop after it, and no longer calls at stops inside it. Each trip keeps its own times, with the time between those two stops scaled by how much longer the new way is. A line that ends inside the closure is cut short.
+- A closed line: trains cannot go round, so each trip through the closure becomes two: one that ends at the last station before it and one that starts from the first station after it, at the times the trip called there. Services on parallel tracks in the same corridor are closed too. Split trips are taken off their vehicles and given vehicles again.
+
+Limits of closures:
+
+- A closure lasts the whole day; it cannot be set for a few hours.
+- It cannot be edited or lifted except by undoing it, and lines drawn or re-routed afterwards do not know about it.
+- The way round a closed road is found by trial against a routing server that has no notion of a closed road (see the notes above). It can take a longer way than a driver would, or include a short side trip, and where it finds nothing the stop pattern is left as it is and the summary says so.
+- Detour times are the published time scaled by distance, not by the speed of the roads used.
+- A road closure changes at most 80 stop patterns at once and says how many it left.
+- The line through a closure is the shortest way between the two stations clicked; where two routes join them, only that one is closed. A service that passes neither station but shares the track is found by its path lying along the closed stretch for at least half its length.
+- Vehicles after a cut are worked out by the same simple rule as for new trips, one line at a time, so the count is higher than a planner would manage (cutting T1 between two stations added about 250). Trips that were not split keep their vehicles, even where the vehicle's other trips were.
+- Light rail is treated as track, so a road closure does not affect it.
+- A trip with fewer than two stops left on either side is removed.
+- Cutting a busy line is slow: about 20 seconds for a line with 400 trips through the closure, because each stop pattern is rewritten in turn.
+
+Limits of loops and of following track:
+
+- A loop cannot be reshaped into a two-way line or the reverse.
+- A loop's headsign is the stop furthest from its start.
+- Track and ferry paths only exist between stations that published services of the same mode link. A new station, or two networks that do not touch (Sydney and Newcastle light rail), is joined by a straight line.
+- A path is built station to station, so a ferry line between two wharves may call past the wharves in between rather than taking open water.
+- New track cannot be drawn by hand.
+
+Limits of new stops:
+
+- They can only be added while drawing or changing a line, not on their own.
+- A new stop cannot be moved, renamed or deleted afterwards except by undoing it.
+- A platform cannot be added to an existing station.
+- Without a routing server, or more than 60 m from a road, a bus stop gets no partner and is used both ways.
+- Which of the pair is on the correct side for a given direction is not known; the routing server may add a small loop where it is wrong.
+- New stops have no walking links or transfers to nearby stops.
+- Every run time to or from a new stop is an estimate from the mode's typical speed.
 
 Limits of changing a route:
 
@@ -272,18 +332,14 @@ Limits of drawing a new line:
 
 - New bus and coach lines follow roads ("Follow roads", on by default, with a live preview while drawing). With a routing server set in `ROUTER_URL` (anything that speaks the OSRM route API) the path comes from the road network, each direction routed separately. Without one, the path reuses published bus routes wherever one already runs between two consecutive stops, and is straight elsewhere; the return direction runs back along the outbound path. Vehicles are checked by a test to stay within 25 m of the drawn path in both directions.
 - The way back uses the stop across the road. A stop's partner is taken from the published timetable: among the lines calling at it, the stop within 150 m that their opposite direction calls at most often. Stops with no partner are used both ways. This avoids the loops a routing server makes when sent back to a stop on the wrong side.
-- One-way loop lines (out and round, never back the same way) cannot be drawn yet.
-- Rail, light rail and ferry lines are still straight from stop to stop.
-- Run times for a new line are learned from the timetable, section by section. Where at least three published trips already run from one stop to the next, their median time is used. Otherwise the section's length is divided by the typical speed of that mode on that day (the median over published trips of path length divided by scheduled time; 22 km/h for buses on the imported weekday). The change summary says how many sections used each.
-- What the run times do not know: time of day (one figure is used all day, so peaks are not slower), traffic, speed limits, and turns. The routing server's own drive times are for cars and are not used.
-- The stop time is still a fixed figure per mode (20 seconds for buses).
+- Run times for a new line, and for new stretches of a changed route, are learned from the timetable section by section and by part of the day (before 06:30, 06:30 to 09:30, 09:30 to 15:00, 15:00 to 19:00, after 19:00). Best evidence first: published trips that already run from one stop to the next (their median time, three or more trips); otherwise the median speed of published trips of the same mode between stops within about 400 m of the section (30 or more); otherwise the typical end-to-end speed of the mode. Each is taken for the part of the day where it has enough trips and for the whole day where it does not. A trip uses the times of the part of the day it sets out in. The change summary says how many sections used each source and the end-to-end time at the slowest and quietest times; a test bus line came out at 71 minutes in the morning peak and 64 in the middle of the day.
+- The stop time is what published trips do at that stop, otherwise what the mode usually does. Bus timetables give no stop time of their own (it is inside the run time), so new bus lines have none either; trains come out at 30 seconds.
+- What the run times do not know: traffic beyond what the timetable already allows for, speed limits and turns. The routing server's own drive times are for cars and are not used. A trip that crosses from one part of the day into the next keeps the times it set out with.
 - At a station the platform is picked automatically (the first one out, the second one back).
-- Only existing stops can be used.
 
 Not built yet:
 
-- New stops, stations and platforms.
-- The road network and routing engine, snapping bus lines to roads, and road closures.
+- The road network and a routing engine of our own (the public server is used instead), and matching published bus paths to road segments.
 - New lines are not in the map tiles; they are drawn as a separate layer.
 
 Original scope for reference:

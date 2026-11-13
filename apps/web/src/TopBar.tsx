@@ -9,6 +9,8 @@ export function TopBar() {
   const routes = useStore((s) => s.routes);
   const modes = useStore((s) => s.modes);
   const set = useStore((s) => s.set);
+  const info = useStore((s) => s.scenarioInfo);
+  const theme = useStore((s) => s.theme);
   const open = useStore((s) => s.open);
   const timelineOpen = useStore((s) => s.timeline.open);
   const openTimeline = useStore((s) => s.openTimeline);
@@ -66,6 +68,17 @@ export function TopBar() {
         <button className="button small-button" onClick={() => set({ fleetOpen: true })} title="Vehicle types, capacities and fleet sizes">
           Fleet
         </button>
+        <button
+          className="button small-button"
+          title={theme === 'dark' ? 'Switch to the light version' : 'Switch to the dark version'}
+          aria-label={theme === 'dark' ? 'Switch to the light version' : 'Switch to the dark version'}
+          onClick={() => {
+            const next = theme === 'dark' ? 'light' : 'dark';
+            set({ theme: next });
+          }}
+        >
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </button>
       </div>
 
       <div className="search">
@@ -104,10 +117,14 @@ export function TopBar() {
 
       {baseline && (
         <div className="panel stats">
-          <Stat value={fmt(baseline.stats.trips)} label="trips" />
+          <Stat
+            value={fmt(info ? info.stats.trips : baseline.stats.trips)}
+            label={info ? 'trips in this scenario' : 'trips'}
+            title={info ? `${fmt(baseline.stats.trips)} as published` : undefined}
+          />
           <Stat value={fmt(baseline.stats.routesRunning)} label="lines running" />
           <Stat
-            value={fmt(baseline.stats.vehicleDays)}
+            value={fmt(info ? info.stats.vehicles : baseline.stats.vehicleDays)}
             label="vehicles (est.)"
             title={`${fmt(baseline.stats.vehicleDaysInferred)} of these are inferred by chaining trips, not taken from operator rosters`}
           />

@@ -55,7 +55,7 @@ export function VehicleView({ routeId }: { routeId: number }) {
       const y = rowTop(env, r);
       if (y + ROW_H < env.top || y > env.height) return;
       if (day.id === selectedDayId) {
-        ctx.fillStyle = '#263243';
+        ctx.fillStyle = COLORS.block;
         ctx.fillRect(0, y, env.width, ROW_H);
       } else if (r % 2 === 1) {
         ctx.fillStyle = COLORS.rowAlt;
@@ -107,13 +107,13 @@ export function VehicleView({ routeId }: { routeId: number }) {
         ctx.fillStyle = `#${t.color}`;
         ctx.fill();
         if (t.id === env.selectedTripId || t.id === env.hoverTripId) {
-          ctx.strokeStyle = '#ffffff';
+          ctx.strokeStyle = COLORS.highlight;
           ctx.lineWidth = t.id === env.selectedTripId ? 2.5 : 1.5;
           roundRect(ctx, x - 1, y + 3, w + 2, ROW_H - 6, 4);
           ctx.stroke();
         } else if (t.edited) {
           // Changed by the scenario: a thin white edge.
-          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = COLORS.highlight;
           ctx.lineWidth = 1;
           roundRect(ctx, x + 0.5, y + 4.5, w - 1, ROW_H - 9, 3);
           ctx.stroke();

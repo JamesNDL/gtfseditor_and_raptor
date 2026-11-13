@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { NewStopTool } from './NewStopTool.tsx';
 import { applyEdit } from './scenario.ts';
 import { useStore } from './store.ts';
 
@@ -11,8 +12,8 @@ export function NewLinePanel() {
   const set = useStore((s) => s.set);
   const baselineId = useStore((s) => s.baselineId);
   const path = useStore((s) => s.builderPath);
-  const wantsRoads = !!builder && builder.followRoads && ['bus', 'coach', 'school_bus'].includes(builder.modeId);
-  const stopKey = builder ? builder.stops.map((s) => s.id).join(',') : '';
+  const wantsRoads = !!builder && builder.followRoads;
+  const stopKey = builder ? `${builder.modeId}:${builder.loop ? 'loop' : ''}:${builder.stops.map((s) => s.id).join(',')}` : '';
 
   // Work out the road path a moment after the stops change, and show it on the map.
   useEffect(() => {
@@ -24,7 +25,7 @@ export function NewLinePanel() {
       fetch('/api/road-path', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ baselineId, stopIds: builder.stops.map((s) => s.id) }),
+        body: JSON.stringify({ baselineId, modeId: builder.modeId, loop: !!builder.loop && builder.stops.length >= 3, stopIds: builder.stops.map((s) => s.id) }),
         signal: controller.signal,
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -41,21 +42,24 @@ export function NewLinePanel() {
   if (!builder || builder.reshape) return null;
 
   const update = (patch: Partial<typeof builder>) => set({ builder: { ...builder, ...patch } });
-  const ready = builder.name.trim() !== '' && builder.stops.length >= 2 && builder.headwayMin >= 1;
+  const loop = !!builder.loop;
+  const enough = builder.stops.length >= (loop ? 3 : 2);
+  const ready = builder.name.trim() !== '' && enough && builder.headwayMin >= 1;
   const roadMode = ['bus', 'coach', 'school_bus'].includes(builder.modeId);
+  const followLabel = roadMode ? 'Follow roads' : builder.modeId === 'ferry' ? 'Follow existing ferry routes' : 'Follow existing track';
 
   return (
     <aside className="panel inspector" aria-label="New line">
       <div className="inspector-nav">
         <strong>Draw a new line</strong>
-        <button className="icon-button" onClick={() => set({ builder: null })} aria-label="Cancel">
+        <button className="icon-button" onClick={() => set({ builder: null, placing: null })} aria-label="Cancel">
           ✕
         </button>
       </div>
       <div className="inspector-body">
         <p className="note">
           Click stops on the map in the order the line calls at them. {roadMode ? 'Zoom in until bus stops appear. ' : 'Click a station to stop there. '}
-          {roadMode ? '' : 'The line is drawn straight between stops. '}
+          {roadMode ? '' : builder.modeId === 'ferry' ? 'Between wharves that ferries already link, the line follows their routes; elsewhere it is straight. ' : 'Between stations that are already linked, the line follows the track; elsewhere it is straight. '}
           Run times are taken from published trips wherever they already run between two of your stops; other sections use the typical speed of
           this mode in the day's timetable.
         </p>
@@ -80,7 +84,7 @@ export function NewLinePanel() {
             <input className="day-select colour" type="color" value={`#${builder.color}`} onChange={(e) => update({ color: e.target.value.slice(1) })} />
           </label>
           <label className="form-wide">
-            <span>Runs every (minutes), 06:00 to 22:00, both directions</span>
+            <span>Runs every (minutes), 06:00 to 22:00, {loop ? 'one way round' : 'both directions'}</span>
             <input
               className="day-select"
               type="number"
@@ -92,17 +96,20 @@ export function NewLinePanel() {
           </label>
         </div>
 
-        {roadMode && (
-          <label className="timeline-check">
-            <input type="checkbox" checked={builder.followRoads} onChange={(e) => update({ followRoads: e.target.checked })} />
-            Follow roads
-            {wantsRoads && path && <span className="muted"> · {path.description}</span>}
-            {wantsRoads && !path && builder.stops.length >= 2 && <span className="muted"> · working out the path ...</span>}
-          </label>
-        )}
+        <label className="timeline-check">
+          <input type="checkbox" checked={builder.followRoads} onChange={(e) => update({ followRoads: e.target.checked })} />
+          {followLabel}
+          {wantsRoads && path && <span className="muted"> · {path.description}</span>}
+          {wantsRoads && !path && builder.stops.length >= 2 && <span className="muted"> · working out the path ...</span>}
+        </label>
+        <label className="timeline-check" title="The line runs round in one direction and returns to its first stop. There is no trip back the other way.">
+          <input type="checkbox" checked={loop} onChange={(e) => update({ loop: e.target.checked })} />
+          One-way loop, back to the first stop
+        </label>
 
         <section>
           <h3>Stops ({builder.stops.length})</h3>
+          {loop && builder.stops.length >= 2 && <p className="muted small">After the last stop the line returns to {builder.stops[0].name}.</p>}
           {builder.stops.length === 0 ? (
             <p className="muted">None yet. Click the first stop on the map.</p>
           ) : (
@@ -125,7 +132,9 @@ export function NewLinePanel() {
           )}
         </section>
 
-        {error && <p className="error-text small">Could not create the line: {error}</p>}
+        <NewStopTool />
+
+        {error && <p className="error-text small">That did not work: {error}</p>}
 
         <div className="actions">
           <button
@@ -140,6 +149,7 @@ export function NewLinePanel() {
                 stopIds: builder.stops.map((s) => s.id),
                 headwaySecs: builder.headwayMin * 60,
                 followRoads: builder.followRoads,
+                loop,
               });
               if (result) {
                 set({ builder: null, builderPath: null });
@@ -147,9 +157,9 @@ export function NewLinePanel() {
               }
             }}
           >
-            {ready ? 'Create the line' : builder.stops.length < 2 ? 'Pick at least two stops' : 'Give it a name'}
+            {ready ? (loop ? 'Create the loop' : 'Create the line') : !enough ? (loop ? 'Pick at least three stops' : 'Pick at least two stops') : 'Give it a name'}
           </button>
-          <button className="button" onClick={() => set({ builder: null })}>
+          <button className="button" onClick={() => set({ builder: null, placing: null })}>
             Cancel
           </button>
         </div>

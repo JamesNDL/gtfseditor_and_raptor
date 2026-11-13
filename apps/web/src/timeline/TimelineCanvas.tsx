@@ -15,6 +15,9 @@ export const COLORS = {
   rowAlt: '#181c22',
   warn: '#fab219',
   critical: '#e5484d',
+  /** The outline of whatever is selected, and the fill of a vehicle waiting between trips. */
+  highlight: '#ffffff',
+  block: '#263243',
 };
 export const FONT = '11px Inter, "Segoe UI", system-ui, sans-serif';
 export const HEADER_H = 24;
@@ -217,7 +220,7 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
       const env = buildEnv(ctx);
       const x = env.x(now);
       if (x >= env.gutter && x <= s.width) {
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = COLORS.highlight;
         ctx.lineWidth = 1.5;
         ctx.shadowColor = 'rgba(255,255,255,0.7)';
         ctx.shadowBlur = 6;

@@ -41,6 +41,14 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
 
   // What the user has typed; blank means "leave this part of the day as it is".
   const [typed, setTyped] = useState<string[]>(BANDS.map(() => ''));
+  // On a line with branches or short workings: change only the main pattern, or the line as a whole.
+  const [allPatterns, setAllPatterns] = useState(false);
+  // How often anything on the line leaves in each part of the day, whatever its stop pattern.
+  const overall = BANDS.map((b) => {
+    const trips = route.hourly.filter((h) => h.hour >= b.from && h.hour < b.to).reduce((sum, h) => sum + h.trips, 0) / directions;
+    return trips > 0 ? Math.max(1, Math.round(((b.to - b.from) * 60) / trips)) : null;
+  });
+  const shown = manyPatterns && allPatterns ? overall : now;
 
   const changes = BANDS.map((b, i) => ({ band: b, minutes: Number(typed[i]) })).filter(
     (c, i) => typed[i].trim() !== '' && Number.isFinite(c.minutes) && c.minutes >= 1 && c.minutes <= 240,
@@ -58,15 +66,21 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
       {manyPatterns && (
         <p className="note small">
           This line runs {route.patterns.length} different stop patterns{overallPeak !== null && `, about ${gap(overallPeak)} between them in the morning peak`}.
-          This card shows and changes only the most common one in each direction{main ? ` (${main.firstStop.replace(/,.*$/, '')} to ${main.lastStop.replace(/,.*$/, '')})` : ''};
-          branches and express trips stay as they are.
+          {allPatterns
+            ? ' The gap you type is between departures of any pattern; each keeps the share of departures it has now, so branches and short runs stay in proportion.'
+            : ` This card shows and changes only the most common one in each direction${main ? ` (${main.firstStop.replace(/,.*$/, '')} to ${main.lastStop.replace(/,.*$/, '')})` : ''}; branches and express trips stay as they are.`}
         </p>
+      )}
+      {manyPatterns && (
+        <label className="check small">
+          <input type="checkbox" checked={allPatterns} onChange={(e) => setAllPatterns(e.target.checked)} /> Change the whole line, shared between all its stop patterns
+        </label>
       )}
       <table className="bands">
         <thead>
           <tr>
             <th>Part of the day</th>
-            <th className="n">{manyPatterns ? 'This pattern now' : 'Now'}</th>
+            <th className="n">{manyPatterns && !allPatterns ? 'This pattern now' : 'Now'}</th>
             <th className="n">Change to</th>
           </tr>
         </thead>
@@ -80,14 +94,14 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
                   {formatSecs(b.from * 3600)} to {formatSecs(b.to * 3600)}
                 </span>
               </td>
-              <td className="n muted">{now[i] === null ? 'no trips' : gap(now[i]!)}</td>
+              <td className="n muted">{shown[i] === null ? 'no trips' : gap(shown[i]!)}</td>
               <td className="n">
                 <input
                   className="day-select edit-number"
                   type="number"
                   min={1}
                   max={240}
-                  placeholder={now[i] === null ? '' : String(now[i])}
+                  placeholder={shown[i] === null ? '' : String(shown[i])}
                   value={typed[i]}
                   onChange={(e) => setTyped(typed.map((t, k) => (k === i ? e.target.value : t)))}
                   aria-label={`${b.name}: minutes between departures`}
@@ -105,6 +119,7 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
           const done = await applyEdit({
             kind: 'lineFrequency',
             routeId: route.id,
+            allPatterns: manyPatterns && allPatterns,
             bands: changes.map((c) => ({ fromSecs: c.band.from * 3600, toSecs: c.band.to * 3600, headwaySecs: c.minutes * 60 })),
           });
           if (done) setTyped(BANDS.map(() => ''));

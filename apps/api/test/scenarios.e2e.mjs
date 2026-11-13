@@ -195,7 +195,18 @@ try {
   const newTrips = await get(`/api/routes/${made.body.routeId}/trips${q}`);
   assert.ok(newTrips.every((t) => t.vehicleDayId && t.stopCount === 3));
   const oneNew = await get(`/api/trips/${newTrips[0].id}${q}`);
-  assert.ok(oneNew.stopTimes[2].arr > oneNew.stopTimes[1].dep && oneNew.stopTimes[1].dep > oneNew.stopTimes[1].arr);
+  // Buses are published with no stop time of their own, and a new bus line follows suit.
+  assert.ok(oneNew.stopTimes[2].arr > oneNew.stopTimes[1].dep && oneNew.stopTimes[1].dep >= oneNew.stopTimes[1].arr);
+  assert.match(made.body.summary, /run times: \d+ sections? from/);
+  // Run times follow the time of day: every trip that sets out in the same part of the day takes the same time,
+  // and no part of the day is wildly different from another.
+  const durations = (from, to) => [...new Set(newTrips.filter((t) => t.direction === 0 && t.startSecs >= from && t.startSecs < to).map((t) => t.endSecs - t.startSecs))];
+  const peak = durations(6.5 * 3600, 9.5 * 3600);
+  const midday = durations(9.5 * 3600, 15 * 3600);
+  assert.equal(peak.length, 1, 'one run time through the morning peak');
+  assert.equal(midday.length, 1, 'one run time through the middle of the day');
+  assert.ok(peak[0] > midday[0] * 0.6 && peak[0] < midday[0] * 1.8, `peak ${peak[0]}s against midday ${midday[0]}s`);
+  step(`run times by time of day: ${Math.round(peak[0] / 60)} min in the morning peak, ${Math.round(midday[0] / 60)} min in the middle of the day`);
   assert.ok((await get(`/api/baselines/${baseline.id}/routes${q}`)).some((r) => r.id === made.body.routeId && r.isNew));
   assert.ok(!(await get(`/api/baselines/${baseline.id}/routes`)).some((r) => r.id === made.body.routeId), 'not in the published list');
   const drawn = (await get(`/api/scenarios/${S}/lines`)).features;
@@ -368,7 +379,7 @@ try {
       inOrder(sampleAdded);
       assert.deepEqual(sampleAdded.stopTimes.map((s) => s.stopId), withStop);
       assert.deepEqual(sampleAdded.stopTimes.slice(0, at).map((s) => s.dep), sampleBack.stopTimes.slice(0, at).map((s) => s.dep), 'stops before the new one keep their times');
-      assert.ok(sampleAdded.stopTimes[at].dep > sampleAdded.stopTimes[at].arr, 'the vehicle waits at the new stop');
+      assert.ok(sampleAdded.stopTimes[at].dep >= sampleAdded.stopTimes[at].arr && sampleAdded.stopTimes[at].arr > sampleAdded.stopTimes[at - 1].dep, 'the new stop has its own time');
       step(`stop added: ${added.body.summary}`);
     }
 
@@ -381,6 +392,380 @@ try {
     for (let i = headBefore; i < headNow; i++) await send('POST', `/api/scenarios/${S}/redo`);
     assert.ok(!(await get(`/api/routes/${line.id}${q}`)).patterns.some((p) => p.id === main.id));
     step('undo restores the published line and redo reshapes it again');
+  }
+
+  // New stops: a bus stop with its partner across the road, used to extend a line; and a new station.
+  {
+    const edit = (body) => send('POST', `/api/scenarios/${S}/edits`, body);
+    const newStops = async () => (await get(`/api/scenarios/${S}/stops`)).features;
+    const metresApart = (a, b) => Math.hypot((a[0] - b[0]) * 111320 * Math.cos((a[1] * Math.PI) / 180), (a[1] - b[1]) * 110540);
+    let line = null;
+    for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 40).slice(0, 40)) {
+      const d = await get(`/api/routes/${r.id}${q}`);
+      if (d.directions.length === 2 && d.patterns[0].stopCount >= 10) {
+        line = d;
+        break;
+      }
+    }
+    const main = line.patterns[0];
+    const stops = (await get(`/api/patterns/${main.id}/stops`)).stops;
+    const end = stops[stops.length - 1];
+    const before = stops[stops.length - 2];
+    // A point a little beyond the last stop, carrying on the way the line was heading, so still by the road.
+    const scale = 30 / Math.max(1, metresApart([before.lon, before.lat], [end.lon, end.lat]));
+    const spot = { lon: end.lon + (end.lon - before.lon) * scale, lat: end.lat + (end.lat - before.lat) * scale };
+
+    assert.equal((await edit({ kind: 'addStop', name: '  ', modeId: 'bus', ...spot })).status, 400, 'a stop needs a name');
+    assert.equal((await edit({ kind: 'addStop', name: 'Nowhere', modeId: 'bus', lon: 0, lat: 0 })).status, 400, 'a stop must be in NSW');
+    const added = await edit({ kind: 'addStop', name: 'E2E Road', modeId: 'bus', ...spot });
+    assert.equal(added.status, 200, JSON.stringify(added.body));
+    const stop = added.body.stops[0];
+    assert.ok(stop.id && !stop.isStation && stop.name === 'E2E Road');
+    let features = await newStops();
+    const paired = features.length === 2;
+    assert.ok(features.length === 1 || paired);
+    assert.equal(added.body.summary.includes('across the road'), paired || added.body.summary.includes('no stop across the road'));
+    const partner = features.find((f) => f.properties.stop_id !== stop.id);
+    if (paired) {
+      const gap = metresApart(partner.geometry.coordinates, [stop.lon, stop.lat]);
+      assert.ok(gap > 4 && gap < 130, `the stop across the road is ${gap.toFixed(0)} m away`);
+    }
+    assert.equal((await get(`/api/scenarios?baseline=${baseline.id}`)).length > 0, true);
+    step(`new stop: ${added.body.summary}`);
+
+    // Extend the line to it. The way back starts from the stop across the road.
+    const extended = await edit({ kind: 'reshape', patternId: main.id, stopIds: [...stops.map((s) => s.id), stop.id] });
+    assert.equal(extended.status, 200, JSON.stringify(extended.body));
+    const after = await get(`/api/routes/${line.id}${q}`);
+    const out = after.patterns.find((p) => p.direction === main.direction && p.stopCount === stops.length + 1);
+    assert.ok(out, 'the line now has one more stop');
+    const outStops = (await get(`/api/patterns/${out.id}/stops`)).stops;
+    assert.equal(outStops[outStops.length - 1].id, stop.id);
+    if (extended.body.summary.includes('changed to match')) {
+      const firstStops = await Promise.all(after.patterns.filter((p) => p.direction !== main.direction).map(async (p) => (await get(`/api/patterns/${p.id}/stops`)).stops[0].id));
+      assert.ok(firstStops.includes(paired ? partner.properties.stop_id : stop.id), 'the way back starts from the new stop, across the road where there is one');
+    }
+    const trip = (await get(`/api/routes/${line.id}/trips${q}`)).find((t) => t.patternId === out.id);
+    const calls = (await get(`/api/trips/${trip.id}${q}`)).stopTimes;
+    assert.equal(calls[calls.length - 1].stopId, stop.id);
+    assert.ok(calls[calls.length - 1].arr > calls[calls.length - 2].dep && calls[calls.length - 1].dist > calls[calls.length - 2].dist);
+    step(`line extended to the new stop: ${extended.body.summary}`);
+
+    // Undo both: the stop disappears; redo brings it back. The published timetable never sees it.
+    await send('POST', `/api/scenarios/${S}/undo`);
+    await send('POST', `/api/scenarios/${S}/undo`);
+    assert.equal((await newStops()).length, 0, 'undo removes the new stop');
+    await send('POST', `/api/scenarios/${S}/redo`);
+    await send('POST', `/api/scenarios/${S}/redo`);
+    assert.equal((await newStops()).length, features.length);
+    assert.equal((await send('POST', '/api/reshape-preview', { patternId: main.id, stopIds: [...stops.map((s) => s.id), stop.id] })).status, 400, 'the published timetable cannot use a scenario\'s stop');
+    step('undo removes the new stop and redo brings it back');
+
+    // A new station with two platforms, and a new train line that runs to it.
+    const t1Trip = await get(`/api/trips/${baseTrips[0].id}`);
+    const from = t1Trip.stopTimes[0];
+    const station = await edit({ kind: 'addStop', name: 'E2E Junction', modeId: 'train', lon: from.lon + 0.02, lat: from.lat + 0.01, platforms: 2 });
+    assert.equal(station.status, 200, JSON.stringify(station.body));
+    assert.equal(station.body.stops[0].name, 'E2E Junction Station');
+    assert.equal(station.body.stops[0].isStation, true);
+    features = await newStops();
+    const platforms = features.filter((f) => f.properties.platform).map((f) => f.properties.stop_id);
+    assert.equal(platforms.length, 2);
+    assert.equal((await get(`/api/stations/${station.body.stops[0].id}/platforms${q}`)).platforms.length, 2);
+    const shuttle = await edit({ kind: 'createLine', name: 'E2E', modeId: 'train', stopIds: [from.stopId, station.body.stops[0].id], headwaySecs: 1800 });
+    assert.equal(shuttle.status, 200, JSON.stringify(shuttle.body));
+    const shuttleTrips = await get(`/api/routes/${shuttle.body.routeId}/trips${q}`);
+    const ends = new Set();
+    for (const direction of [0, 1]) {
+      const t = await get(`/api/trips/${shuttleTrips.find((x) => x.direction === direction).id}${q}`);
+      ends.add(direction === 0 ? t.stopTimes[t.stopTimes.length - 1].stopId : t.stopTimes[0].stopId);
+    }
+    assert.ok([...ends].every((id) => platforms.includes(id)), 'trains call at the new station\'s platforms');
+    assert.equal(ends.size, 2, 'a different platform each way');
+    step(`new station: ${station.body.summary}; ${shuttleTrips.length} trips run to it`);
+  }
+
+  // One-way loops, paths that follow track and water, and closures.
+  {
+    const edit = (body) => send('POST', `/api/scenarios/${S}/edits`, body);
+    const headOf = async () => (await get(`/api/scenarios/${S}`)).head;
+    const undoTo = async (head) => {
+      for (let h = await headOf(); h > head; h--) await send('POST', `/api/scenarios/${S}/undo`);
+    };
+    const metres = (a, b) => Math.hypot((a[0] - b[0]) * 111320 * Math.cos((a[1] * Math.PI) / 180), (a[1] - b[1]) * 110540);
+    const lengthOf = (coords) => coords.slice(1).reduce((sum, c, i) => sum + metres(coords[i], c), 0);
+    const toPath = (p, coords) => {
+      const k = 111320 * Math.cos((p[1] * Math.PI) / 180);
+      let best = Infinity;
+      for (let i = 1; i < coords.length; i++) {
+        const ax = (coords[i - 1][0] - p[0]) * k, ay = (coords[i - 1][1] - p[1]) * 110540;
+        const dx = (coords[i][0] - p[0]) * k - ax, dy = (coords[i][1] - p[1]) * 110540 - ay;
+        const f = dx * dx + dy * dy > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0;
+        best = Math.min(best, Math.hypot(ax + f * dx, ay + f * dy));
+      }
+      return best;
+    };
+    const busLine = await (async () => {
+      for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 40).slice(0, 40)) {
+        const d = await get(`/api/routes/${r.id}${q}`);
+        if (d.directions.length === 2 && d.patterns[0].stopCount >= 14) return d;
+      }
+      throw new Error('no bus line long enough');
+    })();
+    const busStops = (await get(`/api/patterns/${busLine.patterns[0].id}/stops`)).stops;
+
+    // A one-way loop: one direction only, ending where it began.
+    const third = Math.floor(busStops.length / 3);
+    const ring = [busStops[0].id, busStops[third].id, busStops[2 * third].id];
+    assert.equal((await edit({ kind: 'createLine', name: 'LP', modeId: 'bus', stopIds: ring.slice(0, 2), headwaySecs: 1200, loop: true })).status, 400, 'a loop needs three stops');
+    const loop = await edit({ kind: 'createLine', name: 'LP', modeId: 'bus', stopIds: ring, headwaySecs: 1200, loop: true });
+    assert.equal(loop.status, 200, JSON.stringify(loop.body));
+    const loopRoute = await get(`/api/routes/${loop.body.routeId}${q}`);
+    assert.equal(loopRoute.directions.length, 1, 'a loop runs one way only');
+    assert.equal(loopRoute.tripCount, 48, 'every 20 minutes from 06:00 to 22:00, one way');
+    const loopTrips = await get(`/api/routes/${loop.body.routeId}/trips${q}`);
+    const loopTrip = await get(`/api/trips/${loopTrips[0].id}${q}`);
+    assert.deepEqual(loopTrip.stopTimes.map((s) => s.stopId), [...ring, ring[0]], 'it comes back to its first stop');
+    for (let i = 1; i < loopTrip.stopTimes.length; i++) {
+      assert.ok(loopTrip.stopTimes[i].arr > loopTrip.stopTimes[i - 1].dep && loopTrip.stopTimes[i].dist > loopTrip.stopTimes[i - 1].dist, 'times and distances run forwards round the loop');
+    }
+    assert.equal((await get(`/api/scenarios/${S}/lines`)).features.filter((f) => f.properties.route_id === loop.body.routeId).length, 1);
+    assert.ok(loopRoute.vehicleDays < 48 / 2, 'a bus that finishes a lap starts the next one');
+    step(`loop: ${loop.body.summary}`);
+
+    // A new train line between two stations a long way apart follows the track between them.
+    const t1Stops = (await get(`/api/patterns/${[...before.patterns].sort((a, b) => b.stopCount - a.stopCount)[0].id}/stops`)).stops;
+    const far = [t1Stops[1], t1Stops[t1Stops.length - 2]];
+    const crow = metres([far[0].lon, far[0].lat], [far[1].lon, far[1].lat]);
+    const rail = await edit({ kind: 'createLine', name: 'TRK', modeId: 'train', stopIds: far.map((s) => s.parentId ?? s.id), headwaySecs: 1800 });
+    assert.equal(rail.status, 200, JSON.stringify(rail.body));
+    assert.ok(rail.body.summary.includes('following existing track'), rail.body.summary);
+    const railPaths = (await get(`/api/scenarios/${S}/lines`)).features.filter((f) => f.properties.route_id === rail.body.routeId).map((f) => f.geometry.coordinates);
+    assert.equal(railPaths.length, 2);
+    for (const path of railPaths) {
+      assert.ok(path.length > 50 && lengthOf(path) >= crow * 0.98, 'the path has the shape of the track, not a straight line');
+      for (const s of t1Stops.slice(2, -2).filter((_, i) => i % 4 === 0)) {
+        assert.ok(toPath([s.lon, s.lat], path) < 400, `the path passes ${s.name}, which is on the track between the two ends`);
+      }
+    }
+    const railTrip = await get(`/api/trips/${(await get(`/api/routes/${rail.body.routeId}/trips${q}`))[0].id}${q}`);
+    assert.ok(Math.abs(railTrip.stopTimes[1].dist - lengthOf(railPaths[0])) < lengthOf(railPaths[0]) * 0.05, 'the last stop is at the end of the path');
+    const straightLine = await send('POST', '/api/road-path', { baselineId: baseline.id, modeId: 'train', stopIds: far.map((s) => s.parentId ?? s.id) });
+    assert.equal(straightLine.body.method, 'track');
+    const ferry = routes.filter((r) => r.modeId === 'ferry').sort((a, b) => b.tripCount - a.tripCount)[0];
+    if (ferry) {
+      const wharves = (await get(`/api/patterns/${(await get(`/api/routes/${ferry.id}`)).patterns[0].id}/stops`)).stops;
+      const water = await send('POST', '/api/road-path', { baselineId: baseline.id, modeId: 'ferry', stopIds: [wharves[0], wharves[wharves.length - 1]].map((s) => s.parentId ?? s.id) });
+      assert.equal(water.status, 200);
+      assert.equal(water.body.method, 'water');
+      assert.ok(water.body.coords.length > 10, 'a ferry line follows the published ferry routes');
+    }
+    step(`track: ${rail.body.summary}`);
+
+    // Cut a train line between two neighbouring stations: nothing runs across the gap any more.
+    const headBeforeCut = await headOf();
+    const statsBefore = (await get(`/api/scenarios/${S}`)).stats;
+    const mid = Math.floor(t1Stops.length / 2);
+    const [sideA, sideB] = [t1Stops[mid], t1Stops[mid + 1]];
+    const cutBody = { what: 'train', fromStopId: sideA.id, toStopId: sideB.id };
+    assert.equal((await send('POST', `/api/close-preview${q}`, { what: 'train', fromStopId: sideA.id, toStopId: sideA.id })).status, 400, 'a closure needs two different stations');
+    const cutPreview = await send('POST', `/api/close-preview${q}`, cutBody);
+    assert.equal(cutPreview.status, 200, JSON.stringify(cutPreview.body));
+    assert.ok(cutPreview.body.lines.some((l) => l.routeId === t1.id), 'the line through the closure is listed');
+    assert.ok(cutPreview.body.trips.split > 0);
+    assert.equal(await headOf(), headBeforeCut, 'a preview changes nothing');
+    const cut = await edit({ kind: 'close', ...cutBody });
+    assert.equal(cut.status, 200, JSON.stringify(cut.body));
+    const stationsOf = (stops) => new Set(stops.map((s) => s.parentId ?? s.id));
+    const [stationA, stationB] = [sideA.parentId ?? sideA.id, sideB.parentId ?? sideB.id];
+    const afterCut = await get(`/api/routes/${t1.id}${q}`);
+    for (const p of afterCut.patterns) {
+      const stations = stationsOf((await get(`/api/patterns/${p.id}/stops`)).stops);
+      assert.ok(!(stations.has(stationA) && stations.has(stationB)), `no stop pattern of ${t1.shortName} crosses the closure`);
+    }
+    const t1Preview = cutPreview.body.lines.find((l) => l.routeId === t1.id);
+    assert.ok(afterCut.tripCount > withBefore.tripCount - t1Preview.trips, 'trips either side of the closure still run');
+    const cutInfo = await get(`/api/scenarios/${S}`);
+    assert.equal(cutInfo.stats.unassigned, 0, 'every part of a split trip has a vehicle');
+    assert.equal((await get(`/api/scenarios/${S}/closures`)).features.length, 1, 'the closure is drawn on the map');
+    const parts = await get(`/api/routes/${t1.id}/trips${q}`);
+    const day = await get(`/api/vehicle-days/${parts.find((t) => t.edited && t.vehicleDayId).vehicleDayId}${q}`);
+    for (let i = 1; i < day.trips.length; i++) assert.ok(day.trips[i].startSecs >= day.trips[i - 1].endSecs, 'a vehicle cannot run two trips at once');
+    step(`line cut: ${cut.body.summary}`);
+    await undoTo(headBeforeCut);
+    assert.equal((await get(`/api/scenarios/${S}/closures`)).features.length, 0, 'undo reopens the line');
+    assert.equal((await get(`/api/scenarios/${S}`)).stats.trips, statsBefore.trips);
+    step('undo reopens the line');
+
+    // Close a road in the middle of a bus line: buses go round and miss the stops inside.
+    const headBeforeRoad = await headOf();
+    const shut = busStops[Math.floor(busStops.length / 2)];
+    const roadBody = { what: 'road', lon: shut.lon, lat: shut.lat, radiusM: 50 };
+    assert.equal((await send('POST', `/api/close-preview${q}`, { what: 'road', lon: 0, lat: 0 })).status, 400);
+    const roadPreview = await send('POST', `/api/close-preview${q}`, roadBody);
+    assert.equal(roadPreview.status, 200, JSON.stringify(roadPreview.body));
+    assert.ok(roadPreview.body.lines.some((l) => l.routeId === busLine.id), 'the bus line through the closure is listed');
+    if (roadPreview.body.trips.detour === 0) {
+      step('road closure: no routing server answered, so no way round could be found (skipped)');
+    } else {
+      assert.ok(roadPreview.body.paths.length > 0);
+      const road = await edit({ kind: 'close', ...roadBody });
+      assert.equal(road.status, 200, JSON.stringify(road.body));
+      const afterRoad = await get(`/api/routes/${busLine.id}${q}`);
+      assert.equal(afterRoad.tripCount, busLine.tripCount, 'a detour keeps every trip');
+      // A stop pattern is left alone, and reported, when the routing server finds no way round for it.
+      const allRound = !road.body.summary.includes('no way round was found');
+      let stillCalling = 0;
+      for (const p of afterRoad.patterns) {
+        const stops = (await get(`/api/patterns/${p.id}/stops`)).stops;
+        if (stops.some((s) => s.id === shut.id)) stillCalling++;
+      }
+      if (allRound) assert.equal(stillCalling, 0, `no stop pattern calls at the closed stop: ${road.body.summary}`);
+      else assert.ok(stillCalling < afterRoad.patterns.length, road.body.summary);
+      const newPaths = (await get(`/api/scenarios/${S}/lines`)).features.filter((f) => f.properties.route_id === busLine.id).map((f) => f.geometry.coordinates);
+      assert.ok(newPaths.length > 0);
+      const inside = newPaths.filter((path) => toPath([shut.lon, shut.lat], path) <= 49).length;
+      if (allRound) assert.equal(inside, 0, `every new path stays out of the closed stretch: ${road.body.summary}`);
+      else assert.ok(inside < newPaths.length, road.body.summary);
+      const moved = (await get(`/api/routes/${busLine.id}/trips${q}`)).find((t) => t.edited);
+      const movedTrip = await get(`/api/trips/${moved.id}${q}`);
+      for (let i = 1; i < movedTrip.stopTimes.length; i++) {
+        assert.ok(movedTrip.stopTimes[i].arr >= movedTrip.stopTimes[i - 1].dep && movedTrip.stopTimes[i].dist >= movedTrip.stopTimes[i - 1].dist, 'times and distances stay in order');
+      }
+      assert.ok(moved.vehicleDayId, 'a detoured trip keeps its vehicle');
+      step(`road closed: ${road.body.summary}`);
+      await undoTo(headBeforeRoad);
+      assert.deepEqual((await get(`/api/routes/${busLine.id}${q}`)).patterns.map((p) => p.id), busLine.patterns.map((p) => p.id), 'undo reopens the road');
+    }
+  }
+
+  // Schedule edits: a trip added to a line, vehicles worked out again, a stop added to one trip, platforms.
+  {
+    const edit = (body) => send('POST', `/api/scenarios/${S}/edits`, body);
+    const line = routes.find((r) => r.modeId === 'bus' && r.tripCount > 60 && r.id !== someBus.id);
+    const lineBefore = await get(`/api/routes/${line.id}${q}`);
+    const addedTrip = await edit({ kind: 'addTrip', routeId: line.id, direction: 0, startSecs: 12 * 3600 + 420 });
+    assert.equal(addedTrip.status, 200, JSON.stringify(addedTrip.body));
+    const fresh = await get(`/api/trips/${addedTrip.body.focusTripId}${q}`);
+    assert.equal(fresh.startSecs, 12 * 3600 + 420);
+    assert.ok(fresh.vehicleDayId, 'the added trip has a vehicle');
+    assert.equal((await get(`/api/routes/${line.id}${q}`)).tripCount, lineBefore.tripCount + 1);
+    step(`trip added: ${addedTrip.body.summary}`);
+
+    // Doubling the frequency adds vehicles one trip at a time; working them out again should need no more.
+    const freq = await edit({ kind: 'lineFrequency', routeId: line.id, bands: [{ fromSecs: 9 * 3600, toSecs: 12 * 3600, headwaySecs: 600 }] });
+    assert.equal(freq.status, 200, JSON.stringify(freq.body));
+    const piecemeal = (await get(`/api/routes/${line.id}${q}`)).vehicleDays;
+    const replanned = await edit({ kind: 'replan', routeId: line.id });
+    assert.equal(replanned.status, 200, JSON.stringify(replanned.body));
+    const planned = await get(`/api/routes/${line.id}${q}`);
+    const plannedTrips = await get(`/api/routes/${line.id}/trips${q}`);
+    assert.ok(plannedTrips.every((t) => t.vehicleDayId), 'every trip has a vehicle after re-planning');
+    assert.ok(planned.vehicleDays <= piecemeal, `re-planning should not need more vehicles (${planned.vehicleDays} against ${piecemeal})`);
+    assert.ok(!(await get(`/api/scenarios/${S}`)).conflicts.some((c) => c.kind === 'vehicle' && plannedTrips.some((t) => t.id === c.tripId)), 'no vehicle is in two places');
+    step(`vehicles re-planned: ${replanned.body.summary}`);
+
+    // Move a trip onto another vehicle of the line.
+    const mover = plannedTrips[0];
+    const target = plannedTrips.find((t) => t.vehicleDayId !== mover.vehicleDayId);
+    const movedTrip = await edit({ kind: 'moveToVehicle', tripId: mover.id, vehicleDayId: target.vehicleDayId });
+    assert.equal(movedTrip.status, 200, JSON.stringify(movedTrip.body));
+    assert.equal((await get(`/api/trips/${movedTrip.body.focusTripId}${q}`)).vehicleDayId, target.vehicleDayId);
+    step(`trip moved between vehicles: ${movedTrip.body.summary}`);
+
+    // A stop the trip runs through can be put back, and a stop beside the path can be added.
+    const subject = plannedTrips[Math.floor(plannedTrips.length / 2)];
+    const subjectStops = (await get(`/api/trips/${subject.id}${q}`)).stopTimes;
+    const mid = subjectStops[Math.floor(subjectStops.length / 2)];
+    const skipped = await edit({ kind: 'skipStop', tripId: subject.id, stopSeq: mid.seq, scope: 'trip' });
+    assert.equal(skipped.status, 200, JSON.stringify(skipped.body));
+    const skippedId = skipped.body.focusTripId;
+    const options = await get(`/api/trips/${skippedId}/addable-stops${q}`);
+    assert.ok(options.some((o) => o.stopId === mid.stopId && o.restore), 'the skipped stop is offered again');
+    const restored = await edit({ kind: 'addCall', tripId: skippedId, stopId: mid.stopId });
+    assert.equal(restored.status, 200, JSON.stringify(restored.body));
+    const back = await get(`/api/trips/${restored.body.focusTripId}${q}`);
+    const again = back.stopTimes.find((x) => x.stopId === mid.stopId);
+    assert.ok(again.pickupType === 0 && again.dropOffType === 0, 'the trip stops there again');
+    assert.equal(back.stopTimes.length, subjectStops.length);
+    step(`stop restored: ${restored.body.summary}`);
+
+    // Take a stop out of the whole pattern by reshaping is another tool; here find a trip with a stop beside its path.
+    let inserted = null;
+    for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 20).slice(0, 25)) {
+      const trip = (await get(`/api/routes/${r.id}/trips${q}`))[0];
+      if (!trip) continue;
+      const extra = (await get(`/api/trips/${trip.id}/addable-stops${q}`)).find((o) => !o.restore);
+      if (!extra) continue;
+      const beforeStops = (await get(`/api/trips/${trip.id}${q}`)).stopTimes;
+      const done = await edit({ kind: 'addCall', tripId: trip.id, stopId: extra.stopId });
+      assert.equal(done.status, 200, JSON.stringify(done.body));
+      const now = await get(`/api/trips/${done.body.focusTripId}${q}`);
+      assert.equal(now.stopTimes.length, beforeStops.length + 1);
+      for (let i = 1; i < now.stopTimes.length; i++) {
+        assert.ok(now.stopTimes[i].arr >= now.stopTimes[i - 1].dep, 'times run forwards through the new stop');
+        assert.ok(now.stopTimes[i].dist >= now.stopTimes[i - 1].dist, 'stops stay in order along the path');
+      }
+      assert.ok(now.endSecs >= beforeStops[beforeStops.length - 1].arr, 'the trip is no shorter');
+      assert.notEqual(now.patternId, trip.patternId ?? -1, 'the trip has a stop pattern of its own');
+      inserted = done.body.summary;
+      break;
+    }
+    step(inserted ? `stop added to one trip: ${inserted}` : 'no bus trip with a spare stop beside its path was found (skipped)');
+
+    // Whole-line frequency on a line with several stop patterns: the new departures are shared between them.
+    {
+      let branching = null;
+      for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 80 && x.id !== line.id && x.id !== someBus.id).slice(0, 60)) {
+        const trips = await get(`/api/routes/${r.id}/trips${q}`);
+        if (trips.some((t) => t.edited)) continue;
+        const inBand = trips.filter((t) => t.direction === 0 && t.startSecs >= 9 * 3600 && t.startSecs < 15 * 3600);
+        if (new Set(inBand.map((t) => t.patternId)).size >= 2) {
+          branching = { route: r, patterns: new Set(inBand.map((t) => t.patternId)).size };
+          break;
+        }
+      }
+      if (!branching) step('no branching bus line found for the shared frequency check (skipped)');
+      else {
+        const shared = await edit({ kind: 'lineFrequency', routeId: branching.route.id, allPatterns: true, bands: [{ fromSecs: 9 * 3600, toSecs: 15 * 3600, headwaySecs: 900 }] });
+        assert.equal(shared.status, 200, JSON.stringify(shared.body));
+        const now = (await get(`/api/routes/${branching.route.id}/trips${q}`)).filter((t) => t.direction === 0 && t.startSecs >= 9 * 3600 && t.startSecs < 15 * 3600);
+        assert.equal(now.length, 24, 'every 15 minutes for six hours, whatever the pattern');
+        assert.ok(new Set(now.map((t) => t.patternId)).size >= 2, 'more than one stop pattern still runs');
+        const starts = now.map((t) => t.startSecs).sort((a, b) => a - b);
+        assert.ok(starts.every((x, i) => i === 0 || x - starts[i - 1] === 900), 'departures are evenly spaced across the patterns: ' + starts.map((x) => x / 60).join(' ') + ' | ' + shared.body.summary);
+        step(`shared frequency: ${shared.body.summary}`);
+      }
+    }
+
+    // Platforms: a trip can be moved to another platform at the same station.
+    const train = (await get(`/api/routes/${t1.id}/trips${q}`)).find((t) => !t.edited);
+    const trainStops = (await get(`/api/trips/${train.id}${q}`)).stopTimes;
+    let platformDone = false;
+    for (const call of trainStops) {
+      const choices = await get(`/api/trips/${train.id}/platforms${q}&seq=${call.seq}`);
+      assert.ok(choices.length === 0 || choices.some((c) => c.current), 'the platform in use is among the choices');
+      const freeOne = choices.find((c) => c.free && !c.current);
+      if (!freeOne) continue;
+      const moved = await edit({ kind: 'setPlatform', tripId: train.id, stopSeq: call.seq, stopId: freeOne.id });
+      assert.equal(moved.status, 200, JSON.stringify(moved.body));
+      const now = await get(`/api/trips/${moved.body.focusTripId}${q}`);
+      assert.equal(now.stopTimes.find((x) => x.seq === call.seq).stopId, freeOne.id);
+      assert.equal(now.startSecs, train.startSecs, 'changing platform does not move the trip');
+      step(`platform changed: ${moved.body.summary}`);
+      platformDone = true;
+      break;
+    }
+    assert.ok(platformDone, 'some station on T1 has a free platform');
+
+    // A copy one minute behind a train lands on its platforms; where the line has another free one it is used,
+    // and what is left is reported with a free platform offered as a fix.
+    const crowd = await edit({ kind: 'duplicate', tripId: train.id, startSecs: train.startSecs + 60 });
+    assert.equal(crowd.status, 200, JSON.stringify(crowd.body));
+    const clashes = (await get(`/api/scenarios/${S}`)).conflicts.filter((c) => c.kind === 'platform');
+    const offered = clashes.filter((c) => c.fixes.some((x) => x.edit.kind === 'setPlatform')).length;
+    step(`copy one minute behind: ${crowd.body.summary}; ${clashes.length} platform clashes left, ${offered} with a free platform offered`);
+    await send('POST', `/api/scenarios/${S}/undo`);
   }
 
   // Vehicle types: put one trip on a bigger train, then set a fleet size the scenario exceeds.

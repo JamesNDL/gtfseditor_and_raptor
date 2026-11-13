@@ -7,11 +7,41 @@
   --accent: #4cc2ff;
   --series-1: #3987e5;
   --warn: #fab219;
+  /* Behind the map while it loads, hairlines inside panels, text on the accent and warning colours. */
+  --page: #0b0d10;
+  --hairline: #1f242c;
+  --on-accent: #06202e;
+  --on-warn: #1a1300;
+  --danger-text: #ff8a80;
+  --before: #c3cad4;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --playhead: #fff;
   --radius: 14px;
   color-scheme: dark;
   font-family: Inter, 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.4;
+}
+
+/* The light version: the same layout on white panels, chosen with the button in the top bar. */
+:root[data-theme='light'] {
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #cfd6df;
+  --text: #1b2330;
+  --muted: #5b6676;
+  --accent: #0a74b8;
+  --series-1: #2a6fd0;
+  --warn: #9a6700;
+  --page: #e9edf2;
+  --hairline: #e1e6ec;
+  --on-accent: #ffffff;
+  --on-warn: #ffffff;
+  --danger-text: #c62828;
+  --before: #7a8594;
+  --shadow: rgba(20, 30, 45, 0.18);
+  --playhead: #1b2330;
+  color-scheme: light;
 }
 
 * {
@@ -25,7 +55,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #0b0d10;
+  background: var(--page);
   color: var(--text);
 }
 
@@ -98,7 +128,7 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 30px var(--shadow);
 }
 
 /* ------------------------------------------------------------------ top bar */
@@ -296,7 +326,7 @@ h3 {
   place-items: center;
   border-radius: 50%;
   background: var(--accent);
-  color: #06202e;
+  color: var(--on-accent);
 }
 
 .play:hover {
@@ -356,8 +386,8 @@ h3 {
   bottom: 0;
   width: 2px;
   margin-left: -1px;
-  background: #fff;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  background: var(--playhead);
+  box-shadow: 0 0 8px var(--playhead);
   pointer-events: none;
 }
 
@@ -397,7 +427,7 @@ h3 {
 
 .speeds button.on {
   background: var(--accent);
-  color: #06202e;
+  color: var(--on-accent);
   font-weight: 700;
 }
 
@@ -715,7 +745,7 @@ h3 {
 }
 
 .chart-axis {
-  stroke: #3a414d;
+  stroke: var(--border);
 }
 
 .chart-label {
@@ -733,7 +763,7 @@ h3 {
   flex-direction: column;
   padding: 6px 9px;
   border-radius: 8px;
-  background: #0b0d10;
+  background: var(--page);
   border: 1px solid var(--border);
   font-size: 12px;
   white-space: nowrap;
@@ -865,7 +895,7 @@ h3 {
 .stop-link {
   text-align: left;
   text-decoration: underline dotted;
-  text-decoration-color: #5d6878;
+  text-decoration-color: var(--muted);
   text-underline-offset: 3px;
 }
 
@@ -884,10 +914,39 @@ h3 {
 .scenario {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The chooser and the tool buttons never scroll out of sight. */
+.scenario-tools {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px;
+}
+
+.scenario-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 10px;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* On a short window the list of modes gives way before the tools do. */
+/* On a short window the scenario panel gives way first, down to its tools; only then does the list of modes. */
+.modes {
+  flex: 0 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+}
+
+.scenario {
+  flex: 0 1000 auto;
+  min-height: 168px;
 }
 
 .scenario-head,
@@ -970,7 +1029,7 @@ h3 {
   height: 16px;
   border-radius: 50%;
   background: var(--warn);
-  color: #1a1300;
+  color: var(--on-warn);
   font-size: 11px;
   font-weight: 800;
   text-align: center;
@@ -994,7 +1053,7 @@ h3 {
 }
 
 .error-text {
-  color: #ff8a80;
+  color: var(--danger-text);
 }
 
 .button:disabled,
@@ -1006,7 +1065,7 @@ h3 {
 
 .button.danger {
   border-color: #e5484d;
-  color: #ff8a80;
+  color: var(--danger-text);
 }
 
 /* editing controls in the inspector */
@@ -1098,7 +1157,7 @@ h3 {
 /* before-and-after */
 .chart-before {
   fill: none;
-  stroke: #c3cad4;
+  stroke: var(--before);
   stroke-width: 1.2;
   stroke-dasharray: 3 2;
 }
@@ -1126,7 +1185,7 @@ h3 {
 }
 
 .legend-before {
-  border: 1.2px dashed #c3cad4;
+  border: 1.2px dashed var(--before);
 }
 
 .impact {
@@ -1228,7 +1287,7 @@ h3 {
 
 .fleet-table td {
   padding: 3px 8px;
-  border-bottom: 1px solid #1f242c;
+  border-bottom: 1px solid var(--hairline);
   white-space: nowrap;
 }
 
@@ -1328,7 +1387,7 @@ select.cell {
 
 .bands td {
   padding: 3px 4px;
-  border-top: 1px solid #1f242c;
+  border-top: 1px solid var(--hairline);
 }
 
 .bands .n {
@@ -1355,6 +1414,19 @@ select.cell {
   opacity: 1;
 }
 
+/* adding a stop that does not exist yet */
+.new-stop-link {
+  display: block;
+  margin: 4px 0 12px;
+}
+
+.new-stop {
+  border: 1px solid var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
 /* reshaping a line */
 .reshape-preview p {
   margin: 0 0 6px;
@@ -1367,4 +1439,81 @@ select.cell {
 
 .title-row .badge {
   flex: none;
+}
+
+/* Closing a road or a line */
+.close-button {
+  margin-top: 6px;
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.closure-lines {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.closure-lines li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* schedule tools */
+.grow-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.platform-change {
+  margin-left: 6px;
+}
+
+.platform-select {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+/* station panel */
+.station-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 84px;
+}
+
+.station-hour {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  font-size: 10px;
+}
+
+.station-hour span {
+  height: 14px;
+}
+
+.station-bar {
+  width: 100%;
+  background: var(--series-1);
+  border-radius: 2px 2px 0 0;
+}
+
+.section-head .check {
+  margin: 0;
 }

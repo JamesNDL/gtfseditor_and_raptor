@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { keptIndexes, locateStops, mirrorStops, pathDistances, retime, slicePath, type Coord, type OldCall } from './reshape.ts';
+import { bandOf, DAY_BANDS } from './time.ts';
+import { distanceToPathM, keptIndexes, locateStops, mirrorStops, pathDistances, retime, slicePath, type Coord, type OldCall } from './reshape.ts';
 
 const call = (arr: number, dep = arr, pickup = 0, dropOff = 0): OldCall => ({ arr, dep, pickup, dropOff });
 
@@ -99,5 +100,54 @@ describe('mirrorStops', () => {
   });
   it('gives up when there is nowhere to hang the change', () => {
     expect(mirrorStops({ keptAt: [0, 1, 2, 3, -1], matchOld: [3, 2, 1, null], counterpart: [0, 0, 0, 0, 15], opposite })).toBeNull();
+  });
+});
+
+describe('detours and closures', () => {
+  it('scales the time of each trip when the vehicle goes a longer way round', () => {
+    const old = [call(0), call(100, 120), call(300, 320), call(500)];
+    // The third stop is closed and the way from the second to the last is half as long again.
+    const next = retime(old, [0, 1, 3], [{ kind: 'same' }, { kind: 'detour', factor: 1.5 }], { dwellSecs: 20, skipPenaltySecs: 20 });
+    expect(next.map((c) => c.dep)[1]).toBe(120);
+    // 380 s as published, less 20 s standing and 20 s for stopping at the closed stop, times 1.5.
+    expect(next[2].arr).toBe(120 + Math.round((380 - 40) * 1.5));
+  });
+  it('measures how close a path comes to a point', () => {
+    const path: Coord[] = [[151, -33.9], [151.01, -33.9]];
+    expect(distanceToPathM(path, 151.005, -33.9)).toBeLessThan(1);
+    const off = distanceToPathM(path, 151.005, -33.901);
+    expect(off).toBeGreaterThan(105);
+    expect(off).toBeLessThan(116);
+    expect(distanceToPathM(path, 151.02, -33.9)).toBeGreaterThan(900);
+  });
+});
+
+describe('run times by part of the day', () => {
+  it('puts each time in its part of the day', () => {
+    expect(DAY_BANDS[bandOf(5 * 3600)].id).toBe('early');
+    expect(DAY_BANDS[bandOf(8 * 3600)].id).toBe('am');
+    expect(DAY_BANDS[bandOf(12 * 3600)].id).toBe('day');
+    expect(DAY_BANDS[bandOf(17 * 3600)].id).toBe('pm');
+    expect(DAY_BANDS[bandOf(21 * 3600)].id).toBe('evening');
+    // Times after midnight on the same service day are still the evening.
+    expect(DAY_BANDS[bandOf(25 * 3600)].id).toBe('evening');
+    expect(bandOf(6.5 * 3600)).toBe(1);
+  });
+  it('times a new stretch by when the trip sets out', () => {
+    const byBand = [60, 180, 90, 150, 70];
+    const sections = [{ kind: 'same' as const }, { kind: 'new' as const, secs: 90, byBand }];
+    const at = (start: number) => {
+      const old = [call(start), call(start + 300)];
+      const next = retime(old, [0, 1, -1], sections, { dwellSecs: 0, skipPenaltySecs: 20 });
+      return next[2].arr - next[1].dep;
+    };
+    expect(at(8 * 3600)).toBe(180);
+    expect(at(12 * 3600)).toBe(90);
+    expect(at(22 * 3600)).toBe(70);
+  });
+  it('falls back to the single time when none is given by part of the day', () => {
+    const old = [call(8 * 3600), call(8 * 3600 + 300)];
+    const next = retime(old, [0, 1, -1], [{ kind: 'same' }, { kind: 'new', secs: 90 }], { dwellSecs: 0, skipPenaltySecs: 20 });
+    expect(next[2].arr - next[1].dep).toBe(90);
   });
 });

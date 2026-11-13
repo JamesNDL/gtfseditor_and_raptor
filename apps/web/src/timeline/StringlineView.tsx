@@ -91,7 +91,7 @@ export function StringlineView({ patternId, others }: { patternId: number; other
     // Where trips were before the scenario changed them: dashed grey, underneath everything.
     if (data.ghosts.length) {
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = '#aab4c2';
+      ctx.strokeStyle = COLORS.muted;
       ctx.lineWidth = 1.2;
       ctx.globalAlpha = 0.75;
       for (const g of data.ghosts) {
@@ -117,7 +117,7 @@ export function StringlineView({ patternId, others }: { patternId: number; other
         ctx.lineWidth = 3.4;
         tracePath(env, t.calls);
         ctx.stroke();
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = COLORS.highlight;
         ctx.lineWidth = 1;
       }
       tracePath(env, t.calls);
@@ -136,7 +136,7 @@ export function StringlineView({ patternId, others }: { patternId: number; other
     // The selected trip: a white casing under its own colour so it reads on any background.
     const selected = model.trips.find((t) => t.id === env.selectedTripId);
     if (selected) {
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = COLORS.highlight;
       ctx.lineWidth = 5;
       tracePath(env, selected.calls);
       ctx.stroke();
@@ -149,7 +149,7 @@ export function StringlineView({ patternId, others }: { patternId: number; other
     const dragged = env.dragTripId !== null ? model.trips.find((t) => t.id === env.dragTripId) : undefined;
     if (dragged) {
       ctx.setLineDash([6, 4]);
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = COLORS.highlight;
       ctx.lineWidth = 2.5;
       tracePath(env, dragged.calls, env.dragDelta);
       ctx.stroke();

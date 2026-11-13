@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApi, type RouteDetail } from './api.ts';
 import { isRoadMode, startReshape } from './builder.ts';
 import { Badge, fmt, shortStop, Tag } from './inspector/parts.tsx';
+import { NewStopTool } from './NewStopTool.tsx';
 import { applyEdit } from './scenario.ts';
 import { useStore } from './store.ts';
 
@@ -94,7 +95,7 @@ export function ReshapePanel() {
 
   const update = (patch: Partial<typeof builder>) => set({ builder: { ...builder, ...patch } });
   const option = (patch: Partial<typeof reshape>) => update({ reshape: { ...reshape, ...patch } });
-  const cancel = () => set({ builder: null, builderPath: null });
+  const cancel = () => set({ builder: null, builderPath: null, placing: null });
   const original = new Set(reshape.original.map((s) => s.id));
   const changed = stopKey !== reshape.original.map((s) => s.id).join(',');
   const r = route.data;
@@ -150,17 +151,15 @@ export function ReshapePanel() {
             <input type="checkbox" checked={reshape.bothWays} onChange={(e) => option({ bothWays: e.target.checked })} />
             Change the other direction to match
           </label>
+          <label className="timeline-check">
+            <input type="checkbox" checked={builder.followRoads} onChange={(e) => update({ followRoads: e.target.checked })} />
+            New stretches follow {roads ? 'roads' : builder.modeId === 'ferry' ? 'existing ferry routes' : 'existing track'}
+          </label>
           {roads && (
-            <>
-              <label className="timeline-check">
-                <input type="checkbox" checked={builder.followRoads} onChange={(e) => update({ followRoads: e.target.checked })} />
-                New stretches follow roads
-              </label>
-              <label className="timeline-check" title="Otherwise the bus keeps to its published path and simply does not stop">
-                <input type="checkbox" checked={reshape.direct} onChange={(e) => option({ direct: e.target.checked })} />
-                Where stops are removed, take the direct road
-              </label>
-            </>
+            <label className="timeline-check" title="Otherwise the bus keeps to its published path and simply does not stop">
+              <input type="checkbox" checked={reshape.direct} onChange={(e) => option({ direct: e.target.checked })} />
+              Where stops are removed, take the direct road
+            </label>
           )}
         </section>
 
@@ -222,7 +221,9 @@ export function ReshapePanel() {
           </ol>
         </section>
 
-        {error && <p className="error-text small">Could not change the line: {error}</p>}
+        <NewStopTool />
+
+        {error && <p className="error-text small">That did not work: {error}</p>}
 
         <div className="actions">
           <button

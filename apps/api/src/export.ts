@@ -71,7 +71,9 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select gtfs_id as stop_id, code as stop_code, name as stop_name,
                round(ST_Y(geom)::numeric, 8) as stop_lat, round(ST_X(geom)::numeric, 8) as stop_lon,
                location_type, parent_gtfs_id as parent_station, wheelchair as wheelchair_boarding, platform_code
-        from stops where baseline_id = ${b} order by 1`,
+        from stops where baseline_id = ${b}
+          and (scenario_id is null${sc ? ` or (scenario_id = ${Number(sc.id)} and created_edit <= ${Number(sc.head)})` : ''})
+        order by 1`,
       'calendar.txt': `
         select 'DAY' as service_id, ${days.map((d) => `${d === baseline.weekday ? 1 : 0} as ${d}`).join(', ')},
                ${text(baseline.date)} as start_date, ${text(baseline.date)} as end_date`,

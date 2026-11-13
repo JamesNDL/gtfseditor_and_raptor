@@ -78,7 +78,7 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       if (y + rowH < env.top || y > env.height) return;
       const focused = model.platforms[r].id === focusStopId;
       if (focused) {
-        ctx.fillStyle = '#263243';
+        ctx.fillStyle = COLORS.block;
         ctx.fillRect(0, y, env.width, rowH);
       } else if (r % 2 === 1) {
         ctx.fillStyle = COLORS.rowAlt;
@@ -126,7 +126,7 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       ctx.fillStyle = fill;
       ctx.fill();
       if (c.tripId === env.selectedTripId || c.tripId === env.hoverTripId) {
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = COLORS.highlight;
         ctx.lineWidth = c.tripId === env.selectedTripId ? 2.5 : 1.5;
         roundRect(ctx, x - 1, y - 1, w + 2, h + 2, 4);
         ctx.stroke();

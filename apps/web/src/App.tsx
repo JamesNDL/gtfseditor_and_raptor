@@ -1,6 +1,7 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { getJson, type Baseline, type Mode, type RouteListItem } from './api.ts';
 import { clock } from './clock.ts';
+import { ClosurePanel } from './ClosurePanel.tsx';
 import { FleetPanel } from './FleetPanel.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
 import { liveStats } from './liveStats.ts';
@@ -11,6 +12,7 @@ import { ReshapePanel } from './ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { useStore } from './store.ts';
+import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
 import { TimelinePanel } from './timeline/TimelinePanel.tsx';
 import { TopBar } from './TopBar.tsx';
@@ -25,8 +27,12 @@ const LOAD_ORDER = ['train', 'metro', 'light_rail', 'ferry', 'coach', 'bus', 'sc
 export function App() {
   const baselineId = useStore((s) => s.baselineId);
   const set = useStore((s) => s.set);
-  const inspectorOpen = useStore((s) => s.history.length > 0 || s.builder !== null);
+  const inspectorOpen = useStore((s) => s.history.length > 0 || s.builder !== null || s.closing !== null);
   const timelineOpen = useStore((s) => s.timeline.open);
+  const theme = useStore((s) => s.theme);
+
+  // Set the colours before anything draws; the choice is remembered between visits.
+  useMemo(() => applyTheme(theme), [theme]);
 
   useEffect(() => {
     Promise.all([getJson<Baseline[]>('/api/baselines'), getJson<Mode[]>('/api/modes')]).then(([baselines, modes]) => {
@@ -65,13 +71,13 @@ export function App() {
       if (cancelled) return;
       const routes = new Map(list.map((r) => [r.id, r]));
       set({ routes });
-      // Open whatever the link points at, for example #route=2317 or #trip=18202&t=12000.
+      // Open whatever the link points at, for example #route=2317, #trip=18202&t=12000 or #station=4411.
       // Optional extras: tl=stringline|platforms|vehicles, station=<id>, view=<start>-<end> in seconds.
       const params = new URLSearchParams(initialHash.slice(1));
       const linkedScenario = Number(params.get('scenario'));
       if (linkedScenario > 0) await selectScenario(linkedScenario).catch(() => selectScenario(null));
       if (cancelled) return;
-      const kind = (['route', 'trip', 'vehicleDay'] as const).find((k) => Number(params.get(k)) > 0);
+      const kind = (['route', 'trip', 'vehicleDay', 'station'] as const).find((k) => Number(params.get(k)) > 0);
       if (kind) useStore.getState().open({ kind, id: Number(params.get(kind)) }, { replace: true });
       if (Number(params.get('t')) > 0) clock.set(Number(params.get('t')));
       if (params.get('fleet')) useStore.getState().set({ fleetOpen: true });
@@ -138,17 +144,19 @@ export function App() {
 
   return (
     <div className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}`}>
-      <MapView onVehicleCount={onVehicleCount} />
+      {/* The map and the charts draw their own colours, so they are rebuilt when the theme changes. */}
+      <MapView key={`map-${theme}`} onVehicleCount={onVehicleCount} />
       <TopBar />
       <div className="left-column">
         <ModePanel />
         <ScenarioPanel />
       </div>
-      <TimelinePanel />
+      <TimelinePanel key={`timeline-${theme}`} />
       <Inspector />
       <NewLinePanel />
       <ReshapePanel />
-      <TimeBar />
+      <ClosurePanel />
+      <TimeBar key={`timebar-${theme}`} />
       <FleetPanel />
     </div>
   );

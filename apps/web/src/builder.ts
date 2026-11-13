@@ -1,6 +1,7 @@
 // Picking stops on the map, for a new line being drawn or an existing one being reshaped.
 import { distanceM } from '@gtfs-editor/core';
 import { getJson } from './api.ts';
+import { applyEdit } from './scenario.ts';
 import { useStore, type BuilderStop } from './store.ts';
 
 export interface MapStop {
@@ -66,6 +67,18 @@ export function pickStop(stop: MapStop) {
   set({ builder: { ...builder, stops: [...builder.stops.slice(0, where), original ?? picked, ...builder.stops.slice(where)] } });
 }
 
+/** The map was clicked while a named new stop was waiting to be placed: add it there and put it on the line. */
+export async function placeStop(lon: number, lat: number) {
+  const { builder, placing, editBusy } = useStore.getState();
+  if (!builder || !placing || editBusy) return;
+  const result = await applyEdit({ kind: 'addStop', name: placing.name, lon, lat, modeId: builder.modeId, pair: placing.pair, platforms: placing.platforms });
+  if (!result) return; // the reason is shown in the panel; the stop is still waiting to be placed
+  useStore.getState().set({ placing: null });
+  const stop = result.stops?.[0];
+  // The line may have been cancelled while the stop was being added.
+  if (stop && useStore.getState().builder) pickStop(stop);
+}
+
 interface PatternStops {
   id: number;
   routeId: number;
@@ -78,6 +91,8 @@ export async function startReshape(route: { id: number; name: string; modeId: st
   const previous = useStore.getState().builder?.reshape;
   useStore.getState().set({
     builderPath: null,
+    closing: null,
+    closingPreview: null,
     builder: {
       name: route.name,
       modeId: route.modeId,
@@ -94,5 +109,31 @@ export async function startReshape(route: { id: number; name: string; modeId: st
         bothWays: previous?.bothWays ?? true,
       },
     },
+  });
+}
+
+/** A stop was clicked on the map while a line closure is being set up: the first click is one side, the second the other. */
+export function pickClosureStop(stop: MapStop) {
+  const { closing, set } = useStore.getState();
+  if (!closing || closing.what === 'road') return;
+  const picked: BuilderStop = { id: stop.id, name: stop.name, lon: stop.lon, lat: stop.lat, parentId: null };
+  if (!closing.from || closing.to) set({ closing: { ...closing, from: picked, to: null }, closingPreview: null });
+  else if (closing.from.id !== stop.id) set({ closing: { ...closing, to: picked } });
+}
+
+/** The map was clicked while a road closure is being set up. */
+export function pickClosurePoint(lon: number, lat: number) {
+  const { closing, set } = useStore.getState();
+  if (closing?.what === 'road') set({ closing: { ...closing, point: { lon, lat } } });
+}
+
+/** Starts setting up a closure, putting away any line being drawn. */
+export function startClosing() {
+  useStore.getState().set({
+    builder: null,
+    builderPath: null,
+    placing: null,
+    closingPreview: null,
+    closing: { what: 'road', radiusM: 100, point: null, from: null, to: null },
   });
 }

@@ -354,3 +354,22 @@ alter table shapes add column if not exists scenario_id int references scenarios
 alter table shapes add column if not exists created_edit int;
 alter table patterns add column if not exists scenario_id int references scenarios on delete cascade;
 alter table patterns add column if not exists created_edit int;
+
+-- Stops a scenario has added. A road stop may name its partner across the road, used on the way back.
+alter table stops add column if not exists scenario_id int references scenarios on delete cascade;
+alter table stops add column if not exists created_edit int;
+alter table stops add column if not exists partner_id bigint;
+create index if not exists stops_scenario_idx on stops (scenario_id) where scenario_id is not null;
+
+-- Roads and lines a scenario has closed, kept so that the map can show them. The trips that ran
+-- through each one were changed by the same edit.
+create table if not exists scenario_closures (
+  id bigserial primary key,
+  scenario_id int not null references scenarios on delete cascade,
+  created_edit int not null,
+  -- 'road', or the mode whose line is closed.
+  kind text not null,
+  label text not null,
+  geom geometry(MultiPolygon, 4326) not null
+);
+create index if not exists scenario_closures_scenario_idx on scenario_closures (scenario_id);

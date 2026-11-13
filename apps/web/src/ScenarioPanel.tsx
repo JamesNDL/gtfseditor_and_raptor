@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { startClosing } from './builder.ts';
 import { clock } from './clock.ts';
 import { applyEdit, createScenario, deleteScenario, fixAll, redo, selectScenario, undo, type Conflict } from './scenario.ts';
 import { useStore } from './store.ts';
@@ -20,6 +21,7 @@ export function ScenarioPanel() {
   const busy = useStore((s) => s.editBusy);
   const error = useStore((s) => s.editError);
   const baselineId = useStore((s) => s.baselineId);
+  const showChanged = useStore((s) => s.showChanged);
   const set = useStore((s) => s.set);
   if (baselineId === null) return null;
 
@@ -28,6 +30,8 @@ export function ScenarioPanel() {
 
   return (
     <div className="panel scenario">
+      {/* The scenario chooser and the two tools stay put; only what is below them scrolls. */}
+      <div className="scenario-tools">
       <div className="scenario-head">
         <select
           className="day-select scenario-select"
@@ -50,10 +54,18 @@ export function ScenarioPanel() {
       <button
         className="button draw-button"
         title="Create a new line by clicking stops on the map"
-        onClick={() => set({ builder: { name: '', modeId: 'bus', color: 'FF4FA3', headwayMin: 15, followRoads: true, stops: [] }, builderPath: null })}
+        onClick={() =>
+          set({ builder: { name: '', modeId: 'bus', color: 'FF4FA3', headwayMin: 15, followRoads: true, loop: false, stops: [] }, builderPath: null, closing: null, closingPreview: null })
+        }
       >
         + Draw a new line
       </button>
+      <button className="button draw-button close-button" title="Close a stretch of road, or a line between two stations, and see what happens to the services through it" onClick={startClosing}>
+        ✕ Close a road or a line
+      </button>
+      </div>
+
+      <div className="scenario-body">
 
       <a
         className="button small-button export-link"
@@ -149,7 +161,12 @@ export function ScenarioPanel() {
 
           {info.impact.length > 0 && (
             <div className="scenario-section">
-              <h3>What changed, by line</h3>
+              <div className="section-head">
+                <h3>What changed, by line</h3>
+                <label className="check small muted" title="Outline these lines in yellow on the map">
+                  <input type="checkbox" checked={showChanged} onChange={(e) => set({ showChanged: e.target.checked })} /> show on map
+                </label>
+              </div>
               <ul className="impact">
                 {info.impact.map((line) => (
                   <ImpactRow key={line.routeId} line={line} />
@@ -197,6 +214,7 @@ export function ScenarioPanel() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

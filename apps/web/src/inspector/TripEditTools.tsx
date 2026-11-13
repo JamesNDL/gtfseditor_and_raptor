@@ -1,6 +1,6 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useState } from 'react';
-import type { TripDetail } from '../api.ts';
+import { useApi, type TripDetail } from '../api.ts';
 import { VehicleTypePicker } from '../FleetPanel.tsx';
 import { applyEdit } from '../scenario.ts';
 import { useStore } from '../store.ts';
@@ -16,6 +16,8 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
   const set = useStore((s) => s.set);
   const [copyAfter, setCopyAfter] = useState(10);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const addable = useApi<{ stopId: number; name: string; restore: boolean; after: string }[]>(`/api/trips/${trip.id}/addable-stops`);
+  const [addStop, setAddStop] = useState('');
   const clock = (secs: number) => `${String(Math.floor(secs / 3600) % 24).padStart(2, '0')}:${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}`;
   const [departAt, setDepartAt] = useState(clock(trip.startSecs));
 
@@ -105,6 +107,31 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
           </button>
         </div>
       </div>
+
+      {addable.data && addable.data.length > 0 && (
+        <div className="edit-row">
+          <span className="muted small">Add a stop</span>
+          <select className="day-select grow-select" value={addStop} onChange={(e) => setAddStop(e.target.value)} aria-label="Stop to add to this trip">
+            <option value="">Choose a stop this trip passes</option>
+            {addable.data.map((o) => (
+              <option key={o.stopId} value={o.stopId}>
+                {o.name.replace(/, Platform .*$/, '')}
+                {o.restore ? ' (runs through now)' : ` (after ${o.after.replace(/,.*$/, '')})`}
+              </option>
+            ))}
+          </select>
+          <button
+            className="button small-button"
+            disabled={busy || addStop === ''}
+            title="This trip alone stops there; later stops are a little later. To change every trip, use Change route on the line."
+            onClick={async () => {
+              if (await applyEdit({ kind: 'addCall', tripId: trip.id, stopId: Number(addStop) })) setAddStop('');
+            }}
+          >
+            Add
+          </button>
+        </div>
+      )}
 
       <div className="edit-row">
         <span className="muted small">Vehicle</span>

@@ -132,6 +132,8 @@ export interface EditResponse {
   idMap: Record<string, number>;
   focusTripId?: number;
   routeId?: number;
+  /** Stops the edit added, the one to use first. */
+  stops?: { id: number; name: string; lon: number; lat: number; parentId: number | null; isStation: boolean }[];
 }
 
 /** Sends one edit. Returns the result if it was applied, or null. Failures land in the store as `editError`. */

@@ -112,14 +112,14 @@ app.get('/api/baselines/:b/tiles/:z/:x/:y', async (req, reply) => {
         select ST_AsMVTGeom(ST_Transform(s.geom, 3857), bounds.merc, 4096, 64, true) as geom,
                s.id as stop_id, s.name, s.mode_ids[1] as mode, true as station, true as rail, null::text as platform
         from stops s, bounds
-        where s.baseline_id = ${b} and s.location_type = 1 and ${z} >= 9
+        where s.baseline_id = ${b} and s.scenario_id is null and s.location_type = 1 and ${z} >= 9
           and s.mode_ids && array['train', 'metro', 'light_rail', 'ferry'] and s.geom && bounds.wgs),
       road_stops as (
         select ST_AsMVTGeom(ST_Transform(s.geom, 3857), bounds.merc, 4096, 64, true) as geom,
                s.id as stop_id, s.name, s.mode_ids[1] as mode, false as station,
                (s.mode_ids && array['train', 'metro', 'light_rail', 'ferry']) as rail, s.platform_code as platform
         from stops s, bounds
-        where s.baseline_id = ${b} and s.location_type = 0 and ${z} >= 14
+        where s.baseline_id = ${b} and s.scenario_id is null and s.location_type = 0 and ${z} >= 14
           and cardinality(s.mode_ids) > 0 and s.geom && bounds.wgs)
       select coalesce((select ST_AsMVT(l, 'lines') from lines l where l.geom is not null), ''::bytea)
           || coalesce((select ST_AsMVT(q, 'stops') from (select * from stations union all select * from road_stops) q
@@ -448,6 +448,48 @@ app.get('/api/stations/:id/platforms', async (req) => {
     from baseline_conflicts where stop_id = any(${stopIds})`;
 
   return { station, platforms, routes, calls, layovers, conflicts };
+});
+
+// A station or stop at a glance, for the panel on the right: its platforms and the lines that call there.
+app.get('/api/stations/:id/summary', async (req) => {
+  const id = int((req.params as any).id);
+  const sc = await scenarioOf(req, sql);
+  const vis = visible(sql, 't', sc);
+  const [station] = await sql`
+    select p.id, p.name, (p.location_type = 1) as "isStation", ST_X(p.geom) as lon, ST_Y(p.geom) as lat,
+           (p.scenario_id is not null) as "isNew"
+    from stops s join stops p on p.id = coalesce(s.parent_id, s.id) where s.id = ${id}`;
+  if (!station) throw notFound('Station');
+  const platforms = await sql`
+    select c.id, c.name, c.platform_code as "platformCode",
+           (select count(*)::int from stop_times st join trips t on t.id = st.trip_id
+            where st.stop_id = c.id and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}) as calls
+    from stops c
+    where (c.parent_id = ${station.id} or c.id = ${station.id}) and c.location_type = 0
+    order by length(c.platform_code), c.platform_code, c.id`;
+  const used = platforms.filter((p) => p.calls > 0 || platforms.length <= 12);
+  const stopIds = platforms.map((p) => p.id);
+  const lines = stopIds.length
+    ? await sql`
+        select r.id as "routeId", r.short_name as "shortName", r.long_name as "longName", coalesce(r.color, m.color) as color,
+               m.name as "modeName", count(*)::int as calls, min(st.dep) as first, max(st.dep) as last
+        from stop_times st
+        join trips t on t.id = st.trip_id
+        join routes r on r.id = t.route_id
+        join modes m on m.id = r.mode_id
+        where st.stop_id = any(${stopIds}) and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}
+        group by r.id, m.name, m.color, m.sort
+        order by m.sort, count(*) desc
+        limit 80`
+    : [];
+  const hourly = stopIds.length
+    ? await sql`
+        select (st.dep / 3600)::int as hour, count(*)::int as calls
+        from stop_times st join trips t on t.id = st.trip_id
+        where st.stop_id = any(${stopIds}) and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}
+        group by 1 order by 1`
+    : [];
+  return { ...station, platforms: used, lines, hourly, calls: platforms.reduce((sum, p) => sum + p.calls, 0) };
 });
 
 // Every vehicle that runs at least one trip on a line, with its whole day.

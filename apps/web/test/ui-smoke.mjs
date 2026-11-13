@@ -141,7 +141,7 @@ try {
     } else if (msg.method === 'Runtime.exceptionThrown') {
       problems.push(`uncaught: ${msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text}`);
     } else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
-      problems.push(`console.error: ${msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300)}`);
+      problems.push(`console.error: ${msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300)} … ${msg.params.args.slice(1).map((a) => a.value ?? '').join(' ').slice(0, 200)}`);
     }
   };
   await cdp('Runtime.enable');
@@ -248,12 +248,14 @@ try {
   await click('.tl-panel .icon-button');
 
   // 9. Click a station on the map.
-  const station = await findOnMap(/click for platforms/, { x0: 640, x1: 1100, y0: 120, y1: 380 });
+  const station = await findOnMap(/click for station details/, { x0: 640, x1: 1100, y0: 120, y1: 380 });
   assert.ok(station, 'found a station on the map by hovering');
   await clickAt(station.x, station.y);
+  await waitFor(`[...document.querySelectorAll('.inspector h3')].some((h) => h.textContent.includes('Lines that call here'))`, 'the station panel');
+  await click('.inspector .button', 'Platform chart');
   await waitFor(`document.querySelector('.timeline-tabs .on')?.textContent === 'Platforms'`, 'the platform chart');
   await waitFor(`(document.querySelector('.timeline-context')?.textContent ?? '').length > 2`, 'the station name');
-  step(`station click opens its platforms: ${station.tip.split(' · ')[0]}`);
+  step(`station click opens its details on the right, and its platform chart from there: ${station.tip.split(' · ')[0]}`);
   await shot('station');
   await click('.tl-panel .icon-button');
 
@@ -299,7 +301,13 @@ try {
   // The map has zoomed to fit the line's two stations; zoom out a step so that their neighbours are in view.
   await click('.maplibregl-ctrl-zoom-out');
   await sleep(1500);
-  const third = await findOnMap(/click to add to the line/, { x0: 380, x1: 1100, y0: 150, y1: 760 });
+  let third = await findOnMap(/click to add to the line/, { x0: 380, x1: 1100, y0: 150, y1: 760 });
+  // Two neighbouring stations make a short line and a close view; step out again until another station shows.
+  for (let i = 0; i < 2 && !third; i++) {
+    await click('.maplibregl-ctrl-zoom-out');
+    await sleep(1500);
+    third = await findOnMap(/click to add to the line/, { x0: 380, x1: 1100, y0: 150, y1: 760 });
+  }
   assert.ok(third, 'found a station that is not on the line yet');
   await clickAt(third.x, third.y);
   await waitFor(`document.querySelectorAll('.inspector .stops li').length === 3`, 'the added stop to be listed');
@@ -314,6 +322,85 @@ try {
   await waitFor(`document.querySelector('.inspector h2') && document.querySelector('.inspector .badge')?.textContent === 'UI1'`, 'the line to reopen');
   await shot('reshaped');
   step(`route changed by clicking ${third.tip.split(' · ')[0]}: ${previewText.slice(0, 160)}`);
+
+  // 11c. Add a station that does not exist yet by naming it and clicking the map, and run the line to it.
+  await click('.inspector .button', 'Change route');
+  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Change the route'`, 'the route-changing panel again');
+  const stopsNow = await waitFor(`document.querySelectorAll('.inspector .stops li').length`, 'the line\'s stops');
+  await click('.new-stop-link');
+  await click('.new-stop input');
+  await type('UI Halt');
+  await click('.new-stop .button', 'Place it on the map');
+  await waitFor(`document.querySelector('.new-stop')?.textContent.includes('Now click the map')`, 'the prompt to click the map');
+  await mouse('mouseMoved', 700, 620, { buttons: 0 });
+  await sleep(200);
+  assert.match(await text('.map-tooltip'), /Click to place UI Halt here/);
+  await clickAt(700, 620);
+  await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('7 changes')`, 'the new station to be added', 30000);
+  await waitFor(`document.querySelectorAll('.inspector .stops li').length === ${stopsNow + 1}`, 'the new station to join the line');
+  assert.ok((await text('.inspector .stops')).includes('UI Halt'), 'the new station is listed by name');
+  await waitFor(`document.querySelector('.reshape-preview')?.textContent.includes('1 stop added')`, 'the preview with the new station', 30000);
+  await shot('new-station');
+  await click('.inspector .button', 'trips');
+  await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('8 changes')`, 'the line to run to the new station', 60000);
+  await shot('line-to-new-station');
+  step('new station named, placed with a click on the map, and added to the line');
+
+  // 11d. The drawing panel offers a one-way loop, which needs a third stop.
+  if (await find('.inspector .icon-button')) await click('.inspector .icon-button');
+  await click('.draw-button', 'Draw a new line');
+  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Draw a new line'`, 'the drawing panel again');
+  await click('.inspector .timeline-check', 'One-way loop');
+  await waitFor(`[...document.querySelectorAll('.inspector .button')].some((b) => b.textContent.includes('Pick at least three stops'))`, 'the loop to ask for three stops');
+  assert.ok((await text('.inspector .form')).includes('one way round'), 'the frequency is described as one way round');
+  step('the drawing panel offers a one-way loop');
+  await click('.inspector .icon-button');
+
+  // 11e. Close a train line between two stations, see what it does, apply it, and undo it.
+  await click('.close-button');
+  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Close a road or a line'`, 'the closure panel');
+  await js(`(() => { const s = document.querySelector('.inspector select'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'train'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await waitFor(`document.querySelector('.inspector .stops')?.textContent.includes('Click a station')`, 'the prompt for the first station');
+  const published = (tip) => !/UI Halt/.test(tip);
+  let sideA = null;
+  for (const box of [{ x0: 500, x1: 1100, y0: 150, y1: 450 }, { x0: 380, x1: 1100, y0: 450, y1: 760 }]) {
+    const candidate = await findOnMap(/the closure is on one side of here/, box);
+    if (candidate && published(candidate.tip)) {
+      sideA = candidate;
+      break;
+    }
+  }
+  assert.ok(sideA, 'found a station for one side of the closure');
+  await clickAt(sideA.x, sideA.y);
+  await waitFor(`document.querySelector('.inspector .stops')?.textContent.includes('Click the station on the other side')`, 'the prompt for the second station');
+  let sideB = null;
+  for (const box of [{ x0: 380, x1: 1100, y0: sideA.y + 30, y1: 760 }, { x0: 380, x1: sideA.x - 30, y0: 150, y1: 760 }, { x0: sideA.x + 30, x1: 1100, y0: 150, y1: 760 }]) {
+    const candidate = await findOnMap(/the closure is between here and/, box);
+    if (candidate && published(candidate.tip) && candidate.tip.split(' · ')[0] !== sideA.tip.split(' · ')[0]) {
+      sideB = candidate;
+      break;
+    }
+  }
+  assert.ok(sideB, 'found a station for the other side of the closure');
+  await clickAt(sideB.x, sideB.y);
+  await waitFor(`/closed between|Nothing runs through|No train service/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of the closure', 60000);
+  const closureText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
+  await shot('closing');
+  if (/closed between/.test(closureText)) {
+    const changesBefore = Number((await text('.scenario-actions')).match(/(\d+) change/)[1]);
+    await click('.inspector .button', 'Close it and change');
+    await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('${changesBefore + 1} changes')`, 'the closure to apply', 240000);
+    await waitFor(`!document.querySelector('.inspector strong') || document.querySelector('.inspector strong').textContent !== 'Close a road or a line'`, 'the closure panel to close');
+    await shot('closed');
+    step(`line closed between ${sideA.tip.split(' · ')[0]} and ${sideB.tip.split(' · ')[0]}: ${closureText.slice(18, 200)}`);
+    await js(`document.activeElement?.blur()`);
+    await key('z', 'KeyZ', 2, 90);
+    await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('${changesBefore} changes')`, 'undo to reopen the line', 60000);
+    step('Ctrl+Z reopens the line');
+  } else {
+    step(`closure panel answered for ${sideA.tip.split(' · ')[0]} and ${sideB.tip.split(' · ')[0]}: ${closureText.slice(0, 120)}`);
+    await click('.inspector .icon-button');
+  }
 
   // 12. Clashes and "Fix all".
   const clashes = Number((await js(`[...document.querySelectorAll('.scenario-stat')].find((s) => s.textContent.includes('clashes'))?.querySelector('.stat-value')?.textContent ?? '0'`)).replace(/,/g, ''));
@@ -331,6 +418,44 @@ try {
   } else {
     step('no clashes to fix');
   }
+
+  // 13. The two tool buttons stay in view however far the scenario panel is scrolled.
+  await js(`(() => { const b = document.querySelector('.scenario-body'); if (b) b.scrollTop = b.scrollHeight; })()`);
+  await sleep(200);
+  const drawVisible = await js(`(() => {
+    const b = [...document.querySelectorAll('.scenario .draw-button')].find((x) => x.textContent.includes('Draw a new line'));
+    if (!b) return false;
+    const r = b.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && (top === b || b.contains(top));
+  })()`);
+  assert.ok(drawVisible, '"Draw a new line" should stay visible when the scenario panel is scrolled to the bottom');
+  step('the drawing and closing buttons stay in view when the scenario panel is scrolled');
+
+  // 14. A trip added to a line from its panel, at a typed time.
+  await click('.search-input');
+  await type('T1');
+  await waitFor(`document.querySelectorAll('.search-results button').length > 0`, 'search results');
+  await click('.search-results button');
+  await waitFor(`[...document.querySelectorAll('.inspector .edit-row')].some((r) => r.textContent.includes('Add a trip at'))`, 'the add-a-trip row');
+  await click('.inspector .edit-row .button', 'Add');
+  await waitFor(`(document.querySelector('.inspector h3')?.textContent ?? '').includes('Edit this trip')`, 'the new trip to open', 60000);
+  assert.match(await text('.inspector .title-row .muted'), /^12:00/, 'the new trip leaves at the time typed');
+  step(`trip added from the line panel: ${(await text('.inspector .title-row .muted')).split(' · ')[0]}`);
+  await key('z', 'KeyZ', 2, 90);
+  await sleep(1500);
+
+  // 15. The light version, and back.
+  await click('.button', 'Light');
+  await waitFor(`document.documentElement.dataset.theme === 'light'`, 'the light theme');
+  await waitFor(`!!document.querySelector('.maplibregl-canvas')`, 'the map to be rebuilt');
+  await sleep(4000);
+  const panelColour = await js(`getComputedStyle(document.querySelector('.panel')).backgroundColor`);
+  assert.equal(panelColour, 'rgb(255, 255, 255)', 'panels are white in the light version');
+  await shot('light-theme');
+  await click('.button', 'Dark');
+  await waitFor(`document.documentElement.dataset.theme === 'dark'`, 'the dark theme');
+  step('the light version switches on and off');
 } catch (err) {
   failed = err;
   await shot('failure').catch(() => {});

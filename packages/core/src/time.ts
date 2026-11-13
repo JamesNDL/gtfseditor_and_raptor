@@ -14,3 +14,18 @@ export function formatClock(secs: number): { time: string; nextDay: boolean } {
   const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   return { time: `${String(h % 24).padStart(2, '0')}:${mm}`, nextDay: h >= 24 };
 }
+
+/** The parts of the day that run times and frequencies are worked out for, in seconds since the day began. */
+export const DAY_BANDS = [
+  { id: 'early', label: 'early morning', from: 0, to: 6.5 * 3600 },
+  { id: 'am', label: 'morning peak', from: 6.5 * 3600, to: 9.5 * 3600 },
+  { id: 'day', label: 'middle of the day', from: 9.5 * 3600, to: 15 * 3600 },
+  { id: 'pm', label: 'evening peak', from: 15 * 3600, to: 19 * 3600 },
+  { id: 'evening', label: 'evening', from: 19 * 3600, to: Infinity },
+] as const;
+
+/** Which part of the day a time falls in, as an index into DAY_BANDS. */
+export function bandOf(secs: number): number {
+  const k = DAY_BANDS.findIndex((b) => secs < b.to);
+  return k < 0 ? DAY_BANDS.length - 1 : k;
+}

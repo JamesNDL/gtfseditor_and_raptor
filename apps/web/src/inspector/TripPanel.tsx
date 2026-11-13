@@ -1,6 +1,6 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
-import { useApi, type TripDetail, type TripSummary } from '../api.ts';
+import { getJson, useApi, type TripDetail, type TripSummary } from '../api.ts';
 import { clock } from '../clock.ts';
 import { useStore } from '../store.ts';
 import { applyEdit } from '../scenario.ts';
@@ -146,6 +146,7 @@ export function TripPanel({ tripId }: { tripId: number }) {
                     {s.name.replace(/, Platform .*$/, '')}
                   </button>
                   {s.platformCode && <span className="muted"> · platform {s.platformCode}</span>}
+                  {editing && s.platformCode && !noBoard && <PlatformPicker tripId={t.id} seq={s.seq} />}
                   {noBoard && <span className="muted"> · passes through</span>}
                   {s.dep - s.arr >= 60 && <span className="muted"> · waits {duration(s.dep - s.arr)}</span>}
                 </span>
@@ -167,6 +168,56 @@ export function TripPanel({ tripId }: { tripId: number }) {
 
       <div className="muted small">Feed trip ID: {t.gtfsId}</div>
     </>
+  );
+}
+
+interface PlatformChoice {
+  id: number;
+  name: string;
+  platformCode: string | null;
+  free: boolean;
+  uses: number;
+  current: boolean;
+}
+
+/** "Change" beside a platform: lists the station's other platforms, saying which are free when the trip is there. */
+function PlatformPicker({ tripId, seq }: { tripId: number; seq: number }) {
+  const scenarioId = useStore((s) => s.scenarioId);
+  const busy = useStore((s) => s.editBusy);
+  const [choices, setChoices] = useState<PlatformChoice[] | null>(null);
+  if (!choices) {
+    return (
+      <button
+        className="link small platform-change"
+        title="Use a different platform at this station"
+        onClick={() =>
+          void getJson<PlatformChoice[]>(`/api/trips/${tripId}/platforms?seq=${seq}${scenarioId === null ? '' : `&s=${scenarioId}`}`).then(setChoices, () => setChoices([]))
+        }
+      >
+        change
+      </button>
+    );
+  }
+  const others = choices.filter((c) => !c.current);
+  if (!others.length) return <span className="muted small"> · no other platform</span>;
+  return (
+    <select
+      className="day-select platform-select"
+      defaultValue=""
+      disabled={busy}
+      aria-label="Platform to use instead"
+      onChange={(e) => {
+        if (e.target.value) void applyEdit({ kind: 'setPlatform', tripId, stopSeq: seq, stopId: Number(e.target.value) });
+      }}
+    >
+      <option value="">Move to…</option>
+      {others.map((c) => (
+        <option key={c.id} value={c.id}>
+          Platform {c.platformCode ?? c.name} · {c.free ? 'free' : 'busy then'}
+          {c.uses === 0 ? ' · not used by this line' : ''}
+        </option>
+      ))}
+    </select>
   );
 }
 

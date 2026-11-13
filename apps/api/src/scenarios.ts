@@ -4,7 +4,9 @@
 // originals as removed. Rows carry the edit number that created or removed them, so undo and redo
 // only move the scenario's `head`; nothing is ever recomputed backwards.
 import {
+  bandOf,
   COORD_SCALE,
+  DAY_BANDS,
   DEFAULT_CHAIN_RULES,
   distanceM,
   encodePack,
@@ -28,7 +30,11 @@ import {
   typicalChange,
   type ReshapeDeps,
 } from './reshape.ts';
-import { describeMethod, roadPath, type PathMethod } from './roads.ts';
+import { closureRoutes, editClose } from './closures.ts';
+import { describeMethod, linePath, type PathMethod } from './roads.ts';
+import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
+import { bestFree, platformChoices, scheduleEdits, scheduleRoutes } from './schedule.ts';
+import { editAddStop, scenarioStopsGeoJson, stopVisible, type AddedStop } from './stops.ts';
 
 export interface Scenario {
   id: number;
@@ -77,6 +83,8 @@ interface EditResult {
   focusTripId?: number;
   /** A line the edit created, so the client can open it. */
   routeId?: number;
+  /** Stops the edit created, the one to use first. */
+  stops?: AddedStop[];
 }
 
 export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
@@ -101,7 +109,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     seq: number,
     tripIds: number[],
     delta: number,
-    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean },
+    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean; tag?: string },
   ): Promise<Record<number, number>> {
     if (!tripIds.length) return {};
     const pinned = options.pinnedIds ?? [];
@@ -109,14 +117,14 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       `insert into trips (${TRIP_COLUMNS}, gtfs_id, vehicle_day_id, vehicle_day_seq, start_secs, end_secs,
                           scenario_id, origin_trip_id, cloned_from, created_edit, pinned)
        select ${TRIP_COLUMNS},
-              split_part(gtfs_id, '~', 1) || '~' || $1::int || '.' || $2::int || '.' || row_number() over (order by id),
+              split_part(gtfs_id, '~', 1) || '~' || $1::int || '.' || $2::int || '.' || $8::text || row_number() over (order by id),
               case when $5::boolean then vehicle_day_id end, case when $5::boolean then vehicle_day_seq end,
               start_secs + $3::int, end_secs + $3::int,
               $1::int, case when $6::boolean then coalesce(origin_trip_id, case when scenario_id is null then id end) end, id, $2::int,
               (pinned or id = any($7::bigint[]))
        from trips where id = any($4::bigint[])
        returning id, cloned_from`,
-      [sc.id, seq, delta, tripIds, options.keepVehicle, options.replace, pinned] as never[],
+      [sc.id, seq, delta, tripIds, options.keepVehicle, options.replace, pinned, options.tag ?? ''] as never[],
     );
     const idMap: Record<number, number> = {};
     for (const row of created) idMap[row.cloned_from] = row.id;
@@ -173,6 +181,8 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       await tx`delete from patterns where scenario_id = ${sc.id} and created_edit > ${sc.head}`;
       await tx`delete from routes where scenario_id = ${sc.id} and created_edit > ${sc.head}`;
       await tx`delete from shapes where scenario_id = ${sc.id} and created_edit > ${sc.head}`;
+      await tx`delete from stops where scenario_id = ${sc.id} and created_edit > ${sc.head}`;
+      await tx`delete from scenario_closures where scenario_id = ${sc.id} and created_edit > ${sc.head}`;
       await tx`update trips set removed_edit = null where scenario_id = ${sc.id} and removed_edit > ${sc.head}`;
       await tx`delete from scenario_removed where scenario_id = ${sc.id} and edit_seq > ${sc.head}`;
       await tx`delete from scenario_edits where scenario_id = ${sc.id} and seq > ${sc.head}`;
@@ -206,9 +216,10 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
    * Gives each new trip a vehicle. A vehicle already working the line takes the trip if it is free,
    * in the right place before it and (when it has a later trip) in the right place afterwards.
    * Otherwise a new vehicle is added. Vehicles added here can pick up further new trips, so a
-   * there-and-back pair shares one.
+   * there-and-back pair shares one. `forceNew` true puts every trip on its own new vehicle; 'fresh'
+   * ignores the vehicles already working the line and chains the trips onto new ones.
    */
-  async function assignVehicles(tx: Tx, sc: Scenario, seq: number, tripIds: number[], forceNew = false) {
+  async function assignVehicles(tx: Tx, sc: Scenario, seq: number, tripIds: number[], forceNew: boolean | 'fresh' = false) {
     if (!tripIds.length) return { reused: 0, added: 0 };
     const now = { ...sc, head: seq };
     const load = async (where: ReturnType<Tx>): Promise<FleetTrip[]> => {
@@ -264,7 +275,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     for (const trip of fresh) {
       const rules = DEFAULT_CHAIN_RULES[trip.ruleSet];
       let best: { v: Vehicle; wait: number } | null = null;
-      for (const v of forceNew ? [] : [...pool, ...added]) {
+      for (const v of forceNew === true ? [] : [...pool, ...added]) {
         if (v.partition !== trip.partition) continue;
         let prev: FleetTrip | null = null;
         let next: FleetTrip | null = null;
@@ -351,35 +362,30 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     school_bus: { speed: 6.5, dwell: 20, routeType: 712 },
   };
 
-  // Typical end-to-end speed of a mode in the published timetable (metres per second, stops included):
-  // the median over that day's trips of path length divided by scheduled time.
-  const speedCache = new Map<string, number>();
-  async function typicalSpeed(tx: Tx, baselineId: number, modeId: string, fallback: number): Promise<number> {
-    const key = `${baselineId}|${modeId}`;
-    const cached = speedCache.get(key);
-    if (cached) return cached;
-    const [row] = await tx`
-      select percentile_cont(0.5) within group (order by sh.length_m / (t.end_secs - t.start_secs)) as speed
-      from trips t join routes r on r.id = t.route_id join shapes sh on sh.id = t.shape_id
-      where t.baseline_id = ${baselineId} and t.scenario_id is null and r.mode_id = ${modeId}
-        and t.end_secs > t.start_secs + 120 and sh.length_m > 500`;
-    const speed = row?.speed && row.speed > 1 && row.speed < 40 ? Number(row.speed) : fallback;
-    speedCache.set(key, speed);
-    return speed;
-  }
-
   /**
-   * Creates a new line through existing stops, with a timetable in both directions.
-   * The path is drawn straight from stop to stop and run times come from a typical speed for the
-   * mode, so both are rough until refined.
+   * Creates a new line through existing stops, with a timetable in both directions, or in one
+   * direction only for a loop that runs round and back to where it started.
+   * The path follows roads, or the track and ferry routes that published services already use.
    */
   async function editCreateLine(
     tx: Tx,
     sc: Scenario,
     seq: number,
-    body: { name: string; modeId: string; color?: string; stopIds: number[]; headwaySecs?: number; fromSecs?: number; toSecs?: number; followRoads?: boolean },
+    body: {
+      name: string;
+      modeId: string;
+      color?: string;
+      stopIds: number[];
+      headwaySecs?: number;
+      fromSecs?: number;
+      toSecs?: number;
+      followRoads?: boolean;
+      /** Runs one way round and back to the first stop, with no return direction. */
+      loop?: boolean;
+    },
   ) {
-    const followRoads = ROAD_MODES.has(body.modeId) && body.followRoads !== false;
+    const follow = body.followRoads !== false;
+    const loop = body.loop === true;
     let pathMethod: PathMethod = 'straight';
     const name = (body.name ?? '').trim().slice(0, 40);
     if (!name) throw fail(400, 'Give the line a name');
@@ -392,13 +398,16 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     if (!(headway >= 60) || !(to > from)) throw fail(400, 'Bad frequency or hours');
     const chosen = (body.stopIds ?? []).map(Number);
     if (chosen.length < 2 || chosen.length > 150) throw fail(400, 'Pick at least two stops');
+    // A loop comes back to where it started.
+    if (loop && chosen[chosen.length - 1] !== chosen[0]) chosen.push(chosen[0]);
+    if (loop && chosen.length < 4) throw fail(400, 'A loop needs at least three stops, so that it goes round rather than out and back');
     for (let i = 1; i < chosen.length; i++) if (chosen[i] === chosen[i - 1]) throw fail(400, 'The same stop is listed twice in a row');
 
     const rows = await tx`
-      select s.id, s.name, s.location_type, ST_X(s.geom) as lon, ST_Y(s.geom) as lat,
+      select s.id, s.name, s.location_type, s.parent_id, ST_X(s.geom) as lon, ST_Y(s.geom) as lat,
              array(select c.id from stops c where c.parent_id = s.id and c.location_type = 0
                    order by (cardinality(c.mode_ids) = 0), length(c.platform_code), c.platform_code, c.id) as platforms
-      from stops s where s.id = any(${chosen}) and s.baseline_id = ${sc.baselineId}`;
+      from stops s where s.id = any(${chosen}) and s.baseline_id = ${sc.baselineId} and ${stopVisible(tx, 's', sc)}`;
     const byId = new Map(rows.map((r) => [r.id, r]));
     if (chosen.some((id) => !byId.has(id))) throw fail(400, 'One of those stops is not on this day');
     const stops = chosen.map((id) => byId.get(id)!);
@@ -410,11 +419,17 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       return list[Math.min(direction, list.length - 1)];
     };
 
+    const tidy = (stopName: string) => stopName.replace(/,.*$/, '').replace(/ Station$/, '');
+    // A loop is named after the stop furthest from where it starts.
+    const furthest = stops.reduce((best, s) => (distanceM(stops[0].lon, stops[0].lat, s.lon, s.lat) > distanceM(stops[0].lon, stops[0].lat, best.lon, best.lat) ? s : best));
+    const longName = loop
+      ? `${tidy(stops[0].name)} loop via ${tidy(furthest.name)}`
+      : `${stops[0].name.replace(/,.*$/, '')} to ${stops[stops.length - 1].name.replace(/,.*$/, '')}`;
     const [route] = await tx`
       insert into routes (baseline_id, gtfs_id, agency_gtfs_id, agency_name, short_name, long_name, route_type, mode_id, color,
                           scenario_id, created_edit)
       values (${sc.baselineId}, ${`NEW-${sc.id}-${seq}`}, 'NEW', 'New services', ${name},
-              ${`${stops[0].name.replace(/,.*$/, '')} to ${stops[stops.length - 1].name.replace(/,.*$/, '')}`},
+              ${longName},
               ${model.routeType}, ${body.modeId}, ${color}, ${sc.id}, ${seq})
       returning id`;
 
@@ -424,7 +439,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     // streets, loops) are used both ways.
     const returnStops = [...stops];
     let swapped = 0;
-    if (ROAD_MODES.has(body.modeId)) {
+    if (ROAD_MODES.has(body.modeId) && !loop) {
       for (let i = 0; i < stops.length; i++) {
         const s = stops[i];
         if (s.location_type !== 0) continue;
@@ -438,22 +453,27 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
 
     const tripIds: number[] = [];
     let outboundLine: [number, number][] | null = null;
-    const timing = { learned: 0, estimated: 0, speed: 0 };
-    for (const direction of [0, 1]) {
+    const timed: SectionTime[] = [];
+    for (const direction of loop ? [0] : [0, 1]) {
       const order = direction === 0 ? stops : [...returnStops].reverse();
-      // The path: along roads for road vehicles where it can be found, otherwise straight between stops.
-      let line: [number, number][] = order.map((s) => [s.lon, s.lat]);
-      if (followRoads) {
-        const found = await roadPath(tx, sc.baselineId, order.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat })));
-        line = found.coords;
-        if (direction === 0) {
-          pathMethod = found.method;
-          outboundLine = found.coords;
-        } else if (found.method === 'straight' && outboundLine) {
-          // Without a routing server there is rarely a published path for the way back, so the
-          // return trip runs back along the outbound path rather than cutting straight across.
-          line = [...outboundLine].reverse();
-        }
+      // The path: along roads, track or ferry routes where it can be found, otherwise straight between stops.
+      const found = await linePath(
+        tx,
+        sc.baselineId,
+        body.modeId,
+        order.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat, stationId: s.location_type === 1 ? s.id : s.parent_id })),
+        { follow },
+      );
+      let line: [number, number][] = found.coords;
+      let known = found.at;
+      if (direction === 0) {
+        pathMethod = found.method;
+        outboundLine = found.coords;
+      } else if (follow && found.method === 'straight' && pathMethod !== 'straight' && outboundLine) {
+        // Without a routing server there is rarely a published path for the way back, so the
+        // return trip runs back along the outbound path rather than cutting straight across.
+        line = [...outboundLine].reverse();
+        known = undefined;
       }
       const lineDist: number[] = [0];
       for (let i = 1; i < line.length; i++) lineDist.push(lineDist[i - 1] + distanceM(line[i - 1][0], line[i - 1][1], line[i][0], line[i][1]));
@@ -461,7 +481,8 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       const dist: number[] = [];
       let at = 0;
       order.forEach((s, i) => {
-        if (i === order.length - 1) at = line.length - 1;
+        if (known) at = known[i];
+        else if (i === order.length - 1) at = line.length - 1;
         else if (i > 0) {
           let best = at;
           let bestD = Infinity;
@@ -476,38 +497,45 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         }
         dist.push(lineDist[at]);
       });
-      // Arrival and departure at each stop, as seconds after the trip starts.
-      // Run time for each section. Best evidence first:
-      //   1. published trips that already run between these two stops: their median time;
-      //   2. otherwise the section's length at the typical speed of this mode on this day's timetable.
-      const speed = await typicalSpeed(tx, sc.baselineId, body.modeId, model.speed);
-      timing.speed = speed;
-      const arr: number[] = [0];
-      const dep: number[] = [0];
-      for (let i = 1; i < order.length; i++) {
-        const from = platform(order[i - 1], direction);
-        const to = platform(order[i], direction);
-        const seen = await publishedRunSecs(tx, from, to);
-        let secs: number;
-        if (seen.n >= 3 && seen.median > 0) {
-          secs = Math.round(seen.median / 10) * 10;
-          timing.learned++;
-        } else {
-          // The typical speed already includes time spent at stops, so take the stop time back out.
-          secs = Math.max(30, Math.round(((dist[i] - dist[i - 1]) / speed - model.dwell) / 10) * 10);
-          timing.estimated++;
-        }
-        arr.push(dep[i - 1] + Math.max(20, secs));
-        dep.push(i === order.length - 1 ? arr[i] : arr[i] + model.dwell);
-      }
+      // Arrival and departure at each stop, as seconds after the trip starts, for each part of the day:
+      // a trip that starts in the morning peak uses the morning peak's run times throughout.
       const stopIds = order.map((s) => platform(s, direction));
+      const runs: SectionTime[] = [];
+      const dwells: number[] = [0];
+      for (let i = 1; i < order.length; i++) {
+        const dwell = i === order.length - 1 ? 0 : await stopDwell(tx, sc.baselineId, body.modeId, stopIds[i], model.dwell);
+        dwells.push(dwell);
+        const run = await sectionTime(
+          tx,
+          sc.baselineId,
+          body.modeId,
+          { id: stopIds[i - 1], lon: order[i - 1].lon, lat: order[i - 1].lat },
+          { id: stopIds[i], lon: order[i].lon, lat: order[i].lat },
+          dist[i] - dist[i - 1],
+          { speed: model.speed, dwellAtTo: dwell || model.dwell },
+        );
+        runs.push(run);
+        timed.push(run);
+      }
+      const arrBy: number[][] = [];
+      const depBy: number[][] = [];
+      DAY_BANDS.forEach((_, k) => {
+        const arr = [0];
+        const dep = [0];
+        for (let i = 1; i < order.length; i++) {
+          arr.push(dep[i - 1] + runs[i - 1].byBand[k]);
+          dep.push(arr[i] + dwells[i]);
+        }
+        arrBy.push(arr);
+        depBy.push(dep);
+      });
       const wkt = `LINESTRING(${line.map((p) => `${p[0]} ${p[1]}`).join(',')})`;
       const [shape] = await tx`
         insert into shapes (baseline_id, gtfs_id, geom, length_m, dists, scenario_id, created_edit)
         values (${sc.baselineId}, ${`NEW-${sc.id}-${seq}-${direction}`}, ST_GeomFromText(${wkt}, 4326), ${lineDist[lineDist.length - 1]},
                 ${lineDist}::float8[], ${sc.id}, ${seq})
         returning id`;
-      const headsign = order[order.length - 1].name.replace(/,.*$/, '').replace(/ Station$/, '');
+      const headsign = loop ? `${tidy(furthest.name)} loop` : tidy(order[order.length - 1].name);
       const [pattern] = await tx`
         insert into patterns (baseline_id, route_id, direction_id, shape_id, headsign, stop_ids, trip_count, key, scenario_id, created_edit)
         values (${sc.baselineId}, ${route.id}, ${direction}, ${shape.id}, ${headsign}, ${stopIds}::bigint[], 0,
@@ -515,25 +543,31 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         returning id`;
       const starts: number[] = [];
       for (let s = from; s < to; s += headway) starts.push(s);
+      const lasts = starts.map((s) => arrBy[bandOf(s)][order.length - 1]);
       const created = await tx`
         insert into trips (baseline_id, gtfs_id, route_id, pattern_id, shape_id, service_gtfs_id, headsign, direction_id,
                            start_secs, end_secs, first_stop_id, last_stop_id, scenario_id, created_edit)
         select ${sc.baselineId}, ${`NEW${sc.id}.${seq}.${direction}-`} || row_number() over (order by s.start), ${route.id}, ${pattern.id},
-               ${shape.id}, 'NEW', ${headsign}, ${direction}, s.start, s.start + ${arr[arr.length - 1]},
+               ${shape.id}, 'NEW', ${headsign}, ${direction}, s.start, s.start + s.last,
                ${stopIds[0]}, ${stopIds[stopIds.length - 1]}, ${sc.id}, ${seq}
-        from unnest(${starts}::int[]) as s(start)
+        from unnest(${starts}::int[], ${lasts}::int[]) as s(start, last)
         returning id, start_secs`;
-      await tx`
-        insert into stop_times (trip_id, seq, stop_id, arr, dep, dist)
-        select n.id, o.seq, o.stop_id, n.start_secs + o.arr, n.start_secs + o.dep, o.dist
-        from trips n
-        cross join unnest(${stopIds}::bigint[], ${arr}::int[], ${dep}::int[], ${dist}::float4[]) with ordinality as o(stop_id, arr, dep, dist, seq)
-        where n.id = any(${created.map((r) => r.id)})`;
+      for (let k = 0; k < DAY_BANDS.length; k++) {
+        const ids = created.filter((r) => bandOf(r.start_secs) === k).map((r) => r.id);
+        if (!ids.length) continue;
+        await tx`
+          insert into stop_times (trip_id, seq, stop_id, arr, dep, dist)
+          select n.id, o.seq, o.stop_id, n.start_secs + o.arr, n.start_secs + o.dep, o.dist
+          from trips n
+          cross join unnest(${stopIds}::bigint[], ${arrBy[k]}::int[], ${depBy[k]}::int[], ${dist}::float4[]) with ordinality as o(stop_id, arr, dep, dist, seq)
+          where n.id = any(${ids})`;
+      }
       for (const r of created) tripIds.push(r.id);
     }
     const fleet = await assignVehicles(tx, sc, seq, tripIds);
+    const settled = await settlePlatforms(tx, sc, seq, tripIds);
     return {
-      summary: `New line ${name}: ${stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}; run times: ${timing.learned} section${timing.learned === 1 ? '' : 's'} from published trips, ${timing.estimated} at the typical ${Math.round(timing.speed * 3.6)} km/h for this mode${swapped ? `; the way back uses the stop across the road at ${swapped} of ${stops.length} stops` : ''}${fleetNote(fleet)}`,
+      summary: `New ${loop ? 'one-way loop' : 'line'} ${name}: ${loop ? stops.length - 1 : stops.length} stops, every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${tripIds.length} trips), ${describeMethod(pathMethod)}; run times: ${describeTimes(timed, 'end to end', chosen.length - 1)}${swapped ? `; the way back uses the stop across the road at ${swapped} of ${stops.length} stops` : ''}${fleetNote(fleet)}${platformNote(settled)}`,
       idMap: {},
       routeId: route.id,
     };
@@ -549,7 +583,12 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     tx: Tx,
     sc: Scenario,
     seq: number,
-    body: { routeId: number; bands: { fromSecs: number; toSecs: number; headwaySecs: number }[] },
+    body: {
+      routeId: number;
+      bands: { fromSecs: number; toSecs: number; headwaySecs: number }[];
+      /** Share the new departures between every stop pattern in each direction, in the proportions they run now. */
+      allPatterns?: boolean;
+    },
   ) {
     const routeId = Number(body.routeId);
     const bands = (body.bands ?? []).map((b) => ({ from: Math.round(Number(b.fromSecs)), to: Math.round(Number(b.toSecs)), headway: Math.round(Number(b.headwaySecs)) }));
@@ -561,23 +600,28 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const vis = visible(tx, 't', sc);
     const [route] = await tx`select coalesce(short_name, long_name) as name from routes where id = ${routeId}`;
     if (!route) throw fail(404, 'Line not found');
-    const mains = await tx`
-      select distinct on (direction) pattern_id, direction from (
-        select t.pattern_id, coalesce(t.direction_id, 0) as direction, count(*) as n
-        from trips t where t.route_id = ${routeId} and t.pattern_id is not null and ${vis} group by 1, 2) x
-      order by direction, n desc`;
-    if (!mains.length) throw fail(400, 'This line has no trips to copy');
+    const counted = await tx`
+      select t.pattern_id, coalesce(t.direction_id, 0) as direction, count(*)::int as n
+      from trips t where t.route_id = ${routeId} and t.pattern_id is not null and ${vis} group by 1, 2
+      order by direction, n desc, t.pattern_id`;
+    if (!counted.length) throw fail(400, 'This line has no trips to copy');
+    const allPatterns = body.allPatterns === true;
+    const directions = [...new Set(counted.map((c) => c.direction))];
 
     const createdIds: number[] = [];
     let replacedCount = 0;
     let keptPinned = 0;
     let batch = 0;
-    for (const main of mains) {
+    let patternsUsed = 0;
+    for (const direction of directions) {
+      const inDirection = counted.filter((c) => c.direction === direction);
+      // The most-used stop pattern, or every pattern when the new departures are to be shared between them.
+      const patterns = (allPatterns ? inDirection : inDirection.slice(0, 1)).map((c) => c.pattern_id as number);
+      patternsUsed = Math.max(patternsUsed, patterns.length);
       const existing = await tx`
-        select t.id, t.start_secs, t.pinned from trips t where t.pattern_id = ${main.pattern_id} and ${vis} order by t.start_secs`;
+        select t.id, t.start_secs, t.pinned, t.pattern_id from trips t where t.pattern_id = any(${patterns}) and ${vis} order by t.start_secs`;
       for (const band of bands) {
         const middle = (band.from + band.to) / 2;
-        const template = existing.reduce((best, t) => (Math.abs(t.start_secs - middle) < Math.abs(best.start_secs - middle) ? t : best));
         const inBand = existing.filter((t) => t.start_secs >= band.from && t.start_secs < band.to);
         const pinned = inBand.filter((t) => t.pinned);
         const replaced = inBand.filter((t) => !t.pinned).map((t) => t.id);
@@ -589,33 +633,59 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         replacedCount += replaced.length;
         keptPinned += pinned.length;
         if (!starts.length) continue;
-        batch++;
-        const created = await tx.unsafe(
-          `insert into trips (${TRIP_COLUMNS}, gtfs_id, start_secs, end_secs, scenario_id, cloned_from, created_edit)
-           select ${TRIP_COLUMNS},
-                  split_part(gtfs_id, '~', 1) || '~' || $1::int || '.' || $2::int || '.' || $5::int || '-' || row_number() over (order by s.start),
-                  s.start, end_secs + (s.start - start_secs), $1::int, id, $2::int
-           from trips, unnest($4::int[]) as s(start) where id = $3::bigint
-           returning id, start_secs`,
-          [sc.id, seq, template.id, starts, batch] as never[],
-        );
-        await tx`
-          insert into stop_times (trip_id, seq, stop_id, arr, dep, dist, pickup_type, drop_off_type, timepoint, headsign, note)
-          select n.id, st.seq, st.stop_id, st.arr + (n.start_secs - ${template.start_secs}), st.dep + (n.start_secs - ${template.start_secs}),
-                 st.dist, st.pickup_type, st.drop_off_type, st.timepoint, st.headsign, st.note
-          from trips n join stop_times st on st.trip_id = ${template.id}
-          where n.id = any(${created.map((r) => r.id)})`;
-        for (const r of created) createdIds.push(r.id);
+        // Each pattern keeps the share of departures it has in this part of the day; a part of the day
+        // with no trips at all goes to the most-used pattern. Departures are dealt out in turn, so
+        // the patterns stay evenly mixed.
+        const share = patterns.map((p) => inBand.filter((t) => t.pattern_id === p).length);
+        const total = share.reduce((sum, n) => sum + n, 0);
+        const weight = total > 0 ? share.map((n) => n / total) : patterns.map((_, i) => (i === 0 ? 1 : 0));
+        const credit = patterns.map(() => 0);
+        const dealt: number[][] = patterns.map(() => []);
+        for (const start of starts) {
+          let pick = 0;
+          for (let i = 0; i < patterns.length; i++) {
+            credit[i] += weight[i];
+            if (credit[i] > credit[pick] + 1e-9) pick = i;
+          }
+          credit[pick] -= 1;
+          dealt[pick].push(start);
+        }
+        for (let i = 0; i < patterns.length; i++) {
+          if (!dealt[i].length) continue;
+          const own = existing.filter((t) => t.pattern_id === patterns[i]);
+          const template = own.reduce((best, t) => (Math.abs(t.start_secs - middle) < Math.abs(best.start_secs - middle) ? t : best));
+          batch++;
+          const created = await tx.unsafe(
+            `insert into trips (${TRIP_COLUMNS}, gtfs_id, start_secs, end_secs, scenario_id, cloned_from, created_edit)
+             select ${TRIP_COLUMNS},
+                    split_part(gtfs_id, '~', 1) || '~' || $1::int || '.' || $2::int || '.' || $5::int || '-' || row_number() over (order by s.start),
+                    s.start, end_secs + (s.start - start_secs), $1::int, id, $2::int
+             from trips, unnest($4::int[]) as s(start) where id = $3::bigint
+             returning id, start_secs`,
+            [sc.id, seq, template.id, dealt[i], batch] as never[],
+          );
+          await tx`
+            insert into stop_times (trip_id, seq, stop_id, arr, dep, dist, pickup_type, drop_off_type, timepoint, headsign, note)
+            select n.id, st.seq, st.stop_id, st.arr + (n.start_secs - ${template.start_secs}), st.dep + (n.start_secs - ${template.start_secs}),
+                   st.dist, st.pickup_type, st.drop_off_type, st.timepoint, st.headsign, st.note
+            from trips n join stop_times st on st.trip_id = ${template.id}
+            where n.id = any(${created.map((r) => r.id)})`;
+          for (const r of created) createdIds.push(r.id);
+        }
       }
     }
     const fleet = await assignVehicles(tx, sc, seq, createdIds);
+    const settled = await settlePlatforms(tx, sc, seq, createdIds);
     return {
-      summary: `${route.name}: new frequency in ${bands.length} time band${bands.length === 1 ? '' : 's'}, both directions (${createdIds.length} trips, replacing ${replacedCount}${keptPinned ? `, keeping ${keptPinned} placed by hand` : ''})${fleetNote(fleet)}`,
+      summary: `${route.name}: new frequency in ${bands.length} time band${bands.length === 1 ? '' : 's'}, ${directions.length > 1 ? 'both directions' : 'one direction'}${allPatterns && patternsUsed > 1 ? `, shared between ${patternsUsed} stop patterns` : ''} (${createdIds.length} trips, replacing ${replacedCount}${keptPinned ? `, keeping ${keptPinned} placed by hand` : ''})${fleetNote(fleet)}${platformNote(settled)}`,
       idMap: {},
     };
   }
 
-  const reshapeDeps: ReshapeDeps = { cloneTrips, typicalSpeed, newLine: NEW_LINE, skipPenalty: SKIP_PENALTY };
+  const reshapeDeps: ReshapeDeps = { cloneTrips, newLine: NEW_LINE, skipPenalty: SKIP_PENALTY };
+  const closureDeps = { ...reshapeDeps, assignVehicles, removeTrips };
+  const schedule = scheduleEdits({ cloneTrips, assignVehicles, describe: describe as never, fleetNote, skipPenalty: SKIP_PENALTY, newLine: NEW_LINE });
+  const { settlePlatforms, platformNote } = schedule;
 
   interface ReshapeBody {
     patternId: number;
@@ -743,8 +813,9 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       keepVehicle: false,
     });
     const fleet = await assignVehicles(tx, sc, seq, Object.values(idMap));
+    const settled = await settlePlatforms(tx, sc, seq, Object.values(idMap));
     return {
-      summary: `Added a copy of ${t.label} departing ${formatSecs(start)}${fleetNote(fleet)}`,
+      summary: `Added a copy of ${t.label} departing ${formatSecs(start)}${fleetNote(fleet)}${platformNote(settled)}`,
       idMap: {},
       focusTripId: idMap[Number(body.tripId)],
     };
@@ -857,6 +928,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const t = await describe(tx, template.id);
     await removeTrips(tx, sc, seq, replaced);
     let fleet = { reused: 0, added: 0 };
+    let settled = 0;
     if (starts.length) {
       const created = await tx.unsafe(
         `insert into trips (${TRIP_COLUMNS}, gtfs_id, start_secs, end_secs, scenario_id, cloned_from, created_edit)
@@ -874,9 +946,10 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         from trips n join stop_times st on st.trip_id = ${template.id}
         where n.id = any(${created.map((r) => r.id)})`;
       fleet = await assignVehicles(tx, sc, seq, created.map((r) => r.id));
+      settled = await settlePlatforms(tx, sc, seq, created.map((r) => r.id));
     }
     return {
-      summary: `${t.line}: every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${starts.length} trips, replacing ${replaced.length}${pinned.length ? `, keeping ${pinned.length} pinned` : ''})${fleetNote(fleet)}`,
+      summary: `${t.line}: every ${minutes(headway)} from ${formatSecs(from)} to ${formatSecs(to)} (${starts.length} trips, replacing ${replaced.length}${pinned.length ? `, keeping ${pinned.length} pinned` : ''})${fleetNote(fleet)}${platformNote(settled)}`,
       idMap: {},
     };
   }
@@ -890,7 +963,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const mine = sql`t.scenario_id = ${sc.id} and ${visT}`;
 
     const platform = await sql`
-      select t.id as "tripId", o.id as "otherTripId", st.stop_id as "stopId", s.name as "stopName",
+      select t.id as "tripId", o.id as "otherTripId", st.stop_id as "stopId", st.seq, s.name as "stopName",
              r.short_name as line, ro.short_name as "otherLine",
              greatest(st.arr, so.arr) as "fromSecs", least(st.dep, so.dep) as "toSecs",
              st.arr, so.dep as "otherDep", t.start_secs as "startSecs", o.start_secs as "otherStart"
@@ -921,11 +994,74 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
         and (o.start_secs > t.start_secs or o.id > t.id)
       order by t.end_secs limit 200`;
 
+    // A vehicle that ends a trip at a platform and starts its next from the same one holds it in between.
+    // Reported when a trip the scenario made or retimed is the one waiting, or the one calling there.
+    const changed = (alias: string) => {
+      const t = sql(alias);
+      return sql`(${t}.scenario_id = ${sc.id} and (${t}.origin_trip_id is null or exists (
+        select 1 from trips og where og.id = ${t}.origin_trip_id
+          and (og.start_secs <> ${t}.start_secs or og.end_secs <> ${t}.end_secs or og.first_stop_id <> ${t}.first_stop_id
+               or og.last_stop_id <> ${t}.last_stop_id or og.vehicle_day_id is distinct from ${t}.vehicle_day_id))))`;
+    };
+    const waitingFor = (start: ReturnType<typeof sql>, where: ReturnType<typeof sql>) => sql`
+      select a.id as "waitTripId", b.id as "nextTripId", o.id as "tripId", so.seq, a.last_stop_id as "stopId", s.name as "stopName",
+             r.short_name as line, ro.short_name as "otherLine", a.end_secs as "from", b.start_secs as "to",
+             so.arr, so.dep, o.start_secs as "startSecs", vd.label as vehicle
+      from ${start}
+      join routes r on r.id = a.route_id
+      join modes m on m.id = r.mode_id
+      join stops s on s.id = a.last_stop_id
+      join vehicle_days vd on vd.id = a.vehicle_day_id
+      join routes ro on ro.id = o.route_id
+      where ${where} and m.rule_set in ('rail', 'ferry') and s.parent_id is not null
+        and ${visible(sql, 'a', sc)} and ${visible(sql, 'b', sc)} and ${visO}
+        and o.vehicle_day_id is distinct from a.vehicle_day_id
+        and not exists (select 1 from trips c where c.vehicle_day_id = a.vehicle_day_id and c.id not in (a.id, b.id)
+                        and c.start_secs >= a.end_secs and c.start_secs < b.start_secs and ${visible(sql, 'c', sc)})
+      order by so.arr limit 60`;
+    const waitJoin = sql`
+      join trips b on b.vehicle_day_id = a.vehicle_day_id and b.first_stop_id = a.last_stop_id and b.id <> a.id
+        and b.start_secs > a.end_secs and b.start_secs <= a.end_secs + 3600`;
+    const callJoin = sql`
+      join stop_times so on so.stop_id = a.last_stop_id and so.trip_id not in (a.id, b.id) and so.arr < b.start_secs and so.dep > a.end_secs
+        and not (so.pickup_type = 1 and so.drop_off_type = 1)
+      join trips o on o.id = so.trip_id`;
+    const waiting = [
+      // The waiting vehicle's trips are the scenario's.
+      ...(await waitingFor(sql`trips a ${waitJoin} ${callJoin}`, sql`a.scenario_id = ${sc.id} and (${changed('a')} or ${changed('b')})`)),
+      // The trip calling there is the scenario's.
+      ...(await waitingFor(
+        sql`trips o
+          join stop_times so on so.trip_id = o.id and not (so.pickup_type = 1 and so.drop_off_type = 1)
+          join trips a on a.last_stop_id = so.stop_id and a.id <> o.id and a.end_secs < so.dep and a.end_secs > so.arr - 3600
+          ${waitJoin} and b.id <> o.id and b.start_secs > so.arr`,
+        sql`o.scenario_id = ${sc.id} and ${changed('o')} and not (a.scenario_id is not distinct from ${sc.id} and (${changed('a')} or ${changed('b')}))`,
+      )),
+    ];
+
     const [{ n: unassigned }] = await sql`select count(*)::int as n from trips t where ${mine} and t.vehicle_day_id is null`;
 
+    // A free platform at the same station is the gentler fix where there is one. Looked up for the
+    // first clashes only, which are the ones shown.
+    type Fix = { label: string; edit: Record<string, unknown> };
+    const platformFix = async (tripId: number, seq: number): Promise<{ fix: Fix; usual: boolean } | null> => {
+      const best = bestFree(await platformChoices(sql, sc, tripId, seq));
+      if (!best) return null;
+      return {
+        fix: { label: `Use platform ${best.platformCode ?? best.name} instead${best.uses ? '' : ' (not one this line normally uses)'}`, edit: { kind: 'setPlatform', tripId, stopSeq: seq, stopId: best.id } },
+        usual: best.uses > 0,
+      };
+    };
+    const withPlatform = async (fixes: Fix[], tripId: number, seq: number, index: number): Promise<Fix[]> => {
+      if (index >= 30) return fixes;
+      const found = await platformFix(tripId, seq);
+      if (!found) return fixes;
+      return found.usual ? [found.fix, ...fixes] : [...fixes, found.fix];
+    };
+
     const round30 = (secs: number) => Math.ceil(secs / 30) * 30;
-    const conflicts = [
-      ...platform.map((c) => {
+    const platformConflicts = await Promise.all(
+      platform.map(async (c, i) => {
         const delta = round30(c.otherDep - c.arr + 60);
         return {
           kind: 'platform' as const,
@@ -935,9 +1071,46 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
           atSecs: c.fromSecs,
           title: `${String(c.stopName).replace(/ Station/, '')}: two trips at once`,
           detail: `${c.line ?? 'Trip'} ${formatSecs(c.startSecs)} and ${c.otherLine ?? 'trip'} ${formatSecs(c.otherStart)} overlap at ${formatSecs(c.fromSecs)}`,
-          fixes: [{ label: `Move the ${formatSecs(c.startSecs)} trip ${minutes(delta)} later`, edit: { kind: 'shift', tripIds: [c.tripId], delta, ripple: 'none' } }],
+          fixes: await withPlatform(
+            [{ label: `Move the ${formatSecs(c.startSecs)} trip ${minutes(delta)} later`, edit: { kind: 'shift', tripIds: [c.tripId], delta, ripple: 'none' } }],
+            c.tripId,
+            c.seq,
+            i,
+          ),
         };
       }),
+    );
+    const seenWaits = new Set<string>();
+    const waitingConflicts = await Promise.all(
+      waiting
+        .filter((c) => {
+          const key = `${c.waitTripId}|${c.tripId}`;
+          if (seenWaits.has(key) || platform.some((p) => (p.tripId === c.tripId && p.otherTripId === c.waitTripId) || (p.tripId === c.waitTripId && p.otherTripId === c.tripId))) return false;
+          seenWaits.add(key);
+          return true;
+        })
+        .map(async (c, i) => {
+          const delta = round30(c.to - c.arr + 60);
+          return {
+            kind: 'platform' as const,
+            tripId: c.tripId,
+            otherTripId: c.waitTripId,
+            stopId: c.stopId,
+            atSecs: Math.max(c.arr, c.from),
+            title: `${String(c.stopName).replace(/ Station/, '')}: a waiting vehicle is in the way`,
+            detail: `${c.otherLine ?? 'Trip'} ${formatSecs(c.startSecs)} calls at ${formatSecs(c.arr)}, while ${c.vehicle} waits there from ${formatSecs(c.from)} to ${formatSecs(c.to)} for its next ${c.line ?? ''} trip`,
+            fixes: await withPlatform(
+              [{ label: `Move the ${formatSecs(c.startSecs)} trip ${minutes(delta)} later`, edit: { kind: 'shift', tripIds: [c.tripId], delta, ripple: 'none' } }],
+              c.tripId,
+              c.seq,
+              i,
+            ),
+          };
+        }),
+    );
+    const conflicts = [
+      ...platformConflicts,
+      ...waitingConflicts,
       ...vehicle.map((c) => {
         const delta = round30(c.endSecs - c.otherStart + 60);
         return {
@@ -1052,6 +1225,13 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       lineFrequency: editLineFrequency,
       createLine: editCreateLine,
       reshape: editReshape,
+      addStop: editAddStop,
+      setPlatform: schedule.editSetPlatform,
+      replan: schedule.editReplan,
+      moveToVehicle: schedule.editMoveToVehicle,
+      addTrip: schedule.editAddTrip,
+      addCall: schedule.editAddCall,
+      close: (tx: Tx, sc: Scenario, seq: number, b: never) => editClose(tx, sc, seq, b, closureDeps),
     }[body.kind] as
       | ((tx: Tx, sc: Scenario, seq: number, body: never) => Promise<EditResult>)
       | undefined;
@@ -1061,15 +1241,30 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
 
   /** The path a new line would take through these stops, for the preview while drawing. */
   app.post('/api/road-path', async (req) => {
-    const body = req.body as { baselineId: number; stopIds: number[] };
+    const body = req.body as { baselineId: number; stopIds: number[]; modeId?: string; loop?: boolean };
     const ids = (body.stopIds ?? []).map(Number).slice(0, 150);
     if (ids.length < 2) throw fail(400, 'Pick at least two stops');
-    const rows = await sql`select id, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${ids}) and baseline_id = ${Number(body.baselineId)}`;
+    if (body.loop && ids[ids.length - 1] !== ids[0]) ids.push(ids[0]);
+    const rows = await sql`
+      select id, location_type, parent_id, ST_X(geom) as lon, ST_Y(geom) as lat from stops
+      where id = any(${ids}) and baseline_id = ${Number(body.baselineId)}`;
     const byId = new Map(rows.map((r) => [r.id, r]));
     if (ids.some((id) => !byId.has(id))) throw fail(400, 'Unknown stop');
-    const found = await roadPath(sql, Number(body.baselineId), ids.map((id) => ({ id, lon: byId.get(id)!.lon, lat: byId.get(id)!.lat })));
+    const found = await linePath(
+      sql,
+      Number(body.baselineId),
+      String(body.modeId ?? 'bus'),
+      ids.map((id) => {
+        const s = byId.get(id)!;
+        return { id, lon: s.lon, lat: s.lat, stationId: s.location_type === 1 ? id : s.parent_id };
+      }),
+      { follow: true },
+    );
     return { coords: found.coords, method: found.method, description: describeMethod(found.method) };
   });
+
+  closureRoutes(app, sql, { loadScenario, idParam, deps: closureDeps });
+  scheduleRoutes(app, sql);
 
   /** The stops of one stop pattern, in calling order, for the reshaping tool. */
   app.get('/api/patterns/:id/stops', async (req) => {
@@ -1108,6 +1303,9 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     };
   });
 
+  /** Stops this scenario added, as GeoJSON for the map. */
+  app.get('/api/scenarios/:id/stops', async (req) => scenarioStopsGeoJson(sql, await loadScenario(idParam(req))));
+
   /** Lines this scenario created or reshaped, as GeoJSON for the map. */
   app.get('/api/scenarios/:id/lines', async (req) => {
     const sc = await loadScenario(idParam(req));
@@ -1117,8 +1315,8 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
       join patterns p on p.route_id = r.id
       join shapes s on s.id = p.shape_id
       where p.scenario_id = ${sc.id} and p.created_edit <= ${sc.head}
-        -- A reshaped pattern that has since been reshaped again has no trips left and is not drawn.
-        and (r.scenario_id = ${sc.id} or exists (select 1 from trips t where t.pattern_id = p.id and ${visible(sql, 't', sc)}))`;
+        -- A pattern that has since been reshaped again, or cut by a closure, has no trips left and is not drawn.
+        and exists (select 1 from trips t where t.pattern_id = p.id and ${visible(sql, 't', sc)})`;
     return {
       type: 'FeatureCollection',
       features: rows.map((r) => ({

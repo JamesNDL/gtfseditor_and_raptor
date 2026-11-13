@@ -2,6 +2,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useApi, type RouteDetail, type RouteTrip } from '../api.ts';
 import { startReshape } from '../builder.ts';
+import { applyEdit } from '../scenario.ts';
 import { useStore } from '../store.ts';
 import { VehicleTypePicker } from '../FleetPanel.tsx';
 import { FrequencyEditor } from './FrequencyEditor.tsx';
@@ -18,6 +19,9 @@ export function RoutePanel({ routeId }: { routeId: number }) {
   const [tab, setTab] = useState<'trips' | 'patterns'>('trips');
   const [direction, setDirection] = useState<number | 'all'>('all');
   const [metric, setMetric] = useState<'trips' | 'places'>('trips');
+  const busy = useStore((s) => s.editBusy);
+  const [newTripAt, setNewTripAt] = useState('12:00');
+  const [newTripWay, setNewTripWay] = useState(0);
 
   const r = route.data;
   useEffect(() => {
@@ -128,6 +132,18 @@ export function RoutePanel({ routeId }: { routeId: number }) {
       <section>
         <h3>Vehicles used</h3>
         {editing && <VehicleTypePicker scope="route" id={r.id} modeId={r.modeId} label="Run the whole line with" />}
+        {editing && (
+          <div className="edit-row">
+            <button
+              className="button small-button"
+              disabled={busy}
+              title="Takes every trip on this line off its vehicle and works the vehicles out again, each trip going to the vehicle that has waited the shortest time in the right place. Worth doing after frequency changes."
+              onClick={() => applyEdit({ kind: 'replan', routeId: r.id })}
+            >
+              Work out the vehicles again
+            </button>
+          </div>
+        )}
         <ul className="rows">
           {r.vehicleTypes.map((v) => (
             <li key={v.id} className="row">
@@ -175,6 +191,34 @@ export function RoutePanel({ routeId }: { routeId: number }) {
                     To {d.headsign ?? `direction ${d.direction}`}
                   </button>
                 ))}
+              </div>
+            )}
+            {editing && (
+              <div className="edit-row">
+                <span className="muted small">Add a trip at</span>
+                <input className="day-select" type="time" value={newTripAt} onChange={(e) => setNewTripAt(e.target.value)} aria-label="Departure time of the new trip" />
+                {r.directions.length > 1 && (
+                  <select className="day-select" value={newTripWay} onChange={(e) => setNewTripWay(Number(e.target.value))} aria-label="Direction of the new trip">
+                    {r.directions.map((d) => (
+                      <option key={d.direction} value={d.direction}>
+                        to {d.headsign ?? `direction ${d.direction}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  className="button small-button"
+                  disabled={busy || !newTripAt}
+                  title="Adds a trip timed like the nearest one in that direction, and finds it a vehicle"
+                  onClick={async () => {
+                    const [h, m] = newTripAt.split(':').map(Number);
+                    const way = r.directions.some((d) => d.direction === newTripWay) ? newTripWay : (r.directions[0]?.direction ?? 0);
+                    const done = await applyEdit({ kind: 'addTrip', routeId: r.id, direction: way, startSecs: h * 3600 + m * 60 });
+                    if (done?.focusTripId) open({ kind: 'trip', id: done.focusTripId });
+                  }}
+                >
+                  Add
+                </button>
               </div>
             )}
             {!trips.data ? (

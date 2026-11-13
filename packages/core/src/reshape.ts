@@ -1,5 +1,6 @@
 // Reshaping a line (extend, cut short, re-route, add or remove a stop): the parts that need no
 // database, shared by the server's edit and its preview.
+import { bandOf } from './time.ts';
 import { distanceM } from './vehicle-days.ts';
 
 export type Coord = [number, number];
@@ -83,6 +84,29 @@ export function locateStops(coords: Coord[], stops: Coord[]): number[] {
   return out;
 }
 
+/** How close a path comes to a point, in metres. */
+export function distanceToPathM(coords: Coord[], lon: number, lat: number): number {
+  const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
+  const ky = 110_540;
+  let best = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const bx = (coords[i][0] - lon) * kx;
+    const by = (coords[i][1] - lat) * ky;
+    if (i === 0) {
+      best = Math.hypot(bx, by);
+      continue;
+    }
+    const ax = (coords[i - 1][0] - lon) * kx;
+    const ay = (coords[i - 1][1] - lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const span = dx * dx + dy * dy;
+    const f = span > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / span)) : 0;
+    best = Math.min(best, Math.hypot(ax + f * dx, ay + f * dy));
+  }
+  return best;
+}
+
 /** One call of a trip as it is now. */
 export interface OldCall {
   arr: number;
@@ -96,9 +120,12 @@ export interface OldCall {
  * - same: both stops are kept and nothing between them changed; each trip keeps its own time.
  * - passing: both are kept, stops between them were removed and the vehicle still drives past them;
  *   each trip keeps its own time less what stopping cost.
- * - new: a stretch the line did not run before, with one run time for every trip.
+ * - new: a stretch the line did not run before, with one run time for every trip, or one for each
+ *   part of the day (`byBand`, indexed like DAY_BANDS) chosen by when the trip sets out.
+ * - detour: both stops are kept but the vehicle goes a different way between them; each trip keeps
+ *   its own time (less any stops it no longer makes), scaled by how much longer the new way is.
  */
-export type ReshapeSection = { kind: 'same' } | { kind: 'passing' } | { kind: 'new'; secs: number };
+export type ReshapeSection = { kind: 'same' } | { kind: 'passing' } | { kind: 'new'; secs: number; byBand?: number[] } | { kind: 'detour'; factor: number };
 
 export interface NewCall {
   arr: number;
@@ -128,16 +155,18 @@ export function retime(
 ): NewCall[] {
   const n = keptAt.length;
   const lastOld = old.length - 1;
+  const band = bandOf(old[0].dep);
   const run = (i: number): number => {
     const s = sections[i];
-    if (s.kind === 'new') return s.secs;
+    if (s.kind === 'new') return s.byBand?.[band] ?? s.secs;
     const a0 = keptAt[i];
     const a1 = keptAt[i + 1];
     const current = old[a1].arr - old[a0].dep;
     if (s.kind === 'same') return Math.max(0, current);
     let saving = 0;
     for (let a = a0 + 1; a < a1; a++) if (!isPassing(old[a])) saving += old[a].dep - old[a].arr + options.skipPenaltySecs;
-    return Math.max(0, Math.round(current * 0.5), current - saving);
+    const passing = Math.max(0, Math.round(current * 0.5), current - saving);
+    return s.kind === 'detour' ? Math.round(passing * s.factor) : passing;
   };
   const dwell = (i: number): number => {
     if (i === 0 || i === n - 1) return 0;
