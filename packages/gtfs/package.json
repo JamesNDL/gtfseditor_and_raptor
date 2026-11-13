@@ -1,0 +1,16 @@
+{
+  "name": "@gtfs-editor/gtfs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@duckdb/node-api": "latest",
+    "@gtfs-editor/core": "^0.0.0",
+    "postgres": "^4.1.1",
+    "yauzl": "^3.4.0"
+  },
+  "exports": {
+    "./db": "./src/db.ts",
+    "./packs": "./src/import/packs.ts"
+  }
+}

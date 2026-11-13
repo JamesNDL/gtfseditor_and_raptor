@@ -1,0 +1,156 @@
+// GTFS export: one service day, with a scenario's changes applied, as a zip.
+//
+// The database writes each file itself (COPY ... TO STDOUT), so the two million stop times never
+// pass through JavaScript objects. Files go to a temporary folder, are zipped, then removed.
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import type { FastifyInstance } from 'fastify';
+import yazl from 'yazl';
+import type { Sql } from '@gtfs-editor/gtfs/db';
+import { scenarioOf, type Scenario } from './scenarios.ts';
+
+const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+
+/** Same rule as `visible()` in scenarios.ts, as plain SQL text: COPY cannot take parameters. */
+function visibleText(alias: string, sc: Scenario | null): string {
+  if (!sc) return `${alias}.scenario_id is null`;
+  const id = Number(sc.id);
+  const head = Number(sc.head);
+  if (!Number.isInteger(id) || !Number.isInteger(head)) throw fail(400, 'Bad scenario');
+  return `((${alias}.scenario_id is null and not exists (
+             select 1 from scenario_removed x where x.scenario_id = ${id} and x.trip_id = ${alias}.id and x.edit_seq <= ${head}))
+           or (${alias}.scenario_id = ${id} and ${alias}.created_edit <= ${head}
+               and (${alias}.removed_edit is null or ${alias}.removed_edit > ${head})))`;
+}
+
+const hms = (col: string) =>
+  `lpad((${col} / 3600)::text, 2, '0') || ':' || lpad(((${col} % 3600) / 60)::text, 2, '0') || ':' || lpad((${col} % 60)::text, 2, '0')`;
+
+export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
+  app.get('/api/baselines/:b/export', async (req, reply) => {
+    const b = Number((req.params as { b: string }).b);
+    if (!Number.isInteger(b)) throw fail(400, 'Bad day');
+    const [baseline] = await sql`
+      select id, to_char(service_date, 'YYYYMMDD') as date, trim(to_char(service_date, 'day')) as weekday, feed_id
+      from baselines where id = ${b} and ready`;
+    if (!baseline) throw fail(404, 'Day not found');
+    const sc = await scenarioOf(req, sql);
+    if (sc && sc.baselineId !== b) throw fail(400, 'That scenario belongs to a different day');
+    const [scenario] = sc ? await sql`select name from scenarios where id = ${sc.id}` : [null];
+
+    // Work out which trips are in the export once, into a scratch table, so each file's query is a
+    // plain join rather than repeating the scenario rules.
+    const scratch = `staging.export_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+    await sql.unsafe(`create unlogged table ${scratch} as select t.id from trips t where t.baseline_id = ${b} and ${visibleText('t', sc)}`);
+    await sql.unsafe(`alter table ${scratch} add primary key (id); analyze ${scratch}`);
+    const vis = `t.id in (select id from ${scratch})`;
+    const live = vis;
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const text = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    const version = scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published';
+
+    // Every trip in the export runs on the one service day, under a single service id.
+    const files: Record<string, string> = {
+      'agency.txt': `
+        select agency_gtfs_id as agency_id, max(agency_name) as agency_name, 'http://transportnsw.info' as agency_url,
+               'Australia/Sydney' as agency_timezone, 'EN' as agency_lang
+        from routes r where r.baseline_id = ${b} and r.agency_gtfs_id is not null
+          and exists (select 1 from trips t where t.route_id = r.id and ${vis})
+        group by 1 order by 1`,
+      'routes.txt': `
+        select r.gtfs_id as route_id, r.agency_gtfs_id as agency_id, r.short_name as route_short_name,
+               r.long_name as route_long_name, r.description as route_desc, r.route_type,
+               r.color as route_color, r.text_color as route_text_color
+        from routes r where r.baseline_id = ${b}
+          and exists (select 1 from trips t where t.route_id = r.id and ${vis})
+        order by 1`,
+      'stops.txt': `
+        select gtfs_id as stop_id, code as stop_code, name as stop_name,
+               round(ST_Y(geom)::numeric, 8) as stop_lat, round(ST_X(geom)::numeric, 8) as stop_lon,
+               location_type, parent_gtfs_id as parent_station, wheelchair as wheelchair_boarding, platform_code
+        from stops where baseline_id = ${b} order by 1`,
+      'calendar.txt': `
+        select 'DAY' as service_id, ${days.map((d) => `${d === baseline.weekday ? 1 : 0} as ${d}`).join(', ')},
+               ${text(baseline.date)} as start_date, ${text(baseline.date)} as end_date`,
+      'trips.txt': `
+        select r.gtfs_id as route_id, 'DAY' as service_id, t.gtfs_id as trip_id, sh.gtfs_id as shape_id,
+               t.headsign as trip_headsign, t.direction_id,
+               -- A block_id means "passengers stay aboard". Brand-new trips were copied from another
+               -- trip and must not inherit its link.
+               case when t.scenario_id is not null and t.origin_trip_id is null then null else t.feed_block_id end as block_id,
+               t.extra->>'wheelchair_accessible' as wheelchair_accessible, t.extra->>'bikes_allowed' as bikes_allowed
+        from trips t join routes r on r.id = t.route_id left join shapes sh on sh.id = t.shape_id
+        where ${live} order by 3`,
+      'stop_times.txt': `
+        select t.gtfs_id as trip_id, ${hms('st.arr')} as arrival_time, ${hms('st.dep')} as departure_time,
+               s.gtfs_id as stop_id, st.seq as stop_sequence, st.headsign as stop_headsign,
+               st.pickup_type, st.drop_off_type, -- Through float8 first: converting a 32-bit number straight to numeric keeps only six digits.
+               round(st.dist::float8::numeric, 2) as shape_dist_traveled, st.timepoint
+        from trips t join stop_times st on st.trip_id = t.id join stops s on s.id = st.stop_id
+        where ${live} order by 1, 5`,
+      // Distances are the feed's own, stored per point at import, so they line up with the stop times.
+      'shapes.txt': `
+        select s.gtfs_id as shape_id, round(ST_Y((dp).geom)::numeric, 8) as shape_pt_lat,
+               round(ST_X((dp).geom)::numeric, 8) as shape_pt_lon, (dp).path[1] as shape_pt_sequence,
+               round(s.dists[(dp).path[1]]::numeric, 2) as shape_dist_traveled
+        from shapes s
+        cross join lateral ST_DumpPoints(s.geom) dp
+        where s.baseline_id = ${b} and exists (select 1 from trips t where t.shape_id = s.id and ${vis})
+        order by 1, 4`,
+      'pathways.txt': `
+        select p.gtfs_id as pathway_id, f.gtfs_id as from_stop_id, o.gtfs_id as to_stop_id, p.pathway_mode,
+               p.is_bidirectional::int as is_bidirectional, p.traversal_secs as traversal_time
+        from pathways p join stops f on f.id = p.from_stop_id join stops o on o.id = p.to_stop_id
+        where p.baseline_id = ${b} order by 1`,
+      'feed_info.txt': `
+        select 'GTFS Editor' as feed_publisher_name, 'http://transportnsw.info' as feed_publisher_url, 'EN' as feed_lang,
+               ${text(baseline.date)} as feed_start_date, ${text(baseline.date)} as feed_end_date,
+               ${text(`${baseline.feed_id}: ${version}`)} as feed_version`,
+      // Not GTFS: what the editor knows about vehicles, for the simulator. Standard readers ignore these.
+      'editor_vehicle_types.txt': `
+        select id as vehicle_type_id, name, mode_id as mode, cars, seated, standing, fleet_size,
+               capacity_is_placeholder::int as capacity_is_placeholder
+        from vehicle_types order by 1`,
+      'editor_trip_vehicles.txt': `
+        select t.gtfs_id as trip_id, t.vehicle_day_id as vehicle_id, vd.label as vehicle_label,
+               coalesce(vd.source, '') as vehicle_source, tv.vehicle_type_id, tv.assumed::int as vehicle_type_assumed
+        from trips t join trip_vehicle tv on tv.trip_id = t.id left join vehicle_days vd on vd.id = t.vehicle_day_id
+        where ${live} order by 1`,
+    };
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'gtfs-export-'));
+    const zip = new yazl.ZipFile();
+    const cleanUp = async () => {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      await sql.unsafe(`drop table if exists ${scratch}`).catch(() => {});
+    };
+    zip.outputStream.on('close', () => void cleanUp());
+
+    // Files are added to the zip as each one is written, so the download starts straight away instead
+    // of after several minutes of silence.
+    void (async () => {
+      try {
+        for (const [name, query] of Object.entries(files)) {
+          const readable = await sql.unsafe(`copy (${query}) to stdout with (format csv, header true)`).readable();
+          await pipeline(readable, createWriteStream(path.join(dir, name)));
+          zip.addFile(path.join(dir, name), name);
+        }
+        zip.end();
+      } catch (err) {
+        req.log.error(err, 'GTFS export failed');
+        // Cut the download short so a broken zip is not mistaken for a complete one.
+        (zip.outputStream as unknown as { destroy: (e: Error) => void }).destroy(err as Error);
+        void cleanUp();
+      }
+    })();
+
+    const safe = (scenario?.name ?? 'published').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scenario';
+    reply.header('content-type', 'application/zip');
+    reply.header('content-disposition', `attachment; filename="gtfs-${baseline.date}-${safe}.zip"`);
+    reply.header('cache-control', 'no-store');
+    return reply.send(zip.outputStream);
+  });
+}
