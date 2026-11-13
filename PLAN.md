@@ -185,12 +185,21 @@ Not built yet:
 - The rules run on the server only, not also in the browser as first planned.
 - Scenario changes are not in any export (Phase 6).
 
+### Testing status
+
+- `npm test`: unit tests for the shared logic.
+- `npm run test:e2e`: the scenario engine through the API.
+- `npm run export:check`: a GTFS export against the source feed.
+- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, and runs "Fix all". All twelve steps pass with no browser errors.
+
+Not covered by any test: the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
+
 ### Usability pass (after a review of how easy the editor is to pick up)
 
 Done:
 
 - Editing needs no setup: edit controls are always shown, and the first change starts a scenario automatically.
-- Whole-line frequency: one card per line with five parts of the day, showing how often it runs now; typing a new gap changes both directions together and works out vehicles across them.
+- Whole-line frequency: one card per line with five parts of the day, showing how often it runs now; typing a new gap changes both directions together and works out vehicles across them. On a line with several stop patterns the card says so, gives the overall peak gap across all of them, and makes clear it shows and changes only the most common pattern in each direction.
 - "Fix all" applies the suggested fix to each clash in turn.
 - A trip's departure time can be typed directly.
 - Plainer wording ("Trip diagram", "clashes", "placed by hand", the what-else-moves options), a short "How to play" card, and keyboard shortcuts (Ctrl+Z, Ctrl+Y, Space).

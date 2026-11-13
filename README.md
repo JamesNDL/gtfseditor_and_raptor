@@ -25,6 +25,7 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 | `npm run packs` | Rebuild the vehicle animation files for existing baselines |
 | `npm test` | Unit tests for the core logic |
 | `npm run export:check [-- scenarioId]` | Export the first day (or a scenario) as GTFS through the running API and check it; for the published day, compare it with the original feed |
+| `npm run test:ui` | Drive the real interface in a headless browser (click, type, drag, shortcuts) against the running app; screenshots go to `data/ui-test/` |
 | `npm run test:e2e` | End-to-end test of scenario editing against the running API (creates and deletes its own scenario) |
 | `npm run dev` | Start the API and web app |
 

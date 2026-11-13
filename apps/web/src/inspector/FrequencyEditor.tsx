@@ -13,13 +13,13 @@ const BANDS = [
   { name: 'Evening', from: 19, to: 23 },
 ];
 
-/** How often the line runs now in a band: the typical gap between departures, in minutes. */
+/** How often trips run now in a band: its length divided by the number of departures, in minutes. */
 function currentMinutes(starts: number[], from: number, to: number): number | null {
-  const inBand = starts.filter((s) => s >= from && s < to);
-  if (inBand.length < 2) return null;
-  const gaps = inBand.slice(1).map((s, i) => s - inBand[i]).sort((a, b) => a - b);
-  return Math.round(gaps[Math.floor(gaps.length / 2)] / 60);
+  const inBand = starts.filter((s) => s >= from && s < to).length;
+  return inBand === 0 ? null : Math.round((to - from) / 60 / inBand);
 }
+
+const gap = (minutes: number) => (minutes >= 120 ? `every ${Math.round(minutes / 60)} h` : `every ${minutes} min`);
 
 /** One card for the whole line: how often it runs in each part of the day, both directions together. */
 export function FrequencyEditor({ route }: { route: RouteDetail }) {
@@ -32,6 +32,13 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
       }),
     [route.mainDepartures],
   );
+  // Across every stopping pattern, how often anything on the line leaves in the morning peak.
+  const directions = Math.max(1, route.directions.length);
+  const peakTrips = route.hourly.filter((h) => h.hour >= 7 && h.hour < 9).reduce((sum, h) => sum + h.trips, 0) / directions;
+  const overallPeak = peakTrips > 0 ? Math.max(1, Math.round(120 / peakTrips)) : null;
+  const manyPatterns = route.patterns.length > route.mainDepartures.length;
+  const main = route.patterns[0];
+
   // What the user has typed; blank means "leave this part of the day as it is".
   const [typed, setTyped] = useState<string[]>(BANDS.map(() => ''));
 
@@ -48,11 +55,18 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
       <p className="muted small form-preview">
         Type a new gap between departures for any part of the day. Both directions change together and vehicles are worked out for you.
       </p>
+      {manyPatterns && (
+        <p className="note small">
+          This line runs {route.patterns.length} different stop patterns{overallPeak !== null && `, about ${gap(overallPeak)} between them in the morning peak`}.
+          This card shows and changes only the most common one in each direction{main ? ` (${main.firstStop.replace(/,.*$/, '')} to ${main.lastStop.replace(/,.*$/, '')})` : ''};
+          branches and express trips stay as they are.
+        </p>
+      )}
       <table className="bands">
         <thead>
           <tr>
             <th>Part of the day</th>
-            <th className="n">Now</th>
+            <th className="n">{manyPatterns ? 'This pattern now' : 'Now'}</th>
             <th className="n">Change to</th>
           </tr>
         </thead>
@@ -66,7 +80,7 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
                   {formatSecs(b.from * 3600)} to {formatSecs(b.to * 3600)}
                 </span>
               </td>
-              <td className="n muted">{now[i] === null ? 'few trips' : `every ${now[i]} min`}</td>
+              <td className="n muted">{now[i] === null ? 'no trips' : gap(now[i]!)}</td>
               <td className="n">
                 <input
                   className="day-select edit-number"
@@ -84,12 +98,6 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
           ))}
         </tbody>
       </table>
-      {route.patterns.length > route.mainDepartures.length && (
-        <p className="muted small form-preview">
-          This line has {route.patterns.length} different stopping patterns. Only the most common one in each direction is changed; branches and
-          express trips stay as they are.
-        </p>
-      )}
       <button
         className="button"
         disabled={busy || invalid || changes.length === 0}
