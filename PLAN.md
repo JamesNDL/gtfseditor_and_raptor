@@ -4,6 +4,42 @@ A visual, game-like editor for NSW public transport timetables (GTFS), built in 
 
 The build goes in seven phases, each ending in something usable: a read-only viewer first, then schedule editing, network editing, fleet, and export.
 
+## Where we are (13 Nov 2026)
+
+**Next step: reshape existing lines** (extend, cut short, re-route, add or remove a stop from a line). This is the rest of phase 4.
+
+Status by phase; details are under "Phases" below.
+
+| Phase | Status |
+|---|---|
+| 0. Data audit | Done |
+| 1. Import and viewer | Built |
+| 2. Timeline views | Built |
+| 3. Scenarios and schedule editing | Built, with gaps listed in the phase |
+| 4. Network editing | First tool only: draw a new line through existing stops, with bus lines following roads |
+| 5. Fleet and capacity | First slice built |
+| 6. Export and deployment | GTFS export built and verified against the feed; deployment not started |
+
+Everything is committed to git on `master`. Tests: `npm test`, `npm run test:e2e`, `npm run test:ui`, `npm run export:check` (see "Testing status").
+
+Remaining work, roughly in order:
+
+1. Route editing: reshape existing lines; new stops, stations and platforms; one-way loop lines; rail, light rail and ferry paths that follow track or water; road closures; cutting a rail line.
+2. Timings for new lines: by time of day, a learned stop time, better estimates where no bus runs today.
+3. Schedule editing gaps: choosing a free platform, platform clashes that count waiting vehicles, whole-line frequency on branching lines, vehicle planning across lines, adding a stop to one trip, creating a trip from nothing, dragging in the platform and vehicle charts.
+4. Usability: station details in the right-hand panel, goals and scoring, showing edits on the map, watching real people use it.
+5. Data: real vehicle capacities (all are placeholders), transfers between nearby stops, capacity on the map.
+6. Export and deployment: MobilityData validator, export progress, a self-hosted routing server, AWS, logins, shrinking the vehicle data, updating to a new feed while keeping scenarios.
+7. Later, as planned: the passenger simulator, the interchange file, track-level conflicts.
+
+Things a new session needs to know:
+
+- Start with `npm run db:up`, then `npm run dev`. On the development machine the dev servers have been stopped several times for lack of memory; starting them in a separate terminal avoids that.
+- `.env` holds the TfNSW key and `ROUTER_URL`, currently the public OSRM demo server. Stop coordinates are sent to it; host a routing server for real use.
+- The "Decisions made" and "Architecture" sections below were written before the build. Two have since changed: the validity rules run on the server only, not also in the browser, and timeline dragging exists only on the trip diagram.
+- The interface has been driven by a scripted browser (`npm run test:ui`), not yet by a person other than the developer. The untested parts are listed under "Testing status".
+- Lines drawn before the road-following and opposite-stop fixes keep their old paths and should be redrawn.
+
 ## Decisions made
 
 | Topic | Decision |
