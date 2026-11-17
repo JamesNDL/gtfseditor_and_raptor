@@ -16,6 +16,11 @@ import gtfseditor.router.core.Timetable;
 import gtfseditor.router.core.TimetableStats;
 import gtfseditor.router.core.TransferSettings;
 import gtfseditor.router.gtfs.LoadOptions;
+import gtfseditor.router.sim.Demand;
+import gtfseditor.router.sim.DemandGenerator;
+import gtfseditor.router.sim.DemandReader;
+import gtfseditor.router.sim.DemandReport;
+import gtfseditor.router.sim.DemandWriter;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import java.io.IOException;
@@ -91,6 +96,8 @@ public final class RouterServer implements AutoCloseable {
             config.routes.post("/v1/timetables/{id}/loads", this::createLoads);
             config.routes.get("/v1/timetables/{id}/loads/{name}", this::loads);
             config.routes.delete("/v1/timetables/{id}/loads/{name}", this::deleteLoads);
+            config.routes.post("/v1/demand/check", this::checkDemand);
+            config.routes.post("/v1/demand/generate", this::generateDemand);
             config.routes.post("/v1/simulations", this::simulate);
             config.routes.get("/v1/simulations", this::listSimulations);
             config.routes.get("/v1/simulations/{id}", this::simulation);
@@ -444,6 +451,82 @@ public final class RouterServer implements AutoCloseable {
                         error(e.getMessage() == null ? e.toString() : e.getMessage())));
                 ctx.res().getOutputStream().write(10);
             }
+        }
+    }
+
+    // ---- demand files
+
+    /**
+     * {@code POST /v1/demand/check}: a demand CSV as the body, gzipped or not. Answers what the
+     * reader made of it: rows read and refused with the reasons, figures about the rest, and how
+     * many rows name each stop id, so that the caller can look the ids up.
+     */
+    private void checkDemand(Context ctx) throws IOException {
+        String type = ctx.contentType() == null ? "" : ctx.contentType().toLowerCase(Locale.ROOT);
+        String encoding = ctx.header("Content-Encoding") == null ? "" : ctx.header("Content-Encoding");
+        InputStream body = ctx.req().getInputStream();
+        if (type.startsWith("application/gzip") || encoding.equalsIgnoreCase("gzip")) {
+            body = new java.util.zip.GZIPInputStream(body, 1 << 16);
+        }
+        DemandReader.Read read = DemandReader.read(new java.io.InputStreamReader(body,
+                java.nio.charset.StandardCharsets.UTF_8));
+        Demand demand = read.demand();
+        DemandReport.Figures figures = DemandReport.figures(demand);
+        ObjectNode answer = JSON.objectNode().put("rowsRead", read.report().rowsRead())
+                .put("rowsRefused", read.report().rowsRefused());
+        ObjectNode refused = answer.putObject("refused");
+        read.report().refused().forEach(refused::put);
+        ArrayNode examples = answer.putArray("examples");
+        read.report().examples().forEach(examples::add);
+        answer.put("rows", figures.rows()).put("people", figures.people()).put("users", figures.users())
+                .put("earliest", figures.earliest()).put("latest", figures.latest())
+                .put("busiestHour", figures.busiestHour()).put("busiestHourPeople", figures.busiestHourPeople());
+        int[] rowsAt = new int[demand.placeCount()];
+        int positions = 0;
+        for (int row = 0; row < demand.size(); row++) {
+            rowsAt[demand.origin[row]]++;
+            rowsAt[demand.destination[row]]++;
+        }
+        java.util.Map<String, Integer> byStop = new java.util.TreeMap<>();
+        for (int place = 0; place < rowsAt.length; place++) {
+            if (!Double.isNaN(demand.placeLat[place])) {
+                positions += rowsAt[place]; // this end has a position of its own, whatever its stop id
+            } else {
+                byStop.merge(demand.placeStop[place], rowsAt[place], Integer::sum);
+            }
+        }
+        answer.put("endsWithOwnPosition", positions);
+        ObjectNode stops = answer.putObject("stops");
+        byStop.forEach(stops::put);
+        ctx.json(answer);
+    }
+
+    /**
+     * {@code POST /v1/demand/generate}: makes a demand set up on a loaded timetable and answers it
+     * as a gzipped CSV. {@code journeys}, {@code seed}, {@code area}, {@code withinKm},
+     * {@code focus} and {@code people} are as for the command line.
+     */
+    private void generateDemand(Context ctx) throws IOException {
+        JsonNode body = mapper.readTree(ctx.body());
+        if (body == null || !body.isObject()) {
+            throw ApiException.bad("the request must be a JSON object");
+        }
+        int journeys = body.path("journeys").asInt(100_000);
+        if (journeys < 1 || journeys > 5_000_000) {
+            throw ApiException.bad("journeys is 1 to 5,000,000");
+        }
+        gtfseditor.router.sim.Area area = body.has("area") ? Simulations.area(body.get("area"))
+                : gtfseditor.router.sim.Area.OPAL;
+        Demand demand;
+        try (Timetables.Lease lease = timetables.lease(body.hasNonNull("timetable") ? body.get("timetable").asText() : null)) {
+            demand = DemandGenerator.generate(lease.loaded().router().timetable(), area, journeys,
+                    body.path("seed").asLong(1), body.path("withinKm").asDouble(DemandGenerator.DEFAULT_WITHIN_KM),
+                    body.path("focus").asDouble(1.0), body.path("people").asInt(1));
+        }
+        ctx.status(200).contentType("application/gzip");
+        try (java.io.Writer out = new java.io.OutputStreamWriter(new java.util.zip.GZIPOutputStream(
+                ctx.res().getOutputStream(), 1 << 16), java.nio.charset.StandardCharsets.UTF_8)) {
+            DemandWriter.write(demand, out);
         }
     }
 

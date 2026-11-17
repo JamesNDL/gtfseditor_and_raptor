@@ -434,4 +434,44 @@ class SimulationsTest {
         JsonNode scenario = done(Map.of("timetable", "b1-s7", "bau", "bau"));
         assertEquals(4, scenario.get("summary").get("againstBau").get("compared").asInt());
     }
+
+    @Test
+    void aDemandFileIsCheckedAndOneIsMadeUp() throws Exception {
+        // Checking needs no timetable: it is the reader's report, and which stop ids the rows name.
+        HttpResponse<String> checked = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + server.port()
+                + "/v1/demand/check")).header("Content-Type", "text/csv").POST(HttpRequest.BodyPublishers.ofString(
+                DEMAND + "u9,not a time,A,B,1\nu9,09:00,A,B,3\n")).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, checked.statusCode(), checked.body());
+        JsonNode report = JSON.readTree(checked.body());
+        assertEquals(6, report.get("rowsRead").asInt());
+        assertEquals(1, report.get("rowsRefused").asInt());
+        assertEquals(1, report.get("refused").get("a start_time that cannot be read").asInt());
+        assertEquals(5, report.get("rows").asInt());
+        assertEquals(8, report.get("people").asInt());
+        assertEquals(4, report.get("users").asInt());
+        assertEquals(4, report.get("stops").get("A").asInt(), "four journey ends are at A");
+        assertEquals(3, report.get("stops").get("D").asInt());
+        HttpResponse<String> broken = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + server.port()
+                + "/v1/demand/check")).header("Content-Type", "text/csv").POST(HttpRequest.BodyPublishers.ofString(
+                "user_id,start_time\nu1,07:50\n")).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, broken.statusCode());
+
+        load("b1", feed("published.zip", "08:00"), "v1");
+        HttpResponse<byte[]> made = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + server.port()
+                + "/v1/demand/generate")).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(
+                "{\"timetable\":\"b1\",\"journeys\":200,\"seed\":3,\"area\":\"all\",\"people\":2}")).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, made.statusCode());
+        List<String> lines = new ArrayList<>();
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(
+                new GZIPInputStream(new ByteArrayInputStream(made.body())), StandardCharsets.UTF_8))) {
+            for (String line = in.readLine(); line != null; line = in.readLine()) {
+                lines.add(line);
+            }
+        }
+        assertEquals(201, lines.size());
+        assertTrue(lines.get(0).startsWith("user_id,start_time,origin_stop,destination_stop"));
+        assertTrue(lines.get(1).endsWith(",2"), lines.get(1));
+        assertEquals(400, send("POST", "/v1/demand/generate", "{\"timetable\":\"b1\",\"journeys\":0}").status());
+    }
 }

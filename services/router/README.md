@@ -54,6 +54,8 @@ $env:ROUTER_LOAD = "b1=data/exports/check/export.zip"; npm run router:dev
 | `GET /v1/timetables/{id}/loads/{name}` | One load state's totals, or with `?format=csv` every load above 0. |
 | `DELETE /v1/timetables/{id}/loads/{name}` | Discard a load state. |
 | `POST`, `GET`, `DELETE /v1/simulations...` | Simulation runs as jobs; see "Runs on the service" below. |
+| `POST /v1/demand/check` | A demand CSV as the body (gzipped with `Content-Type: application/gzip`): the reader's report, and how many journey ends name each stop id. Needs no timetable. |
+| `POST /v1/demand/generate` | Makes a demand set up on a loaded timetable and answers it as a gzipped CSV: `timetable`, `journeys`, `seed`, `area`, `withinKm`, `focus`, `people`. |
 
 An id is the caller's choice: up to 64 letters, digits, dots, dashes or underscores, for example
 `b1` or `b1-s7`. An error is a `4xx` or `5xx` status with `{"error": "..."}`.
@@ -285,8 +287,8 @@ Assignment.run(router, requests, Preferences.defaults(),      // many at once, a
 
 `router-sim` sends a file of journeys through a timetable and writes where the passengers ended up.
 The design is in [`docs/simulator-plan.md`](../../docs/simulator-plan.md); phases S0 (demand files)
-(the simulator, from the command line) and S2 (runs as jobs on the HTTP service) are built. The
-editor does not call it yet.
+(the simulator, from the command line), S2 (runs as jobs on the HTTP service) and S3 (the editor's
+API starts runs and keeps their results) are built. The web app has no panels for it yet.
 
 ### A demand file
 

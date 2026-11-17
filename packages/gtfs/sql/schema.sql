@@ -377,3 +377,190 @@ create index if not exists scenario_closures_scenario_idx on scenario_closures (
 -- day. Both null for a closure that lasts all day.
 alter table scenario_closures add column if not exists from_secs int;
 alter table scenario_closures add column if not exists to_secs int;
+
+-- ---------------------------------------------------------------------------
+-- The passenger simulator (docs/simulator-plan.md, phase S3).
+-- ---------------------------------------------------------------------------
+
+-- A file of journeys, uploaded or made up once and kept, so that the same people can be sent
+-- through the published timetable and through any scenario. It belongs to no scenario. The file
+-- itself is under data/sim/demand; this row is what is known about it.
+create table if not exists demand_sets (
+  id serial primary key,
+  name text not null,
+  file text not null,
+  -- 'checking' or 'generating' while the router works on it, then 'ready' or 'failed'.
+  state text not null default 'ready',
+  error text,
+  made_up boolean not null default false,
+  row_count int not null default 0,
+  people bigint not null default 0,
+  users int not null default 0,
+  earliest int,
+  latest int,
+  -- What the reader made of the file: rows refused and why, the busiest hour.
+  report jsonb not null default '{}',
+  -- How many journey ends name each stop id, for telling which ids a timetable does not have.
+  stop_counts jsonb not null default '{}',
+  made_by text,
+  created_at timestamptz not null default now()
+);
+
+-- A box on the map that a run can be limited to.
+create table if not exists sim_areas (
+  id serial primary key,
+  name text not null unique,
+  south double precision not null,
+  west double precision not null,
+  north double precision not null,
+  east double precision not null,
+  -- One of the four the editor comes with; those cannot be removed.
+  provided boolean not null default false,
+  check (south < north and west < east)
+);
+
+insert into sim_areas (name, south, west, north, east, provided) values
+  ('Opal area',                    -34.75, 150.10, -32.70, 151.85, true),
+  ('Newcastle and the Hunter',     -33.20, 151.15, -32.70, 151.85, true),
+  ('Sydney',                       -34.20, 150.60, -33.40, 151.40, true),
+  ('Wollongong and the Illawarra', -34.75, 150.60, -34.10, 151.10, true)
+on conflict (name) do nothing;
+
+-- Folders of the simulation library. A folder may sit inside another.
+create table if not exists sim_folders (
+  id serial primary key,
+  name text not null,
+  parent_id int references sim_folders on delete restrict,
+  created_at timestamptz not null default now()
+);
+
+-- One run of the simulator. Every run is kept until someone removes it.
+--   kind 'bau': on the published timetable. scenario_id is null.
+--   kind 'scenario': on a scenario, measured against the BAU run bau_run_id.
+-- plans_run_id is set for a run that is another run's plans put on the vehicles again with
+-- capacity on; it has that run's kind, scenario and BAU run.
+create table if not exists sim_runs (
+  id serial primary key,
+  name text not null,
+  kind text not null check (kind in ('bau', 'scenario')),
+  baseline_id int references baselines on delete set null,
+  scenario_id int references scenarios on delete set null,
+  -- The timetable the run was made on: the router's id for it, and the version of its contents.
+  -- A run whose version is no longer the scenario's is out of date.
+  timetable_id text not null,
+  timetable_version text not null,
+  -- The part of the version that capacities do not change. Kept apart because the plans of a
+  -- run stay good when only capacities are edited.
+  plan_version text not null,
+  demand_set_id int references demand_sets on delete set null,
+  bau_run_id int references sim_runs on delete set null,
+  plans_run_id int references sim_runs on delete set null,
+  -- The box the run is limited to, or null for the whole network. Copied here so that removing a
+  -- saved area changes no run.
+  area_name text,
+  area_south double precision,
+  area_west double precision,
+  area_north double precision,
+  area_east double precision,
+  capacity boolean not null default false,
+  settings jsonb not null default '{}',
+  -- 'queued', 'preparing' (the timetable), 'running' (on the router), 'importing' (the results),
+  -- then 'done', 'failed' or 'stopped'.
+  state text not null default 'queued',
+  progress jsonb not null default '{}',
+  error text,
+  summary jsonb,
+  -- The run's id on the router service, which holds its files.
+  router_run_id text,
+  folder_id int references sim_folders on delete set null,
+  made_by text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz,
+  -- Rows held in the result tables. An archived run keeps its loads and stop figures here and its
+  -- journeys and legs only as files on the router.
+  result_rows bigint not null default 0,
+  archived boolean not null default false
+);
+create index if not exists sim_runs_bau_idx on sim_runs (bau_run_id);
+create index if not exists sim_runs_folder_idx on sim_runs (folder_id);
+
+-- Results. Each table is partitioned by run, so that removing or archiving a run is dropping a
+-- table and not deleting millions of rows. Times are seconds from the start of the service day.
+-- Trips, routes and stops are the editor's own ids; one the editor no longer has is null.
+create table if not exists sim_journeys (
+  run_id int not null,
+  journey_id text not null,
+  part int not null,
+  user_id text not null,
+  people int not null,
+  status text not null,
+  start_secs int not null,
+  depart int,
+  arrive int,
+  journey_secs int,
+  rides int not null,
+  boardings int not null,
+  walk_secs int not null,
+  wait_secs int,
+  left_behind int not null,
+  rerouted boolean not null,
+  stops text,
+  reference_arrive int,
+  later_secs int,
+  margin_secs int not null,
+  origin_changed boolean not null,
+  origin_stop_id bigint,
+  origin_walk_metres int not null,
+  destination_changed boolean not null,
+  destination_stop_id bigint,
+  destination_walk_metres int not null,
+  change_reason text,
+  no_journey_reason text,
+  stranded_stop_id bigint,
+  stranded_time int
+) partition by list (run_id);
+
+create table if not exists sim_legs (
+  run_id int not null,
+  journey_id text not null,
+  part int not null,
+  leg int not null,
+  kind text not null,
+  trip_id bigint,
+  route_id bigint,
+  from_stop_id bigint,
+  to_stop_id bigint,
+  depart int not null,
+  arrive int not null,
+  metres int not null,
+  stay_aboard boolean not null,
+  people int not null
+) partition by list (run_id);
+
+create table if not exists sim_trip_loads (
+  run_id int not null,
+  trip_id bigint,
+  trip_gtfs_id text not null,
+  position int not null,
+  stop_id bigint,
+  arrive int not null,
+  depart int not null,
+  boardings int not null,
+  alightings int not null,
+  load int not null,
+  left_behind int not null,
+  capacity int not null
+) partition by list (run_id);
+
+create table if not exists sim_stop_activity (
+  run_id int not null,
+  stop_id bigint,
+  stop_gtfs_id text not null,
+  quarter_start int not null,
+  boardings int not null,
+  alightings int not null,
+  changes int not null,
+  left_behind int not null,
+  max_waiting int not null
+) partition by list (run_id);

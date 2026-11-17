@@ -1,6 +1,6 @@
 # Passenger simulator plan
 
-Written 17 Nov 2026. Phases S0, S1 and S2 are built (18 Nov 2026): what was found, measured and done differently is in sections 14 and 15, and the rest is not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
+Written 17 Nov 2026. Phases S0 to S3 are built (18 Nov 2026): what was found, measured and done differently is in sections 14 to 16, and the rest is not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
 
 ## 1. Summary
 
@@ -600,3 +600,38 @@ One service with the weekday and the closed-stops stand-in of section 14 both lo
 
 - The service still runs in the 768 MB heap. A whole-network run of 1.7 million journeys will need it raised (section 5.2); nothing checks before starting, and a run that runs out of memory fails with a message saying so.
 - A demand file given as a URL is fetched whole before it is read; nothing is streamed.
+
+## 16. S3 findings (18 Nov 2026)
+
+S3 is built: the editor's API keeps demand sets, saved areas, folders and runs, gets the right timetable into the router, starts and follows the job, and copies the results into PostgreSQL. The routes are listed in the root `README.md`. `npm run test:sim` drives all of it against the running API and router. There are still no panels in the web app; that is S4.
+
+### Measured on the published weekday
+
+| Measure | Plan's estimate | Measured |
+|---|---|---|
+| Export without shapes | "well under a minute" | 14 s and 25 MB, against 2 to 5 minutes and 179 MB with them |
+| Export cut to Newcastle | not estimated | 6 s and 2 MB |
+| Getting a scenario's timetable into the router (export, fetch, load) | minutes before every run was the risk | 22 s for the whole network |
+| A BAU run of 100,000 made-up journeys, whole network, started through the API | | Done; the API was restarted while it was planning and picked the run up again |
+| Rows copied into the database for that run | "several million" for a million journeys | 2,138,703: 100,000 journeys, 517,705 legs, 1,199,706 trip-stop rows, 321,292 stop-quarter rows. Each count equals the summary's. Every trip and stop was matched to the editor's own. 246 MB. |
+| A scenario run against it: Scenario 7, which adds two stops and a light rail line | | 19 people ride the new line and 3 board at its new stops; 6 change stop because another is now better; 12 arrive sooner, by 19 minutes on average, and nobody later |
+
+That scenario run is the "add a line: some people near it use it" check of section 9, now on a real export from the editor. The "close a stretch" check has still only been done on the scripted zip of section 14.
+
+### What differs from the plan
+
+- **The router checks demand files, not the API.** Section 3.2 had the Node API check the rows and look up positions. The reader already exists in the router, so the API hands the upload to a new router call (`POST /v1/demand/check`) and keeps its report. Positions are looked up by the BAU run, as section 14 said. The API does keep how many journey ends name each stop id, and says which ids a day's published timetable does not have. An upload therefore needs the router running.
+- **Making demand up needs the published timetable in the router,** so the first time it waits for an export; the set shows as `generating` until it is ready.
+- **Capacity added to a run is a run of its own** in the library, listed under the run whose plans it uses, not a second set of results on the same run.
+- **Out of date is worked out when a run is read,** by comparing the version it was made on with the scenario as it is now. Nothing has to be marked when a scenario is edited, and undoing the edit brings the run back into date. The version is the published day as imported, the scenario's `head`, and the time of that edit.
+- **Vehicle capacities are part of the version the router holds** but not of the plans' version, so editing a capacity reloads the timetable and marks only capacity results out of date, as section 6.4 wants.
+- **A run records its own copy of its box,** so removing a saved area changes no run.
+- **Removing a demand set that runs were made from asks first,** like removing a BAU run.
+- **The demand file is handed to the router by path** when both are on one machine, which is the usual case, and by URL otherwise (`ROUTER_SHARES_FILES=0`).
+
+### Not done
+
+- **Size on disk.** 246 MB for 100,000 journeys is about 4 GB for a whole day of 1.7 million, most of it the trip-stop rows and the legs. Archiving takes out the journeys and legs only. Nothing warns when the disk is filling yet; that belongs with the library panel in S4, which shows sizes.
+- **"Seats only"** is still not offered: the export gives seated and standing per vehicle type, but the router adds them into one figure.
+- **Who may rename or remove** is open to everyone, as section 6.5 says until there are logins.
+- The check in the browser (`npm run test:ui`) has nothing to drive until S4.

@@ -355,7 +355,7 @@ final class Simulations implements AutoCloseable {
     }
 
     /** An area by name, {@code "all"}, or a box of {@code south}, {@code west}, {@code north} and {@code east}. */
-    private static Area area(JsonNode value) {
+    static Area area(JsonNode value) {
         if (value.isNull()) {
             return null;
         }

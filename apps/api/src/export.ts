@@ -1,5 +1,11 @@
 // GTFS export: one service day, with a scenario's changes applied, as a zip.
 //
+// Two options, both for the journey router and the simulator (docs/simulator-plan.md, 4.7 and 8):
+//   ?shapes=0                      leave out shapes.txt, which is most of the export's time and size
+//   ?box=south,west,north,east     keep only the stops inside the box, widened by ?margin= metres
+//                                  (2000 unless said); each trip keeps only its calls at those stops,
+//                                  and a trip left with fewer than two is dropped
+//
 // The database writes each file itself (COPY ... TO STDOUT), so the two million stop times never
 // pass through JavaScript objects. Files go to a temporary folder, are zipped, then removed.
 import { createWriteStream } from 'node:fs';
@@ -29,6 +35,26 @@ function visibleText(alias: string, sc: Scenario | null): string {
 const hms = (col: string) =>
   `lpad((${col} / 3600)::text, 2, '0') || ':' || lpad(((${col} % 3600) / 60)::text, 2, '0') || ':' || lpad((${col} % 60)::text, 2, '0')`;
 
+/**
+ * Reads ?box=south,west,north,east and widens it by a margin in metres, so that someone near the
+ * edge still has the stops just outside it to walk or change to.
+ */
+function exportBox(text: string | undefined, marginText: string | undefined) {
+  if (!text) return null;
+  const parts = text.split(',').map(Number);
+  const margin = marginText === undefined ? 2000 : Number(marginText);
+  const [south, west, north, east] = parts;
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n)) || !(south < north) || !(west < east)
+    || south < -90 || north > 90 || west < -180 || east > 180) {
+    throw fail(400, 'box must be south,west,north,east');
+  }
+  if (!Number.isFinite(margin) || margin < 0 || margin > 50_000) throw fail(400, 'margin is 0 to 50000 metres');
+  const lat = margin / 111_000;
+  const lon = lat / Math.max(0.01, Math.cos(((south + north) / 2) * Math.PI / 180));
+  const round = (n: number) => Math.round(n * 1e6) / 1e6;
+  return { south: round(south - lat), west: round(west - lon), north: round(north + lat), east: round(east + lon) };
+}
+
 export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
   app.get('/api/baselines/:b/export', async (req, reply) => {
     const b = Number((req.params as { b: string }).b);
@@ -40,17 +66,29 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
     const sc = await scenarioOf(req, sql);
     if (sc && sc.baselineId !== b) throw fail(400, 'That scenario belongs to a different day');
     const [scenario] = sc ? await sql`select name from scenarios where id = ${sc.id}` : [null];
+    const query = req.query as Record<string, string | undefined>;
+    const withShapes = query.shapes !== '0';
+    const box = exportBox(query.box, query.margin);
+    // Stops inside the box, as SQL on a stops row aliased `alias`. PostGIS takes x (east) first.
+    const inBox = (alias: string) =>
+      box ? `${alias}.geom && ST_MakeEnvelope(${box.west}, ${box.south}, ${box.east}, ${box.north}, 4326)` : 'true';
 
     // Work out which trips are in the export once, into a scratch table, so each file's query is a
     // plain join rather than repeating the scenario rules.
     const scratch = `staging.export_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
-    await sql.unsafe(`create unlogged table ${scratch} as select t.id from trips t where t.baseline_id = ${b} and ${visibleText('t', sc)}`);
+    await sql.unsafe(`create unlogged table ${scratch} as select t.id from trips t where t.baseline_id = ${b} and ${visibleText('t', sc)}${
+      box
+        ? ` and (select count(*) from stop_times st join stops s on s.id = st.stop_id where st.trip_id = t.id and ${inBox('s')}) >= 2`
+        : ''
+    }`);
     await sql.unsafe(`alter table ${scratch} add primary key (id); analyze ${scratch}`);
     const vis = `t.id in (select id from ${scratch})`;
     const live = vis;
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const text = (value: string) => `'${value.replaceAll("'", "''")}'`;
-    const version = scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published';
+    const version = (scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published')
+      + (box ? `, cut to ${box.south},${box.west},${box.north},${box.east}` : '');
+    const stopVisible = `(scenario_id is null${sc ? ` or (scenario_id = ${Number(sc.id)} and created_edit <= ${Number(sc.head)})` : ''})`;
 
     // Every trip in the export runs on the one service day, under a single service id.
     const files: Record<string, string> = {
@@ -71,14 +109,19 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select gtfs_id as stop_id, code as stop_code, name as stop_name,
                round(ST_Y(geom)::numeric, 8) as stop_lat, round(ST_X(geom)::numeric, 8) as stop_lon,
                location_type, parent_gtfs_id as parent_station, wheelchair as wheelchair_boarding, platform_code
-        from stops where baseline_id = ${b}
-          and (scenario_id is null${sc ? ` or (scenario_id = ${Number(sc.id)} and created_edit <= ${Number(sc.head)})` : ''})
+        from stops where baseline_id = ${b} and ${stopVisible}${
+          box
+            ? // A stop inside the box, or the parent of one: a parent's own position may lie outside.
+              ` and (${inBox('stops')} or gtfs_id in (
+                   select parent_gtfs_id from stops where baseline_id = ${b} and ${stopVisible} and ${inBox('stops')}))`
+            : ''
+        }
         order by 1`,
       'calendar.txt': `
         select 'DAY' as service_id, ${days.map((d) => `${d === baseline.weekday ? 1 : 0} as ${d}`).join(', ')},
                ${text(baseline.date)} as start_date, ${text(baseline.date)} as end_date`,
       'trips.txt': `
-        select r.gtfs_id as route_id, 'DAY' as service_id, t.gtfs_id as trip_id, sh.gtfs_id as shape_id,
+        select r.gtfs_id as route_id, 'DAY' as service_id, t.gtfs_id as trip_id, ${withShapes ? 'sh.gtfs_id' : 'null::text'} as shape_id,
                t.headsign as trip_headsign, t.direction_id,
                -- A block_id means "passengers stay aboard". Brand-new trips were copied from another
                -- trip and must not inherit its link.
@@ -92,7 +135,7 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
                st.pickup_type, st.drop_off_type, -- Through float8 first: converting a 32-bit number straight to numeric keeps only six digits.
                round(st.dist::float8::numeric, 2) as shape_dist_traveled, st.timepoint
         from trips t join stop_times st on st.trip_id = t.id join stops s on s.id = st.stop_id
-        where ${live} order by 1, 5`,
+        where ${live} and ${inBox('s')} order by 1, 5`,
       // Distances are the feed's own, stored per point at import, so they line up with the stop times.
       'shapes.txt': `
         select s.gtfs_id as shape_id, round(ST_Y((dp).geom)::numeric, 8) as shape_pt_lat,
@@ -106,7 +149,7 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select p.gtfs_id as pathway_id, f.gtfs_id as from_stop_id, o.gtfs_id as to_stop_id, p.pathway_mode,
                p.is_bidirectional::int as is_bidirectional, p.traversal_secs as traversal_time
         from pathways p join stops f on f.id = p.from_stop_id join stops o on o.id = p.to_stop_id
-        where p.baseline_id = ${b} order by 1`,
+        where p.baseline_id = ${b} and ${inBox('f')} and ${inBox('o')} order by 1`,
       'feed_info.txt': `
         select 'GTFS Editor' as feed_publisher_name, 'http://transportnsw.info' as feed_publisher_url, 'EN' as feed_lang,
                ${text(baseline.date)} as feed_start_date, ${text(baseline.date)} as feed_end_date,
@@ -136,6 +179,7 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
     void (async () => {
       try {
         for (const [name, query] of Object.entries(files)) {
+          if (name === 'shapes.txt' && !withShapes) continue;
           const readable = await sql.unsafe(`copy (${query}) to stdout with (format csv, header true)`).readable();
           await pipeline(readable, createWriteStream(path.join(dir, name)));
           zip.addFile(path.join(dir, name), name);
