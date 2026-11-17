@@ -36,12 +36,27 @@ const ACTION: Record<Action, string> = {
 
 const trips = (n: number) => `${fmt(n)} trip${n === 1 ? '' : 's'}`;
 
+const secsOf = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 3600 + m * 60 : null;
+};
+
+/** The times of a closure that lasts part of the day. An end at or before the start is the next morning. */
+function windowOf(closing: Closing): { fromSecs: number; toSecs: number } | null {
+  const fromSecs = secsOf(closing.startAt);
+  const end = secsOf(closing.endAt);
+  if (fromSecs === null || end === null) return null;
+  return { fromSecs, toSecs: end <= fromSecs ? end + 24 * 3600 : end };
+}
+
 /** The request the server needs, or null while the closure is not yet placed. */
 function requestFor(closing: Closing, baselineId: number): Record<string, unknown> | null {
+  const when = closing.allDay ? {} : windowOf(closing);
+  if (!when) return null;
   if (closing.what === 'road') {
-    return closing.point ? { what: 'road', baselineId, lon: closing.point.lon, lat: closing.point.lat, radiusM: closing.radiusM } : null;
+    return closing.point ? { what: 'road', baselineId, lon: closing.point.lon, lat: closing.point.lat, radiusM: closing.radiusM, ...when } : null;
   }
-  return closing.from && closing.to ? { what: closing.what, baselineId, fromStopId: closing.from.id, toStopId: closing.to.id } : null;
+  return closing.from && closing.to ? { what: closing.what, baselineId, fromStopId: closing.from.id, toStopId: closing.to.id, ...when } : null;
 }
 
 /** Shown while a road or a line is being closed: where it is, and what happens to the services through it. */
@@ -95,6 +110,8 @@ export function ClosurePanel() {
   const road = closing.what === 'road';
   const update = (patch: Partial<Closing>) => set({ closing: { ...closing, ...patch } });
   const cancel = () => set({ closing: null, closingPreview: null });
+  const when = closing.allDay ? null : windowOf(closing);
+  const overnight = when !== null && when.toSecs > 24 * 3600;
   const affected = preview ? preview.trips.detour + preview.trips.split + preview.trips.shortened + preview.trips.removed : 0;
 
   return (
@@ -163,13 +180,41 @@ export function ClosurePanel() {
           </section>
         )}
 
+        <section>
+          <div className="section-head">
+            <h3>When</h3>
+            <div className="speeds">
+              <button className={closing.allDay ? 'on' : ''} onClick={() => update({ allDay: true })}>
+                All day
+              </button>
+              <button className={closing.allDay ? '' : 'on'} onClick={() => update({ allDay: false })}>
+                Part of the day
+              </button>
+            </div>
+          </div>
+          {!closing.allDay && (
+            <>
+              <div className="closure-times">
+                <span>from</span>
+                <input className="day-select" type="time" value={closing.startAt} onChange={(e) => update({ startAt: e.target.value })} aria-label="Closure starts" />
+                <span>to</span>
+                <input className="day-select" type="time" value={closing.endAt} onChange={(e) => update({ endAt: e.target.value })} aria-label="Closure ends" />
+                {overnight && <span className="muted">the next morning</span>}
+              </div>
+              <p className="muted small">
+                Only trips that would be in the closed stretch between these times change. Trips before and after run as published.
+              </p>
+            </>
+          )}
+        </section>
+
         <section className="reshape-preview">
           <h3>What this does</h3>
           {!request ? (
             <p className="muted">Nothing yet.</p>
           ) : preview ? (
             preview.lines.length === 0 ? (
-              <p className="muted">Nothing runs through there on this day.</p>
+              <p className="muted">{closing.allDay ? 'Nothing runs through there on this day.' : 'Nothing runs through there between those times.'}</p>
             ) : (
               <>
                 <p>

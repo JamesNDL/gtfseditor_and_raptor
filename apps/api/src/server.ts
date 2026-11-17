@@ -412,7 +412,7 @@ app.get('/api/stations/:id/platforms', async (req) => {
   if (!stopIds.length) return { station, platforms: [], routes: [], calls: [], layovers: [], conflicts: [] };
 
   const calls = await sql`
-    select st.trip_id as "tripId", st.stop_id as "stopId", st.arr, st.dep,
+    select st.trip_id as "tripId", st.seq, st.stop_id as "stopId", st.arr, st.dep,
            (st.pickup_type = 1 and st.drop_off_type = 1) as passing,
            r.id as "routeId", t.headsign,
            (t.first_stop_id = st.stop_id and st.dep = t.start_secs) as starts,

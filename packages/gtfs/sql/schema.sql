@@ -373,3 +373,7 @@ create table if not exists scenario_closures (
   geom geometry(MultiPolygon, 4326) not null
 );
 create index if not exists scenario_closures_scenario_idx on scenario_closures (scenario_id);
+-- A closure for part of the day: when it starts and ends, in seconds since the start of the service
+-- day. Both null for a closure that lasts all day.
+alter table scenario_closures add column if not exists from_secs int;
+alter table scenario_closures add column if not exists to_secs int;

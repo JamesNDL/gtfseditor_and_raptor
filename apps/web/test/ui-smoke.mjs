@@ -327,7 +327,11 @@ try {
   await click('.inspector .button', 'Change route');
   await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Change the route'`, 'the route-changing panel again');
   const stopsNow = await waitFor(`document.querySelectorAll('.inspector .stops li').length`, 'the line\'s stops');
-  await click('.new-stop-link');
+  // The panel is still settling when the link first appears, and a click can land where the link was.
+  for (let i = 0; i < 5 && !(await find('.new-stop input')); i++) {
+    await click('.new-stop-link');
+    await sleep(400);
+  }
   await click('.new-stop input');
   await type('UI Halt');
   await click('.new-stop .button', 'Place it on the map');
@@ -386,6 +390,15 @@ try {
   await waitFor(`/closed between|Nothing runs through|No train service/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of the closure', 60000);
   const closureText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
   await shot('closing');
+  // For part of the day: the preview names the hours, and going back to all day restores it.
+  await click('.inspector .speeds button', 'Part of the day');
+  await waitFor(`/10:00 to 14:00|between those times/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of a part-day closure', 60000);
+  const partDayText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
+  assert.equal(await js(`document.querySelectorAll('.closure-times input[type=time]').length`), 2, 'a start and an end time are offered');
+  await shot('closing-part-day');
+  await click('.inspector .speeds button', 'All day');
+  await waitFor(`(() => { const t = document.querySelector('.reshape-preview')?.textContent ?? ''; return !/10:00 to 14:00|between those times/.test(t) && /closed between|Nothing runs through|No train service/.test(t); })()`, 'the all-day preview again', 60000);
+  step(`part-day closure previewed: ${partDayText.slice(18, 160)}`);
   if (/closed between/.test(closureText)) {
     const changesBefore = Number((await text('.scenario-actions')).match(/(\d+) change/)[1]);
     await click('.inspector .button', 'Close it and change');
@@ -456,6 +469,89 @@ try {
   await click('.button', 'Dark');
   await waitFor(`document.documentElement.dataset.theme === 'dark'`, 'the dark theme');
   step('the light version switches on and off');
+
+  // 16. Vehicle chart: drag a trip down onto another vehicle.
+  const changeCount = async () => Number((await text('.scenario-actions')).match(/(\d+) changes?/)?.[1] ?? 0);
+  const canvasBox = () => js(`(() => { const r = document.querySelector('.timeline-canvas').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
+  /** Sweeps the pointer over the chart until the tooltip matches, and returns where. */
+  const findOnChart = async (pattern, box, ys, stepX) => {
+    for (const y of ys) {
+      for (let x = box.x + 170; x < box.x + box.w - 30; x += stepX) {
+        await mouse('mouseMoved', x, y, { buttons: 0 });
+        await sleep(30);
+        const tip = await js(`(() => { const t = document.querySelector('.timeline-tooltip'); return t && t.style.display !== 'none' ? t.textContent : ''; })()`);
+        if (pattern.test(tip)) return { x, y, tip };
+      }
+    }
+    return null;
+  };
+  /** Presses at a point, moves to another in small steps, and returns the tooltip shown just before letting go. */
+  const dragTo = async (from, to) => {
+    await mouse('mousePressed', from.x, from.y);
+    for (let i = 1; i <= 8; i++) await mouse('mouseMoved', from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+    await sleep(150);
+    return text('.timeline-tooltip');
+  };
+  await click('.search-input');
+  await type('T1');
+  await waitFor(`document.querySelectorAll('.search-results button').length > 0`, 'search results');
+  await click('.search-results button');
+  await waitFor(`document.querySelector('.inspector h2')?.textContent.includes('T1')`, 'the T1 panel');
+  await click('.inspector .button', 'Trip diagram');
+  await click('.timeline-tabs button', 'Vehicles');
+  await waitFor(`document.querySelector('.timeline-tabs .on')?.textContent === 'Vehicles' && !!document.querySelector('.timeline-canvas')`, 'the vehicle chart');
+  // The whole day, so that every vehicle has a trip in view.
+  await click('.timeline-window .button', 'Day');
+  await sleep(2500);
+  let box = await canvasBox();
+  // Vehicles the scenario added are listed first and may have no trip in the hours shown, so look down every row in view.
+  const vehicleRows = [];
+  for (let y = box.y + 24 + 11; y < box.y + box.h - 12; y += 22) vehicleRows.push(y);
+  const tripBar = await findOnChart(/\d\d:\d\d to \d\d:\d\d/, box, vehicleRows, 12);
+  assert.ok(tripBar, 'found a trip to drag on the vehicle chart');
+  let before = await changeCount();
+  // Two rows down, or up when that would reach the bottom edge (where the rows start to scroll).
+  const vehicleDrop = { x: tripBar.x, y: tripBar.y + (tripBar.y + 44 < box.y + box.h - 30 ? 44 : -44) };
+  const vehicleTip = await dragTo(tripBar, vehicleDrop);
+  assert.match(vehicleTip, /^Move to /, 'the tooltip names the vehicle the trip would move to');
+  await shot('dragging-to-vehicle');
+  await mouse('mouseReleased', vehicleDrop.x, vehicleDrop.y);
+  await waitFor(`Number((document.querySelector('.scenario-actions')?.textContent.match(/(\\d+) changes?/) ?? [])[1]) === ${before + 1}`, 'the move to another vehicle to apply', 30000);
+  assert.equal(await js(`document.querySelector('.scenario .error-text')?.textContent ?? ''`), '');
+  step(`trip dragged onto another vehicle on the vehicle chart (tooltip while dragging: "${vehicleTip}")`);
+
+  // 17. Platform chart: drag a call up or down onto another platform. The station is the one clicked in step 9.
+  await click('.timeline-tabs button', 'Platforms');
+  await waitFor(`document.querySelector('.timeline-tabs .on')?.textContent === 'Platforms' && !!document.querySelector('.timeline-canvas')`, 'the platform chart');
+  await sleep(2500);
+  box = await canvasBox();
+  const rowYs = [];
+  for (let y = box.y + 32; y < box.y + box.h - 8; y += 8) rowYs.push(y);
+  const callBar = await findOnChart(/Stops \d+ min|Starts here|Terminates here/, box, rowYs, 10);
+  if (!callBar) {
+    step('platform chart: no call in view to drag at this station (not checked)');
+  } else {
+    before = await changeCount();
+    let dropAt = { x: callBar.x, y: callBar.y + 30 };
+    let platformTip = await dragTo(callBar, dropAt);
+    if (!/^Move to /.test(platformTip)) {
+      // The bottom row has nothing below it: go up instead.
+      dropAt = { x: callBar.x, y: callBar.y - 30 };
+      for (let i = 1; i <= 8; i++) await mouse('mouseMoved', callBar.x, callBar.y + 30 - (60 * i) / 8);
+      await sleep(150);
+      platformTip = await text('.timeline-tooltip');
+    }
+    if (!/^Move to /.test(platformTip)) {
+      await mouse('mouseReleased', callBar.x, callBar.y);
+      step('platform chart: the station in view has one platform, so there is nowhere to drag a call (not checked)');
+    } else {
+      await shot('dragging-to-platform');
+      await mouse('mouseReleased', dropAt.x, dropAt.y);
+      await waitFor(`Number((document.querySelector('.scenario-actions')?.textContent.match(/(\\d+) changes?/) ?? [])[1]) === ${before + 1}`, 'the platform change to apply', 30000);
+      assert.equal(await js(`document.querySelector('.scenario .error-text')?.textContent ?? ''`), '');
+      step(`call dragged onto another platform on the platform chart (tooltip while dragging: "${platformTip}")`);
+    }
+  }
 } catch (err) {
   failed = err;
   await shot('failure').catch(() => {});

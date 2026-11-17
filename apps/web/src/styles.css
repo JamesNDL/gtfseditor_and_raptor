@@ -1517,3 +1517,12 @@ select.cell {
 .section-head .check {
   margin: 0;
 }
+
+/* The start and end times of a closure that lasts part of the day. */
+.closure-times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}

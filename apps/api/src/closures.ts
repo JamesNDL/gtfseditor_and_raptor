@@ -6,7 +6,7 @@
 //   after it, and no longer call at the stops inside it.
 // - Trains, trams and ferries cannot go round, so each trip is cut in two: one part that ends at the
 //   last station before the closure, and one that starts from the first station after it.
-import { distanceM, distanceToPathM, pathDistances, slicePath, type Coord } from '@gtfs-editor/core';
+import { distanceM, distanceToPathM, formatClock, pathDistances, slicePath, type Coord } from '@gtfs-editor/core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { applyReshape, describeChange, planReshape, type ReshapeDeps, type ReshapePlan } from './reshape.ts';
@@ -32,6 +32,12 @@ export interface CloseBody {
   /** Line: the two stations the closure lies between. */
   fromStopId?: number;
   toStopId?: number;
+  /**
+   * Part of the day: the closure starts and ends at these times, in seconds since the start of the
+   * service day (so an end after midnight is more than 24 hours). Left out, it lasts all day.
+   */
+  fromSecs?: number;
+  toSecs?: number;
 }
 
 const TRACK_MODES = new Set(['train', 'metro', 'light_rail', 'ferry']);
@@ -49,6 +55,8 @@ interface Item {
   name: string;
   color: string;
   trips: number;
+  /** For a closure that lasts part of the day: the trips that would be in it then. The rest are left alone. */
+  tripIds?: number[];
   closedStops: string[];
   action: Action;
   /** Why a pattern could not be changed. */
@@ -62,12 +70,18 @@ interface ClosurePlan {
   label: string;
   zoneWkt: string;
   zone: unknown;
+  /** The times it starts and ends, or null when it lasts all day. */
+  window: { fromSecs: number; toSecs: number } | null;
   items: Item[];
   /** Stop patterns over the limit, left as they are. */
   skipped: number;
 }
 
 const tidy = (name: string) => name.replace(/,.*$/, '').replace(/ Station$/, '');
+const clock = (secs: number) => {
+  const { time, nextDay } = formatClock(secs);
+  return nextDay ? `${time} the next day` : time;
+};
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Works out everything a closure would do, without changing anything. `full` also plans each new path. */
@@ -75,6 +89,15 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
   const what = String(body.what);
   const road = what === 'road';
   if (!road && !TRACK_MODES.has(what)) throw fail(400, 'Choose what is closed');
+
+  let window: ClosurePlan['window'] = null;
+  if (body.fromSecs != null || body.toSecs != null) {
+    const fromSecs = Number(body.fromSecs);
+    const toSecs = Number(body.toSecs);
+    if (!Number.isInteger(fromSecs) || !Number.isInteger(toSecs) || fromSecs < 0 || toSecs > 36 * 3600) throw fail(400, 'Give the times the closure starts and ends');
+    if (toSecs <= fromSecs) throw fail(400, 'The closure must end after it starts');
+    window = { fromSecs, toSecs };
+  }
 
   let zoneSql;
   let label: string;
@@ -122,6 +145,7 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
     zoneSql = tx`ST_Buffer(ST_GeomFromText(${wkt}, 4326)::geography, ${CORRIDOR_M[what]})::geometry`;
     label = `${mode.name} closed between ${tidy(from.name)} and ${tidy(to.name)}`;
   }
+  if (window) label += `, ${clock(window.fromSecs)} to ${clock(window.toSecs)}`;
   const [zone] = await tx`select ST_AsText(z.g) as wkt, ST_AsGeoJSON(z.g) as json from (select ${zoneSql} as g) z`;
   const zoneWkt: string = zone.wkt;
 
@@ -180,6 +204,23 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
       action: 'removed',
       plans: [],
     };
+    if (window) {
+      // A trip is caught if it is between the last stop before the closure and the first one after it
+      // at any moment the closure is in force. Where the closure is before the first stop or after the
+      // last, the start or end of the trip stands in.
+      const caught = await tx`
+        select t.id from trips t
+        cross join lateral (
+          select array_agg(st.dep order by st.seq) as deps, array_agg(st.arr order by st.seq) as arrs
+          from stop_times st where st.trip_id = t.id) c
+        where t.pattern_id = ${r.id} and ${visible(tx, 't', sc)}
+          and coalesce(c.deps[${before + 1}], t.start_secs) < ${window.toSecs}
+          and coalesce(c.arrs[${after + 1}], t.end_secs) > ${window.fromSecs}
+        order by t.start_secs, t.id`;
+      if (!caught.length) continue;
+      item.tripIds = caught.map((t) => t.id as number);
+      item.trips = item.tripIds.length;
+    }
     const head = ids.slice(0, before + 1);
     const tail = ids.slice(after);
     if (road) {
@@ -193,6 +234,7 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
         if (full) {
           try {
             const plan = await planReshape(tx, sc, r.id, kept, { followRoads: true, direct: false, platformIndex: 0, avoid }, deps);
+            if (item.tripIds) plan.tripIds = item.tripIds;
             // The path enters the area only before its first stop or after its last: nothing to change.
             if (plan.rerouted === 0 && plan.added === 0 && plan.removed === 0) continue;
             // Checked on the whole new path, so that nothing is applied that still runs through the closure.
@@ -215,7 +257,9 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
         if (full) {
           try {
             for (const piece of pieces) {
-              item.plans.push(await planReshape(tx, sc, r.id, piece, { followRoads: false, direct: false, platformIndex: 0 }, deps));
+              const plan = await planReshape(tx, sc, r.id, piece, { followRoads: false, direct: false, platformIndex: 0 }, deps);
+              if (item.tripIds) plan.tripIds = item.tripIds;
+              item.plans.push(plan);
             }
           } catch (err) {
             if ((err as { statusCode?: number }).statusCode !== 400) throw err;
@@ -228,7 +272,7 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
     }
     items.push(item);
   }
-  return { what, label, zoneWkt, zone: JSON.parse(zone.json), items, skipped };
+  return { what, label, zoneWkt, zone: JSON.parse(zone.json), window, items, skipped };
 }
 
 const median = (values: number[]) => {
@@ -258,8 +302,8 @@ export async function editClose(tx: Sql, sc: Scenario, seq: number, body: CloseB
     lines.add(item.routeId);
     for (const name of item.closedStops) closedStops.add(name);
     if (item.action === 'removed') {
-      const trips = await tx`select t.id from trips t where t.pattern_id = ${item.patternId} and ${visible(tx, 't', sc)}`;
-      await deps.removeTrips(tx, sc, seq, trips.map((t) => t.id));
+      const ids = item.tripIds ?? (await tx`select t.id from trips t where t.pattern_id = ${item.patternId} and ${visible(tx, 't', sc)}`).map((t) => t.id as number);
+      await deps.removeTrips(tx, sc, seq, ids);
     } else if (item.plans.length === 1) {
       const done = await applyReshape(tx, sc, seq, item.plans[0], part++, deps);
       Object.assign(idMap, done.idMap);
@@ -280,8 +324,9 @@ export async function editClose(tx: Sql, sc: Scenario, seq: number, body: CloseB
   }
   const fleet = replan.length ? await deps.assignVehicles(tx, sc, seq, replan) : null;
   await tx`
-    insert into scenario_closures (scenario_id, created_edit, kind, label, geom)
-    values (${sc.id}, ${seq}, ${plan.what}, ${plan.label}, ST_Multi(ST_GeomFromText(${plan.zoneWkt}, 4326)))`;
+    insert into scenario_closures (scenario_id, created_edit, kind, label, geom, from_secs, to_secs)
+    values (${sc.id}, ${seq}, ${plan.what}, ${plan.label}, ST_Multi(ST_GeomFromText(${plan.zoneWkt}, 4326)),
+            ${plan.window?.fromSecs ?? null}, ${plan.window?.toSecs ?? null})`;
 
   const parts: string[] = [];
   if (tally.detour) parts.push(`${count(tripsBy.detour, 'trip')} sent another way, ${describeChange(median(changes))}`);
@@ -329,6 +374,7 @@ export function closureRoutes(
     return {
       label: plan.label,
       zone: plan.zone,
+      window: plan.window,
       lines: [...byLine.values()].map((l) => ({ ...l, actions: [...l.actions] })).sort((a, b) => b.trips - a.trips),
       trips: {
         detour: tripsWith('detour'),
@@ -348,11 +394,11 @@ export function closureRoutes(
   app.get('/api/scenarios/:id/closures', async (req) => {
     const sc = await ctx.loadScenario(ctx.idParam(req));
     const rows = await sql`
-      select c.id, c.kind, c.label, ST_AsGeoJSON(c.geom) as geometry from scenario_closures c
+      select c.id, c.kind, c.label, c.from_secs, c.to_secs, ST_AsGeoJSON(c.geom) as geometry from scenario_closures c
       where c.scenario_id = ${sc.id} and c.created_edit <= ${sc.head}`;
     return {
       type: 'FeatureCollection',
-      features: rows.map((r) => ({ type: 'Feature', geometry: JSON.parse(r.geometry), properties: { id: r.id, kind: r.kind, label: r.label } })),
+      features: rows.map((r) => ({ type: 'Feature', geometry: JSON.parse(r.geometry), properties: { id: r.id, kind: r.kind, label: r.label, fromSecs: r.from_secs, toSecs: r.to_secs } })),
     };
   });
 }

@@ -15,5 +15,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # The journey router (docs/router-plan.md). Not started by a plain `docker compose up`:
+  # use `docker compose --profile router up -d router`.
+  router:
+    build: ./services/router
+    profiles: ["router"]
+    environment:
+      ROUTER_PORT: "3002"
+      ROUTER_DATA: /data/router
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./data/router:/data/router
+      # The editor's exports, so a timetable can be loaded by path: /data/exports/check/export.zip
+      - ./data/exports:/data/exports:ro
+    mem_limit: 1g
+
 volumes:
   pgdata:

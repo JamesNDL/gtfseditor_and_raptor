@@ -2,6 +2,7 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo } from 'react';
 import { useApi } from '../api.ts';
+import { applyEdit } from '../scenario.ts';
 import { useStore } from '../store.ts';
 import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
@@ -11,6 +12,8 @@ export interface PlatformData {
   routes: { id: number; shortName: string | null; color: string }[];
   calls: {
     tripId: number;
+    /** Which of the trip's calls this is. */
+    seq: number;
     stopId: number;
     arr: number;
     dep: number;
@@ -33,6 +36,7 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
   const { data, error } = useApi<PlatformData>(`/api/stations/${stationId}/platforms`);
   const open = useStore((s) => s.open);
   const focusStopId = useStore((s) => s.timeline.focusStopId);
+  const editing = useStore((s) => s.baselineId !== null);
   const stationName = data?.station.name;
   useEffect(() => {
     if (stationName) onStationName(stationName);
@@ -140,6 +144,24 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       }
     }
 
+    // A call being dragged: a dashed white outline on the platform, or at the time, it would move to.
+    const held = env.dragHit;
+    const dragged = held ? data.calls.find((c) => c.tripId === held.tripId && c.seq === held.seq) : undefined;
+    const draggedRow = dragged ? (env.dragRow ?? model.row.get(dragged.stopId)) : undefined;
+    if (dragged && draggedRow !== undefined) {
+      const [x, w] = barX(env, dragged.arr + env.dragDelta, dragged.dep + env.dragDelta);
+      if (env.dragRow !== null) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.fillRect(env.gutter, rowTop(env, draggedRow), env.width - env.gutter, rowH);
+      }
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = COLORS.highlight;
+      ctx.lineWidth = 2;
+      roundRect(ctx, x - 1, rowTop(env, draggedRow) + inset - 1, Math.max(w, 6) + 2, rowH - 2 * inset + 2, 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // Two trips on the platform at once in the feed as published.
     ctx.strokeStyle = COLORS.critical;
     ctx.lineWidth = 2;
@@ -178,6 +200,8 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       const what = best.passing ? 'Passes through' : best.starts ? 'Starts here' : best.ends ? 'Terminates here' : `Stops ${minutes(best.dep - best.arr)}`;
       return {
         tripId: best.tripId,
+        row: r,
+        seq: best.seq,
         tooltip: [
           `${model.name.get(best.routeId) ?? '?'}${best.headsign ? ` to ${best.headsign}` : ''}`,
           best.arr === best.dep ? formatSecs(best.arr) : `${formatSecs(best.arr)} to ${formatSecs(best.dep)}`,
@@ -191,6 +215,7 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       if (px >= env.x(l.from) && px <= env.x(l.to)) {
         return {
           tripId: l.nextTripId,
+          noDrag: true,
           tooltip: [
             `Vehicle waits here ${minutes(l.to - l.from)}`,
             `${formatSecs(l.from)} to ${formatSecs(l.to)}`,
@@ -210,6 +235,29 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       render={render}
       hitTest={hitTest}
       onHit={(hit) => hit.tripId !== undefined && open({ kind: 'trip', id: hit.tripId }, { replace: true })}
+      rowAt={(py, env) => {
+        const r = Math.floor((py - env.top + env.scrollY) / rowH);
+        return r >= 0 && r < model.platforms.length ? r : null;
+      }}
+      dropLabel={(_, row) => `Move to ${model.labels[row]}`}
+      // Sideways moves the whole trip in time; up or down moves this call to another platform.
+      onDragTrip={
+        editing
+          ? (tripId, delta) => {
+              open({ kind: 'trip', id: tripId }, { replace: true });
+              void applyEdit({ kind: 'shift', tripIds: [tripId], delta, ripple: useStore.getState().ripple });
+            }
+          : undefined
+      }
+      onDropRow={
+        editing
+          ? (hit, row) => {
+              if (hit.tripId === undefined || hit.seq === undefined) return;
+              open({ kind: 'trip', id: hit.tripId }, { replace: true });
+              void applyEdit({ kind: 'setPlatform', tripId: hit.tripId, stopSeq: hit.seq, stopId: model.platforms[row].id });
+            }
+          : undefined
+      }
     />
   );
 }

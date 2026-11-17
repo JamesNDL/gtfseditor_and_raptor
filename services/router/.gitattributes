@@ -1,0 +1,4 @@
+# The wrapper script runs inside the Linux Docker build, so it must keep Unix line endings.
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary

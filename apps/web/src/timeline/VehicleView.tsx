@@ -2,6 +2,7 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
 import { useApi } from '../api.ts';
+import { applyEdit } from '../scenario.ts';
 import { currentSelection, useStore } from '../store.ts';
 import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
@@ -41,6 +42,7 @@ export function VehicleView({ routeId }: { routeId: number }) {
   const open = useStore((s) => s.open);
   const selection = useStore(currentSelection);
   const selectedDayId = selection?.kind === 'vehicleDay' ? selection.id : null;
+  const editing = useStore((s) => s.baselineId !== null);
 
   const stay = useMemo(() => new Set((data?.stayAboard ?? []).map(([a, b]) => `${a}>${b}`)), [data]);
 
@@ -128,6 +130,31 @@ export function VehicleView({ routeId }: { routeId: number }) {
       }
       ctx.restore();
     });
+
+    // A trip being dragged: a dashed white outline on the vehicle, or at the time, it would move to.
+    if (env.dragTripId !== null) {
+      const from = data.vehicleDays.findIndex((d) => d.trips.some((t) => t.id === env.dragTripId));
+      const t = data.vehicleDays[from]?.trips.find((t) => t.id === env.dragTripId);
+      if (t) {
+        const y = rowTop(env, env.dragRow ?? from);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(env.gutter, env.top, env.width - env.gutter, env.plotH);
+        ctx.clip();
+        if (env.dragRow !== null) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+          ctx.fillRect(env.gutter, y, env.width - env.gutter, ROW_H);
+        }
+        const x = env.x(t.startSecs + env.dragDelta);
+        const w = Math.max(MIN_BAR, env.x(t.endSecs + env.dragDelta) - x - 1);
+        ctx.setLineDash([5, 3]);
+        ctx.strokeStyle = COLORS.highlight;
+        ctx.lineWidth = 2;
+        roundRect(ctx, x - 1, y + 3, w + 2, ROW_H - 6, 4);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
   };
 
   const hitTest = (px: number, py: number, env: Env): Hit | null => {
@@ -151,6 +178,7 @@ export function VehicleView({ routeId }: { routeId: number }) {
       if (px >= x - 4 && px <= x + w + 4) {
         return {
           tripId: t.id,
+          row: r,
           tooltip: [
             `${t.shortName ?? '?'}${t.headsign ? ` to ${t.headsign}` : ''}`,
             `${formatSecs(t.startSecs)} to ${formatSecs(t.endSecs)}`,
@@ -182,6 +210,29 @@ export function VehicleView({ routeId }: { routeId: number }) {
         if (hit.tripId !== undefined) open({ kind: 'trip', id: hit.tripId }, { replace: true });
         else if (hit.vehicleDayId !== undefined) open({ kind: 'vehicleDay', id: hit.vehicleDayId }, { replace: true });
       }}
+      rowAt={(py, env) => {
+        const r = Math.floor((py - env.top + env.scrollY) / ROW_H);
+        return r >= 0 && r < data.vehicleDays.length ? r : null;
+      }}
+      dropLabel={(_, row) => `Move to ${data.vehicleDays[row].label}`}
+      // Sideways moves the trip in time; up or down gives it to another vehicle.
+      onDragTrip={
+        editing
+          ? (tripId, delta) => {
+              open({ kind: 'trip', id: tripId }, { replace: true });
+              void applyEdit({ kind: 'shift', tripIds: [tripId], delta, ripple: useStore.getState().ripple });
+            }
+          : undefined
+      }
+      onDropRow={
+        editing
+          ? (hit, row) => {
+              if (hit.tripId === undefined) return;
+              open({ kind: 'trip', id: hit.tripId }, { replace: true });
+              void applyEdit({ kind: 'moveToVehicle', tripId: hit.tripId, vehicleDayId: data.vehicleDays[row].id });
+            }
+          : undefined
+      }
     />
   );
 }

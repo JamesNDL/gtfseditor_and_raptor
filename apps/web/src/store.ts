@@ -29,6 +29,10 @@ export interface Closing {
   point: { lon: number; lat: number } | null;
   from: BuilderStop | null;
   to: BuilderStop | null;
+  /** False for a closure that lasts part of the day, between the two times ("HH:MM"). */
+  allDay: boolean;
+  startAt: string;
+  endAt: string;
 }
 
 export type TimelineTab = 'stringline' | 'platforms' | 'vehicles';

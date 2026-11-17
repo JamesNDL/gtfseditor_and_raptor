@@ -20,7 +20,15 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @gtfs-editor/api\" \"npm run dev -w @gtfs-editor/web\"",
     "test:e2e": "node apps/api/test/scenarios.e2e.mjs",
     "export:check": "node packages/gtfs/src/export-check.ts",
-    "test:ui": "node apps/web/test/ui-smoke.mjs"
+    "test:ui": "node apps/web/test/ui-smoke.mjs",
+    "router:build": "cd services/router && .\\gradlew build",
+    "router:test": "cd services/router && .\\gradlew test",
+    "router:load": "cd services/router && .\\gradlew -q :router-gtfs:loadTimetable",
+    "router:route": "cd services/router && .\\gradlew -q :router-gtfs:route",
+    "router:compare": "node services/router/tools/compare-tfnsw.mjs",
+    "router:dev": "cd services/router && .\\gradlew :router-server:run",
+    "router:bench": "cd services/router && .\\gradlew :router-bench:jmh",
+    "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

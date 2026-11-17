@@ -51,6 +51,20 @@ export function TimelinePanel() {
     setView(start, start + hours * 3600);
   };
 
+  // What can be dragged comes first: it is the part that cannot be guessed.
+  const hint = [
+    timeline.tab === 'stringline' && 'Drag a trip sideways to retime it',
+    timeline.tab === 'vehicles' && 'Drag a trip sideways to retime it, up or down to change its vehicle',
+    timeline.tab === 'platforms' && 'Drag a call sideways to retime its trip, up or down to change its platform',
+    'scroll to zoom time · drag elsewhere to pan · click a trip to inspect it · click empty space to move the clock',
+    editing && timeline.tab === 'stringline' && 'white core = changed · dashed grey = where it was',
+    editing && timeline.tab === 'vehicles' && 'blue name = vehicle added · white edge = changed trip',
+    timeline.tab === 'vehicles' && 'bright link = passengers stay aboard · dashed amber = empty run needed',
+    timeline.tab === 'platforms' && 'faint band = vehicle waiting between trips · red box = overlap already in the feed',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <section className="panel tl-panel" aria-label="Timeline">
       <header className="timeline-header">
@@ -131,12 +145,9 @@ export function TimelinePanel() {
           ))}
       </div>
 
-      <footer className="timeline-hint muted small">
-        Scroll to zoom time · drag to pan · click a trip to inspect it · click empty space to move the clock
-        {editing && timeline.tab === 'stringline' && ' · drag a trip to retime it · white core = changed · dashed grey = where it was'}
-        {editing && timeline.tab === 'vehicles' && ' · blue name = vehicle added · white edge = changed trip'}
-        {timeline.tab === 'vehicles' && ' · bright link = passengers stay aboard · dashed amber = empty run needed'}
-        {timeline.tab === 'platforms' && ' · faint band = vehicle waiting between trips · red box = overlap already in the feed'}
+      {/* One line, cut short where the panel is narrow; the whole of it shows on hover. */}
+      <footer className="timeline-hint muted small" title={hint}>
+        {hint}
       </footer>
     </section>
   );

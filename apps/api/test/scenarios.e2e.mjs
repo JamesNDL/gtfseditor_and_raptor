@@ -597,6 +597,43 @@ try {
     assert.equal((await get(`/api/scenarios/${S}`)).stats.trips, statsBefore.trips);
     step('undo reopens the line');
 
+    // The same cut for part of the day: only trips in the closed stretch between 10:00 and 14:00 change.
+    const partBody = { ...cutBody, fromSecs: 10 * 3600, toSecs: 14 * 3600 };
+    assert.equal((await send('POST', `/api/close-preview${q}`, { ...cutBody, fromSecs: 14 * 3600, toSecs: 10 * 3600 })).status, 400, 'a closure must end after it starts');
+    const partPreview = await send('POST', `/api/close-preview${q}`, partBody);
+    assert.equal(partPreview.status, 200, JSON.stringify(partPreview.body));
+    assert.match(partPreview.body.label, /10:00 to 14:00$/);
+    assert.ok(partPreview.body.trips.split > 0 && partPreview.body.trips.split < cutPreview.body.trips.split, 'fewer trips are caught than by an all-day closure');
+    const t1Before = await get(`/api/routes/${t1.id}${q}`);
+    const partCut = await edit({ kind: 'close', ...partBody });
+    assert.equal(partCut.status, 200, JSON.stringify(partCut.body));
+    const t1Part = await get(`/api/routes/${t1.id}${q}`);
+    const t1Caught = partPreview.body.lines.find((l) => l.routeId === t1.id);
+    assert.ok(t1Part.tripCount > t1Before.tripCount && t1Part.tripCount <= t1Before.tripCount + t1Caught.trips, 'each caught trip now runs in two parts');
+    // Trips that cross the closed stretch still run, but none of them is in it while it is closed.
+    let crossing = 0;
+    const sides = new Map();
+    for (const trip of await get(`/api/routes/${t1.id}/trips${q}`)) {
+      if (trip.startSecs > 15 * 3600 || trip.endSecs < 9 * 3600) continue;
+      if (!sides.has(trip.patternId)) {
+        const stations = (await get(`/api/patterns/${trip.patternId}/stops`)).stops.map((s) => s.parentId ?? s.id);
+        sides.set(trip.patternId, [stations.indexOf(stationA), stations.indexOf(stationB)]);
+      }
+      const [a, b] = sides.get(trip.patternId);
+      if (a < 0 || b < 0) continue;
+      const calls = (await get(`/api/trips/${trip.id}${q}`)).stopTimes;
+      crossing++;
+      const [first, second] = a < b ? [calls[a], calls[b]] : [calls[b], calls[a]];
+      assert.ok(first.dep >= 14 * 3600 || second.arr <= 10 * 3600, `trip ${trip.id} is in the closed stretch while it is closed`);
+    }
+    assert.ok(crossing > 0, 'trips outside the closed hours still cross');
+    const [drawn] = (await get(`/api/scenarios/${S}/closures`)).features;
+    assert.equal(drawn.properties.fromSecs, 10 * 3600);
+    assert.equal((await get(`/api/scenarios/${S}`)).stats.unassigned, 0, 'every part of a split trip has a vehicle');
+    step(`line cut for part of the day: ${partCut.body.summary}`);
+    await undoTo(headBeforeCut);
+    assert.equal((await get(`/api/scenarios/${S}`)).stats.trips, statsBefore.trips);
+
     // Close a road in the middle of a bus line: buses go round and miss the stops inside.
     const headBeforeRoad = await headOf();
     const shut = busStops[Math.floor(busStops.length / 2)];

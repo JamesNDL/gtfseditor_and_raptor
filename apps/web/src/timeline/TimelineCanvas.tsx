@@ -45,11 +45,21 @@ export interface Env {
   /** Trip being dragged to a new time, and how far in seconds (snapped). */
   dragTripId: number | null;
   dragDelta: number;
+  /** The row a dragged trip is held over, when that is not the row it came from; null while only its time is changing. */
+  dragRow: number | null;
+  /** What was pressed to start the drag. */
+  dragHit: Hit | null;
 }
 
 export interface Hit {
   tripId?: number;
   vehicleDayId?: number;
+  /** The row this is drawn in, in views whose rows a trip can be dragged between. */
+  row?: number;
+  /** Which of the trip's calls this is, where a view draws one call rather than a whole trip. */
+  seq?: number;
+  /** Can be clicked but not dragged. */
+  noDrag?: boolean;
   tooltip: string[];
 }
 
@@ -64,12 +74,18 @@ interface Props {
   scrollTo?: number;
   /** When given, trips can be dragged sideways; called with the trip and the shift in seconds. */
   onDragTrip?: (tripId: number, deltaSecs: number) => void;
+  /** The row under a y position, or null. With `onDropRow`, trips can be dragged up or down onto another row. */
+  rowAt?: (py: number, env: Env) => number | null;
+  /** Called when a trip is dropped on a row other than its own. One drag changes the row or the time, never both. */
+  onDropRow?: (hit: Hit, row: number) => void;
+  /** What dropping on that row would do, shown beside the pointer during the drag. */
+  dropLabel?: (hit: Hit, row: number) => string;
 }
 
 const TICK_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600];
 const MIN_WINDOW = 10 * 60;
 
-export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, scrollTo, onDragTrip }: Props) {
+export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, scrollTo, onDragTrip, rowAt, onDropRow, dropLabel }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -81,12 +97,14 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
     hoverTripId: null as number | null,
     dragTripId: null as number | null,
     dragDelta: 0,
+    dragRow: null as number | null,
+    dragHit: null as Hit | null,
     staticDirty: true,
     staticCanvas: null as HTMLCanvasElement | null,
     lastNow: -1,
   });
-  const propsRef = useRef({ gutter, contentHeight, render, hitTest, onHit, onDragTrip });
-  propsRef.current = { gutter, contentHeight, render, hitTest, onHit, onDragTrip };
+  const propsRef = useRef({ gutter, contentHeight, render, hitTest, onHit, onDragTrip, rowAt, onDropRow, dropLabel });
+  propsRef.current = { gutter, contentHeight, render, hitTest, onHit, onDragTrip, rowAt, onDropRow, dropLabel };
 
   const view = useStore((s) => s.view);
   const selectedTripId = useStore((s) => s.highlightTripId);
@@ -128,6 +146,8 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
         selectedTripId: useStore.getState().highlightTripId,
         dragTripId: s.dragTripId,
         dragDelta: s.dragDelta,
+        dragRow: s.dragRow,
+        dragHit: s.dragHit,
       };
     };
 
@@ -194,6 +214,15 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
     const paint = () => {
       frame = requestAnimationFrame(paint);
       const now = clock.secs;
+      // A trip held near the top or bottom edge scrolls the rows, so it can reach a row that is out of view.
+      if (drag?.moved && drag.hit && propsRef.current.onDropRow) {
+        const step = drag.py2 < HEADER_H + EDGE ? -SCROLL_STEP : drag.py2 > s.height - EDGE ? SCROLL_STEP : 0;
+        const next = Math.max(0, Math.min(maxScroll(), s.scrollY + step));
+        if (next !== s.scrollY) {
+          s.scrollY = next;
+          updateTripDrag();
+        }
+      }
       if (!s.staticDirty && now === s.lastNow) return;
       if (s.width === 0 || s.height === 0) return;
       const redrawn = s.staticDirty;
@@ -271,40 +300,63 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
       useStore.getState().setView(na, nb);
     };
 
-    let drag: { px: number; py: number; view: [number, number]; scrollY: number; moved: boolean; tripId: number | null } | null = null;
+    /** `px`, `py` are where the pointer went down; `px2`, `py2` where it is now. `hit` is the trip being dragged, if any. */
+    let drag: { px: number; py: number; px2: number; py2: number; view: [number, number]; scrollY: number; moved: boolean; hit: Hit | null } | null = null;
     const SNAP = 30;
+    const EDGE = 18;
+    const SCROLL_STEP = 6;
     const onDown = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
       const { px, py } = local(e);
       // Pressing on a trip drags that trip (when editing); pressing anywhere else pans the view.
-      let tripId: number | null = null;
-      if (propsRef.current.onDragTrip && py > HEADER_H) {
-        tripId = propsRef.current.hitTest(px, py, buildEnv(canvas.getContext('2d')!))?.tripId ?? null;
+      let hit: Hit | null = null;
+      const p = propsRef.current;
+      if ((p.onDragTrip || p.onDropRow) && py > HEADER_H) {
+        const under = p.hitTest(px, py, buildEnv(canvas.getContext('2d')!));
+        if (under && under.tripId !== undefined && !under.noDrag) hit = under;
       }
-      drag = { px, py, view: useStore.getState().view, scrollY: s.scrollY, moved: false, tripId };
+      drag = { px, py, px2: px, py2: py, view: useStore.getState().view, scrollY: s.scrollY, moved: false, hit };
     };
     const hideTooltip = () => (tooltipRef.current!.style.display = 'none');
+    /** Works out what the trip being dragged would do if dropped now, and says so beside the pointer. */
+    const updateTripDrag = () => {
+      if (!drag?.hit) return;
+      const p = propsRef.current;
+      const hit = drag.hit;
+      const over = p.onDropRow && p.rowAt ? p.rowAt(drag.py2, buildEnv(canvas.getContext('2d')!)) : null;
+      const toRow = over !== null && hit.row !== undefined && over !== hit.row ? over : null;
+      let delta = 0;
+      if (toRow === null && p.onDragTrip) {
+        const span = drag.view[1] - drag.view[0];
+        const secs = ((drag.px2 - drag.px) / Math.max(1, s.width - p.gutter)) * span;
+        delta = Math.round(secs / SNAP) * SNAP;
+      }
+      s.dragTripId = hit.tripId!;
+      s.dragHit = hit;
+      s.dragRow = toRow;
+      s.dragDelta = delta;
+      s.staticDirty = true;
+      const tooltip = tooltipRef.current!;
+      const mins = Math.abs(delta) / 60;
+      tooltip.textContent =
+        toRow !== null ? (p.dropLabel?.(hit, toRow) ?? 'Move here') : delta === 0 ? 'No change' : `${mins} min ${delta > 0 ? 'later' : 'earlier'}`;
+      tooltip.style.display = 'flex';
+      tooltip.style.left = `${drag.px2 + 14}px`;
+      tooltip.style.right = '';
+      tooltip.style.top = `${Math.max(HEADER_H, drag.py2 - 28)}px`;
+      canvas.style.cursor = toRow !== null ? 'ns-resize' : p.onDragTrip ? 'ew-resize' : 'grabbing';
+    };
     const onMove = (e: PointerEvent) => {
       const { px, py } = local(e);
       if (drag) {
         const dx = px - drag.px;
         const dy = py - drag.py;
         if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+        drag.px2 = px;
+        drag.py2 = py;
         if (!drag.moved) return;
-        if (drag.tripId !== null) {
-          const span = drag.view[1] - drag.view[0];
-          const secs = (dx / Math.max(1, s.width - propsRef.current.gutter)) * span;
-          s.dragTripId = drag.tripId;
-          s.dragDelta = Math.round(secs / SNAP) * SNAP;
-          s.staticDirty = true;
-          const tooltip = tooltipRef.current!;
-          const mins = Math.abs(s.dragDelta) / 60;
-          tooltip.textContent = s.dragDelta === 0 ? 'No change' : `${mins} min ${s.dragDelta > 0 ? 'later' : 'earlier'}`;
-          tooltip.style.display = 'flex';
-          tooltip.style.left = `${px + 14}px`;
-          tooltip.style.right = '';
-          tooltip.style.top = `${Math.max(HEADER_H, py - 28)}px`;
-          canvas.style.cursor = 'ew-resize';
+        if (drag.hit) {
+          updateTripDrag();
           return;
         }
         hideTooltip();
@@ -344,15 +396,19 @@ export function TimelineCanvas({ gutter, contentHeight, render, hitTest, onHit, 
     };
     const onUp = (e: PointerEvent) => {
       const wasDrag = drag?.moved;
-      const draggedTrip = drag?.tripId ?? null;
+      const dragged = drag?.hit ?? null;
       drag = null;
-      if (wasDrag && draggedTrip !== null) {
+      if (wasDrag && dragged) {
         const delta = s.dragDelta;
+        const row = s.dragRow;
         s.dragTripId = null;
         s.dragDelta = 0;
+        s.dragRow = null;
+        s.dragHit = null;
         s.staticDirty = true;
         hideTooltip();
-        if (delta !== 0) propsRef.current.onDragTrip?.(draggedTrip, delta);
+        if (row !== null) propsRef.current.onDropRow?.(dragged, row);
+        else if (delta !== 0) propsRef.current.onDragTrip?.(dragged.tripId!, delta);
         return;
       }
       if (wasDrag) return;

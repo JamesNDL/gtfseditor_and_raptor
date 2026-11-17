@@ -134,6 +134,6 @@ export function startClosing() {
     builderPath: null,
     placing: null,
     closingPreview: null,
-    closing: { what: 'road', radiusM: 100, point: null, from: null, to: null },
+    closing: { what: 'road', radiusM: 100, point: null, from: null, to: null, allDay: true, startAt: '10:00', endAt: '14:00' },
   });
 }

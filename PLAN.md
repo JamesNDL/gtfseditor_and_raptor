@@ -4,9 +4,9 @@ A visual, game-like editor for NSW public transport timetables (GTFS), built in 
 
 The build goes in seven phases, each ending in something usable: a read-only viewer first, then schedule editing, network editing, fleet, and export.
 
-## Where we are (13 Nov 2026)
+## Where we are (15 Nov 2026)
 
-**Next step: dragging in the platform and vehicle charts, then goals and scoring**, and the journey router planned in `docs/router-plan.md`. Run times by time of day, the schedule editing gaps (free platforms, re-planning a line's vehicles, a stop added to one trip, a trip added to a line, whole-line frequency across branches), station details on the right, a light version of the interface and the pinned tool buttons are now built; what they leave out is listed under phases 3 and 4.
+**Next step: to be agreed with the owner before building.** (Goals and a score were built on 14 Nov from an earlier version of this line and removed the next day: the owner had not asked for them. Do not add game features.) The last thing built is a closure for part of the day. Phases 1 to 4 of the journey router (the timetable loader, the search, the HTTP service, and capacity with bulk requests) are built; phase 5 (the benchmark harness and demand generator) is next in `docs/router-plan.md`. Dragging in the platform and vehicle charts is built, and the router's empty project (`services/router`, phase 0 of its plan) builds and starts. Run times by time of day, the schedule editing gaps (free platforms, re-planning a line's vehicles, a stop added to one trip, a trip added to a line, whole-line frequency across branches), station details on the right, a light version of the interface and the pinned tool buttons are now built; what they leave out is listed under phases 3 and 4.
 
 Status by phase; details are under "Phases" below.
 
@@ -15,7 +15,7 @@ Status by phase; details are under "Phases" below.
 | 0. Data audit | Done |
 | 1. Import and viewer | Built |
 | 2. Timeline views | Built |
-| 3. Scenarios and schedule editing | Built; the remaining gaps (dragging in two charts, vehicle planning across lines) are listed in the phase |
+| 3. Scenarios and schedule editing | Built; the remaining gap (vehicle planning across lines) is listed in the phase |
 | 4. Network editing | Four tools: draw a new line (two-way or a one-way loop), change the route of an existing line, add a stop or station where there is none, and close a road or a line. Bus lines follow roads; trains, trams and ferries follow the track and routes that published services use |
 | 5. Fleet and capacity | First slice built |
 | 6. Export and deployment | GTFS export built and verified against the feed; deployment not started |
@@ -24,13 +24,14 @@ Everything is committed to git on `master`. Tests: `npm test`, `npm run test:e2e
 
 Remaining work, roughly in order:
 
-1. Route editing: the gaps listed in phase 4 (reshaping, new stops, closures); a routing server that can be told a road is closed; a closure for part of the day; re-planning vehicles across lines after a line is cut.
-2. Schedule editing: dragging in the platform and vehicle charts (the edits behind them, `setPlatform` and `moveToVehicle`, exist); vehicle planning across lines rather than one line at a time.
-3. Usability: goals and scoring, watching real people use it.
-4. The journey router: a standalone Java RAPTOR service, capacity aware with a switch, with bulk and road-routing endpoints. Planned in `docs/router-plan.md`; nothing is built. It has 16 questions for the owner, each with a default.
+1. Route editing: the gaps listed in phase 4 (reshaping, new stops, closures); a routing server that can be told a road is closed; re-planning vehicles across lines after a line is cut.
+2. Schedule editing: vehicle planning across lines rather than one line at a time.
+3. Usability: watching real people use it.
+4. The journey router: a standalone Java RAPTOR service, capacity aware with a switch, with bulk and road-routing endpoints. Planned in `docs/router-plan.md`. Phases 0 and 1 of that plan are built: `services/router` is a Gradle project of five modules. It loads the exported weekday zip into memory in about 4 seconds (59,014 trips, 57 MB), saves a snapshot, and plans journeys from the command line (`npm run router:route`); the search agrees with a brute-force check. On test journeys inside the Opal area it meets its single-query speed targets (median 8 ms for any two stops, under 1 ms within 10 km) and meets the bulk target only for short journeys; journeys leave as late as they can, slow alternatives are dropped and one journey is recommended. Its server (port 3002, `npm run router:dev`) loads, reloads and unloads timetables, plans one journey per request (`POST /v1/journeys`) or many (`POST /v1/journeys/bulk`), and keeps named load states so that a request can ignore how full vehicles are, respect it, or respect it and add its passengers (`off`, `check`, `assign`); the editor does not call it yet. Every vehicle capacity is still a placeholder. There is no road routing, and its Docker image has not been rebuilt since the endpoints were added. The plan has 16 questions for the owner, each with a default.
 5. Data: real vehicle capacities (all are placeholders), transfers between nearby stops, capacity on the map.
 6. Export and deployment: MobilityData validator, export progress, a self-hosted routing server, AWS, logins, shrinking the vehicle data, updating to a new feed while keeping scenarios.
-7. Later, as planned: the passenger simulator, the interchange file, track-level conflicts.
+7. The passenger simulator: planned in `docs/simulator-plan.md` (18 Nov 2026), agreed with the owner section by section, nothing built. It sends a file of journeys through the timetable using the journey router, is started from the editor by a wizard, and shows results in the editor. Its build order is section 10 of that file (S0 to S6); the owner's decisions are in its section 12 and the open questions, each with a default, follow them.
+8. Later, as planned: the interchange file, track-level conflicts.
 
 Things a new session needs to know:
 
@@ -47,6 +48,9 @@ Things a new session needs to know:
 - Run times for new stretches come from `apps/api/src/timings.ts`, for five parts of the day (`DAY_BANDS` in `packages/core/src/time.ts`). A trip uses the times of the part of the day it sets out in.
 - The schedule edits added last (`setPlatform`, `replan`, `moveToVehicle`, `addTrip`, `addCall`) are in `apps/api/src/schedule.ts`. New trips are moved off a busy platform automatically by `settlePlatforms` there.
 - The light version is a second set of CSS variables under `:root[data-theme='light']`; the map and the timeline charts take their colours from `apps/web/src/theme.ts` and are rebuilt when the theme changes.
+- Dragging in the three timeline charts is handled in one place, `apps/web/src/timeline/TimelineCanvas.tsx`. A chart that passes `onDragTrip` gets sideways drags (a retime); one that also passes `rowAt` and `onDropRow` gets drags onto another row. One drag does one or the other, never both: over another row it is a move, otherwise a retime.
+- The router is run with `npm run router:build`, `router:test`, `router:load` (loads `data/exports/check/export.zip` and prints counts, time and memory) and `router:dev` (Windows form; they call `.\gradlew` in `services/router`). It is not part of `npm run dev`. In `docker-compose.yml` it sits behind a profile: `docker compose --profile router up -d router`. What was checked about GraphHopper, Javalin and Gradle before building is under "Phase 0 findings" in `docs/router-plan.md`; what the first real load and the first real searches measured is under "Phase 1 findings", "Phase 2 findings", "Quality and speed of results" and "Compared with the TfNSW trip planner" (300 journeys: 42% arrive within a minute of TfNSW's, ours sooner in 52%, TfNSW sooner in 6%); what the service measured over HTTP is under "Phase 3 findings", what capacity and bulk requests measured is under "Phase 4 findings", and its requests are described in `services/router/README.md`. Router test journeys stay inside the Opal area (Newcastle, Sydney, Wollongong).
+- The dev API restarts whenever a source file changes, which cuts off an export in progress. Run `npm run export:check` only while no files are being edited.
 - `npm run export:check` gives up if the download is silent for five minutes, and a full weekday export now takes about that long on the development machine. It timed out twice on 13 Nov; the export itself had not failed.
 
 ## Decisions made
@@ -224,13 +228,15 @@ Built:
 - Add a stop to one trip ("Add a stop" in the trip's edit tools): a stop the trip runs through, or one beside its path that is not in its stop pattern. Only that trip changes, and later stops are later by the stop time plus an allowance.
 - Whole-line frequency on a line with branches: "Change the whole line, shared between all its stop patterns" spaces departures evenly across the line and deals them out to each stop pattern in the share it has in that part of the day.
 - Changes on the map: lines the scenario has touched are outlined in yellow (switch beside "What changed, by line"). The top bar shows the scenario's own trip and vehicle counts.
-- `npm run test:e2e` exercises all of the above through the API.
+- Dragging in the platform and vehicle charts. In the platform chart a call dragged up or down moves to that platform, and dragged sideways retimes its trip. In the vehicle chart a trip dragged up or down moves to that vehicle, and dragged sideways is retimed. A dashed outline shows where it would land and a label beside the pointer says what the drop would do; holding a trip at the top or bottom edge scrolls the rows.
+- `npm run test:e2e` exercises all of the above through the API, except the dragging, which `npm run test:ui` does in a browser.
 
 Not built yet:
 
-- Dragging in the platform and vehicle charts. The edits a drag would make exist (`setPlatform`, `moveToVehicle`, `shift`); only the pointer handling is missing.
+- A drag changes the platform or vehicle, or the time, but not both at once.
+- A drop is never refused in advance. A call dropped on a bus stand or another mode's platform at an interchange is turned down by the server with a message; a trip dropped on a vehicle that is busy or in the wrong place is accepted and shows as a clash.
+- A trip cannot be dragged onto a new, empty vehicle; "Its own new vehicle" in the trip's edit tools does that.
 - Vehicle planning across lines. Working out a line's vehicles again treats that line alone: a vehicle that also ran other lines keeps those trips, so the total across the network can go up even though the line's own count goes down. Fleet-size caps are not enforced, only reported.
-- Moving a trip to another vehicle has no control in the interface yet (it will be the vertical drag in the vehicle chart).
 - A free platform is judged by time only. Whether the track layout lets a train reach it is not known, which is why only platforms the line already uses are chosen automatically.
 - An added stop's time is an estimate: the published stop time there, plus 20 to 120 seconds by mode for slowing and starting.
 - The line search still shows published-timetable counts.
@@ -239,11 +245,11 @@ Not built yet:
 ### Testing status
 
 - `npm test`: unit tests for the shared logic, including the route-change rules.
-- `npm run test:e2e`: the scenario engine through the API, including cutting a bus line short, extending it again, adding a stop, checking that vehicles follow the new path, adding a bus stop with its partner across the road and extending a line to it, adding a station and running a new train line to it, a one-way loop, a train line that follows the track between two distant stations, cutting a train line between two stations and undoing it, closing a road on a bus line (every new path is checked to stay out of the closed stretch), run times that differ by time of day, a trip added to a line, a line's vehicles worked out again, a trip moved between vehicles, a stop put back on one trip and a stop added to one trip, whole-line frequency shared between stop patterns, a platform change, and the free-platform fix offered for clashes.
+- `npm run test:e2e`: the scenario engine through the API, including cutting a bus line short, extending it again, adding a stop, checking that vehicles follow the new path, adding a bus stop with its partner across the road and extending a line to it, adding a station and running a new train line to it, a one-way loop, a train line that follows the track between two distant stations, cutting a train line between two stations and undoing it, closing a road on a bus line (every new path is checked to stay out of the closed stretch), run times that differ by time of day, a trip added to a line, a line's vehicles worked out again, a trip moved between vehicles, a stop put back on one trip and a stop added to one trip, whole-line frequency shared between stop patterns, a platform change, the free-platform fix offered for clashes.
 - `npm run export:check`: a GTFS export against the source feed.
-- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, changes that line's route by clicking a third station, names a new station and places it with a click, ticks the one-way loop option, closes a train line between two stations clicked on the map and undoes it, runs "Fix all", checks that the two tool buttons stay in view when the scenario panel is scrolled, adds a trip from the line panel at a typed time, and switches the light version on and off. A station click now opens the station panel, and the platform chart from there.
+- `npm run test:ui`: the interface itself, driven in a headless browser. It loads the app, pauses with Space, searches for a line, changes a frequency (which starts a scenario on its own), undoes and redoes with the keyboard, retimes a trip, skips a stop, drags a trip on the trip diagram, clicks a station on the map, draws a new line by clicking two stations, opens the fleet screen, changes that line's route by clicking a third station, names a new station and places it with a click, ticks the one-way loop option, closes a train line between two stations clicked on the map and undoes it, runs "Fix all", checks that the two tool buttons stay in view when the scenario panel is scrolled, adds a trip from the line panel at a typed time, switches the light version on and off, drags a trip onto another vehicle in the vehicle chart, and drags a call onto another platform in the platform chart. A station click now opens the station panel, and the platform chart from there.
 
-Not covered by any test: the platform picker, "Add a stop" and "Work out the vehicles again" in the browser (all three are tested through the API), the outline of changed lines on the map, the light version beyond the panels turning white, the platform and vehicle charts beyond opening them, the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, changing a bus route or placing a bus stop in the browser (the browser test uses a train line), a GTFS export containing new stops (checked against the database only, because the export check timed out), drawing a whole loop or closing a road in the browser (both are tested through the API), a GTFS export after a closure, export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
+Not covered by any test: the platform picker, "Add a stop" and "Work out the vehicles again" in the browser (all three are tested through the API), the outline of changed lines on the map, the light version beyond the panels turning white, a sideways drag and edge scrolling in the platform and vehicle charts (the up-and-down drag is tested in both), the vehicle-type pickers and fleet editing in the browser, following roads in the drawing tool, changing a bus route or placing a bus stop in the browser (the browser test uses a train line), a GTFS export containing new stops (checked against the database only, because the export check timed out), drawing a whole loop or closing a road in the browser (both are tested through the API), a GTFS export after a closure, export from the button, a second day, and anything on a small screen. No person other than the developer has used it.
 
 ### Usability pass (after a review of how easy the editor is to pick up)
 
@@ -257,7 +263,6 @@ Done:
 
 Still open from the review:
 
-- No goals or scoring.
 - Nobody other than the developer has been watched using it.
 
 Done since:
@@ -291,7 +296,8 @@ Built:
 
 Limits of closures:
 
-- A closure lasts the whole day; it cannot be set for a few hours.
+- A closure can last all day or part of it ("When" in the panel: a start and an end time; an end at or before the start means the next morning). Only trips that would be between the last stop before the closure and the first stop after it at some moment in those hours are changed; the rest run as published. Built 15 Nov. The planning was checked against the database (Chatswood to Artarmon: 376 trips all day, 65 between 10:00 and 14:00, none missed and none caught wrongly). Applying one and undoing it is a step in `npm run test:e2e`, and the preview in the panel is a step in `npm run test:ui`; both pass. Applying one from the panel, and a road closure for part of the day, are not tested.
+- A part-day closure does not hold or turn back a trip that reaches the closure just before it ends; such a trip is changed like the others. The map draws the closed area all day and does not show the hours; they are in the change list on the left.
 - It cannot be edited or lifted except by undoing it, and lines drawn or re-routed afterwards do not know about it.
 - The way round a closed road is found by trial against a routing server that has no notion of a closed road (see the notes above). It can take a longer way than a driver would, or include a short side trip, and where it finds nothing the stop pattern is left as it is and the summary says so.
 - Detour times are the published time scaled by distance, not by the speed of the roads used.

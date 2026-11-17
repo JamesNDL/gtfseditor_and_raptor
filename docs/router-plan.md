@@ -1,6 +1,6 @@
 # Journey router build plan (Java, RAPTOR, capacity aware)
 
-Written 13 Nov 2026. This is a plan only; no code has been written or changed.
+Written 13 Nov 2026. Phase 0 (the empty project) was built the same day; its findings are in section 14. Phase 1 (the timetable loader) was built on 15 Nov; its findings and measurements are in section 15. Phase 2 (the search) was built the same day; see section 16. Its results were then checked and improved for quality and speed on journeys inside the Opal area; see section 17, which replaces the speed figures in section 16. Its journeys were then compared with the TfNSW trip planner's; see section 18. Phase 3 (the service) was built on 17 Nov; see section 19. Phase 4 (capacity and bulk requests) was built the same day; see section 20. The benchmark harness, road routing and the website's use of the router are not built.
 
 ## 1. Summary
 
@@ -504,3 +504,422 @@ Each has a default, so work can start without answers.
 | 14 | Will other applications need access control on the router? | None in the first version; it listens on the local network only. |
 | 15 | Are school buses (11,386 of the weekday's trips) part of journey planning? | Included, with a per-request option to leave a mode out. |
 | 16 | Is Java 25 acceptable as the language level, with Gradle as the build tool? | Yes. |
+
+## 14. Phase 0 findings (13 Nov 2026)
+
+Phase 0 is built: `services/router` builds with `gradlew build` on Java 26 (eight tests), and the server starts on port 3002 (`ROUTER_PORT`) and answers `GET /v1/health`. The Docker image builds and answers the same check. No loader, search, capacity or road code exists yet.
+
+Versions chosen:
+
+| Item | Version | Note |
+|---|---|---|
+| Gradle | 9.9.1, wrapper checked in | Runs on Java 26 (supported from 9.4.0). |
+| Java language level | 25, by `options.release = 25` | No toolchain, so no Java 25 install is needed to build. |
+| Javalin | 7.2.4 | Apache 2.0, needs Java 17 or newer, uses Jetty 12. Routes are defined inside `config.routes`. |
+| Jackson | 2.22.4 | The version Javalin 7.2.4 builds against. |
+| JUnit | 6.1.3 | |
+| JMH | 1.37 | Run by a plain `jmh` task in `router-bench`, no plugin. |
+
+What the checks on GraphHopper found, from its documentation, build files and source (none of its code was run, and it is not a dependency yet):
+
+| Question | Finding |
+|---|---|
+| Release | 11.1 is the current stable release. 12.0 is in pre-release. |
+| Licence | Apache 2.0; its README says it may be embedded in closed-source products. |
+| Java | 11.1 is built for Java 17. 12.x will need Java 25 or newer, which matches this plan but would shut out embedders on older Java. |
+| Embedded use | In the open-source core (`com.graphhopper:graphhopper-core`). |
+| Car and foot profiles | Both built in. |
+| Avoiding an area per request | In the open-source core: a custom model takes polygons, and a priority of 0 blocks one. |
+| Memory-mapped storage | In the open-source core, but not the default, and described as much slower for the import. |
+
+Three things that change the plan:
+
+- **Closure-avoiding requests will be slower than section 7.3 says.** The documented per-request example switches off the speed-up index, so those requests run in the slower flexible mode, not in "a few milliseconds". Ordinary car routes are not affected. This is a reading of the example, not a stated rule; measure it in phase 6.
+- **There is no open-source matrix endpoint.** The editor's OSRM `table` call (phase 8, section 7.5) would have to be built from repeated route requests.
+- **Memory-mapped storage costs import time.** Section 7.3 assumes it for serving; the import may need the in-memory setting, on this machine or another.
+
+The package name is `gtfseditor.router`; the plan did not name one.
+
+## 15. Phase 1 findings (15 Nov 2026)
+
+Phase 1 is built: `router-core` holds the timetable as flat arrays and can save and read a snapshot; `router-gtfs` reads a GTFS zip into it, generates the walking links and keeps the snapshot cache. `npm run router:load` loads `data/exports/check/export.zip` and prints the report below. There is still no search and no endpoint beyond health.
+
+### Measured on the published weekday (17 Nov 2026)
+
+One run on the development machine, with a 768 MB heap limit.
+
+| Measure | Plan's estimate or target | Measured |
+|---|---|---|
+| Trips, stop times, stops | 59,014; 2,001,666; 89,444 | The same. A test checks them when `ROUTER_REAL_ZIP` names the zip. |
+| Patterns | 20,000 to 25,000 | 17,976, holding 498,763 pattern stops |
+| Walking links | 6 to 15 MB | 598,172 links, about 7 MB |
+| Load from the zip | under 60 s | 3.7 s |
+| Load from a snapshot | under 3 s | 1.3 s, most of it fingerprinting the 179 MB zip |
+| Timetable in memory | under 100 MB | 57 MB (estimate); 63 MB of heap in use after loading |
+| Heap in use while loading | under 1 GB | 362 MB at most |
+| Snapshot file | not estimated | 38 MB |
+
+Where the walking links come from: 10,888 through station pathways, 21,794 between stops of one station, 565,490 between stops within 400 m. The limit of 40 per stop left out 490.
+
+### What differs from the plan
+
+- **Fewer patterns than the editor has.** The editor's 18,167 patterns are per route. The router groups by stops and pick-up and set-down flags only, so two routes over the same stops share a pattern, and the route is kept per trip. That is the likely reason the count is lower even after overtaking trips are split apart; the two effects were not counted separately.
+- **Most "stations" are a single bus stop.** The feed gives 77,665 of the 89,444 stops a parent, so "station" does not mean a railway station. 67,179 parents have one stop in use and 9,990 have two. Checked in phase 2: of 16,341 pairs sharing a parent, 68 are more than 400 m apart, and the worst is 667 km (a mistake in the feed). Pairs more than 1 km apart are no longer linked as one station (a setting); that drops 8 pairs.
+- **Block links work as planned.** 2,154 trips share a `block_id`, in 1,077 blocks of two trips each. 1,076 of the first trips run on into the second from the stop where they end, so the figure of "half" is only because the second trip of a pair has nothing to run on into. One block's second trip starts 571 m away and is not linked.
+- **Every capacity is a placeholder,** as section 2 said: 59,014 of 59,014 trips. None needed the per-mode default.
+- **Stops and stop names are plain text objects,** not one byte block as section 5 proposed. The whole timetable is 57 MB, so the saving was not worth the code.
+- **The snapshot is keyed by the zip's contents** (SHA-256), the load options and the snapshot format, so a copy of the same zip reuses it and a changed setting does not.
+
+### Decisions the plan left open
+
+| Topic | What was built |
+|---|---|
+| Service date | Taken from the feed when it covers one day, as the editor's export does. An ordinary feed needs `--date`. |
+| Times a feed leaves out | A stop with no time is spread evenly between its timed neighbours. A trip is left out if it has fewer than two stops, no time at either end, or times that go backwards. None of this happens in the editor's export. |
+| Pick-up and set-down | Only type 1 ("none") blocks boarding or leaving. Types 2 and 3 (phone or ask the driver) count as allowed. |
+| Which link wins for one pair of stops | `transfers.txt`, then pathways, then same station, then distance. A pathway time is used even when the straight-line walk would be quicker. |
+| Limit per stop | Applies to generated links only. Links from pathways and `transfers.txt` are always kept. |
+| Walks through a station | Not offered beyond 900 s. A pathway with no time is taken as 60 s. Both are settings. |
+| `transfers.txt` | Rows for one route or trip, and rows that name a station, are left out and counted. The editor's export has no such file, so this is tested on hand-made feeds only. |
+| Default capacity by mode | Train 1,200, metro 1,100, light rail 300, ferry 400, bus 65, coach 50, school bus 70: the editor's placeholder types. |
+
+### Not done in phase 1
+
+- Nothing finds stops near a coordinate yet. Phase 2 needs it for journeys that start or end at a point.
+- `frequencies.txt` is not read. The editor's export has none.
+- The server does not load a timetable; that is phase 3.
+- The Docker image was not rebuilt or run after these changes.
+- Old snapshot files are never removed from `data/router/snapshots`.
+
+## 16. Phase 2 findings (15 Nov 2026)
+
+Phase 2 is built: `router-core` has the plain RAPTOR search, journey reconstruction, access and egress for stops, stations and points, and stay-aboard marking. `npm run router:route` plans a journey from the command line. There are still no endpoints beyond health, and no capacity.
+
+### How it was checked
+
+| Check | Result |
+|---|---|
+| Brute-force reference | 10,000 random queries on 400 small random timetables. The search and a deliberately simple search agree on the earliest arrival for every limit on rides, in every query. |
+| Hand-made feed | 15 tests covering the rules in section 10.1: direct trip, one change, walk between stops, missed connection, past midnight, run-through stop, stay-aboard, loop, express overtaking, station, stop, point, direct walk, ride limit, four threads at once. |
+| Replay on the real weekday | 3,000 random stop-to-stop queries returned 1,182 journeys. Each was replayed against the timetable by code that shares nothing with the search. None failed. |
+| By eye | Central to Bondi Junction, Parramatta to Manly Wharf and Bondi Beach to Newcastle Interchange give sensible journeys. Not compared with the TfNSW trip planner. |
+
+### Speed, roughly
+
+One run of 3,000 random stop-to-stop queries on the weekday, one thread, up to 8 rides, departure times from 05:00 to 22:00. This is not the benchmark of section 10.2: the pairs are uniform over all 89,444 stops in NSW, not weighted by service.
+
+| Measure | Target (section 10.3) | Measured |
+|---|---|---|
+| Median | under 10 ms | 11.4 ms |
+| 95th percentile | under 30 ms | 64.2 ms |
+| 99th percentile | not set | 85.0 ms |
+| Queries per second | over 1,000 on 8 threads | 49 on one thread |
+| Queries with an answer | not set | 25% |
+
+Both time targets are missed on this mix. An average query scanned 15,724 patterns over its rounds, against 17,976 in the timetable, so most queries explored much of the state. Only a quarter had an answer; a query with no answer has nothing to prune against and runs every round. I have not checked why so few have an answer; school-only stops and regional networks with no link to the rest are the likely reasons. Tuning is phase 5, where the service-weighted query set will show whether the targets are in reach. One candidate is to bound the search by time (for example, give up 6 hours after departure).
+
+### What differs from the plan
+
+- **Two arrival times per stop per round, not one.** The plan's walking links do not chain: A to B and B to C does not give A to C. A passenger who arrives at a stop on foot may board there but may not walk on, so "arrived on a vehicle" and "arrived on foot" are kept apart. One number would either lose journeys or allow two walks in a row. The cost is 16 MB of working memory per thread, against the 12 MB estimated.
+- **Stay-aboard uses up a ride.** As section 6.2 said for the first version: two trips on one vehicle count as two rides against the limit of 8, and as no change in the result.
+- **A stop as origin includes the stops one walk away,** so a journey from a stop may start with a walk to the stop across the road. The same holds at the destination.
+- **Walking the whole way** is offered when the two ends are one walking link apart, or two points within the walking limit. It is labelled `walk`.
+- **The journey's departure is the time asked for,** not the latest time the passenger could leave and still catch the first vehicle. Waiting at the first stop counts as waiting.
+- **Walks from a point** use the walking speed and detour factor without the fixed 30 seconds, as section 6.3 says.
+
+### Not done in phase 2
+
+- The simulator's request options (section 4.4): a query can start from a given stop at a given time, but blocked boardings are left for phase 4, where they are first needed.
+- A minimum time to change at one stop. A change at the same stop takes no time.
+- Leaving a mode out per request (question 15).
+
+## 17. Quality and speed of results (15 Nov 2026)
+
+Done before phase 3, at the owner's request. Test journeys are now drawn only inside the Opal area: a rectangle from the Hunter and Newcastle in the north to Wollongong and Kiama in the south, west to the Blue Mountains (latitude -34.75 to -32.70, longitude 150.10 to 151.85). Each end is a stop picked in proportion to how many times a vehicle calls there in the day, and departure times lean towards the two peaks, as section 10.2 asks. `npm run router:route -- "-ProuteArgs=--random 3000"` runs it; `--within <km>` limits how far apart the ends are, `--show <n>` prints journeys to read, `--area all` goes back to the whole state.
+
+### Quality: what was wrong and what changed
+
+Found by reading sample journeys. Each has a test on the hand-made feed.
+
+| Problem | Change |
+|---|---|
+| A journey was shown leaving at the time asked for, then waiting at the first stop, sometimes for hours. | The journey now leaves as late as it can. Working back from the last ride, each earlier ride moves to the latest trip of the same pattern that still makes the connection, and the first walk is timed to meet the first vehicle. Arrival is unchanged. On average the passenger can leave 7 minutes after the time asked for. |
+| Alternatives with fewer changes were offered however much slower they were. One waited over four hours to save a change. | An alternative is offered only if it arrives no more than 30 minutes later for each ride it saves (a setting). |
+| The fastest journey was always first, even when it used two more vehicles to save a minute. | The result names a recommended journey: the fastest, unless one with fewer boardings is within 5 minutes per boarding saved (a setting). It differs from the fastest in about 14% of journeys. |
+| Walking links were missing at the largest interchanges, because of the limit of 40 per stop. A journey to Central's Railway Square left the metro at Martin Place for two buses instead of riding to Central and walking. | The limit is now 150. No stop reaches it (the most is 54), so nothing is cut. That journey now arrives 6 minutes sooner with two fewer vehicles. |
+| School buses could not be left out. They are in about 7% of recommended journeys. | A query can avoid kinds of vehicle (`--avoid school_bus`). A pattern now holds one kind of vehicle only, so avoided patterns are skipped whole. They are still included by default: see the question below. |
+| Two stops of one "station" 667 km apart were linked. | Fixed earlier: stops of one station more than 1 km apart are not linked as one. |
+
+Not changed: journeys are still the earliest arrival for each number of rides. Nothing prefers less walking, or one mode over another, beyond the rules above.
+
+**Question for the owner (extends question 15):** should school buses be left out unless asked for? The default is still to include them, as question 15 says.
+
+### Speed
+
+Measured on the development machine (6 cores, 256 KB of fast cache per core, other programs running). 3,000 test journeys per row; each timed four times and the quickest kept; then all run together on 6 threads.
+
+| Test journeys | Asked time to arrival | Median | 95th percentile | Per second, 1 thread | Per second, 6 threads |
+|---|---|---|---|---|---|
+| Ends within 10 km | 48 min | 0.80 ms | 4.7 ms | 702 | 1,941 |
+| Ends within 25 km | 72 min | 3.05 ms | 11.3 ms | 245 | 683 |
+| Any two stops in the area | 123 min | 8.28 ms | 18.6 ms | 114 | 326 |
+
+Against section 10.3: the single-query targets (median under 10 ms, 95th percentile under 30 ms) are met on all three. The bulk target (over 1,000 a second on 8 threads) is met for journeys within 10 km and missed for longer ones. I have no tap data to say which row real trips resemble.
+
+What the work changed, on the same journeys: any two stops went from a median of 9.1 ms to 8.3 ms; ends within 25 km from 3.9 ms to 3.0 ms; ends within 10 km from about 1.0 ms to 0.8 ms. Those are modest gains for seven changes, all of which keep the answers exact (the brute-force check still passes):
+
+- board only at stops reached earlier in the previous round;
+- do not ride a trip again that an earlier round has already ridden from the same stop or before;
+- stop riding a trip once it is past the last stop worth boarding at and already later than the best arrival found;
+- skip stops and walks that are already later than the best arrival found;
+- stops numbered by map position, and the search's numbers for a stop, a pattern and a walking link each kept together, so they come from memory in fewer fetches.
+
+Why it is not faster: a search costs in proportion to how much of the network can be reached before the destination is. For a two-hour journey that is most of the Opal area: about 17,000 pattern scans, 26,000 improved arrivals and 190,000 walking links looked at. Six threads give about three times one thread, not six, which I take to be this machine's shared memory and not the code; I have not confirmed that on another machine.
+
+What would make long journeys much faster, none of it done:
+
+- A limit on how far ahead of the best-known arrival the search looks. Simple, but no longer exact for the fewer-changes alternatives.
+- Pruning by a lower bound on the time still needed to reach the destination. Needs a bound that is provably safe; straight-line distance over a top speed is not, because timetables have stops a zero-minute hop apart.
+- Range RAPTOR for bulk runs without capacity (already in phase 8).
+
+## 18. Compared with the TfNSW trip planner (15 Nov 2026)
+
+300 test journeys inside the Opal area (200 with ends within 25 km, 100 between any two stops) were asked of the TfNSW Trip Planner API for the same service day, Tuesday 17 Nov 2026, and compared with ours. To repeat it:
+
+```
+npm run router:route -- "-ProuteArgs=--random 200 --within 25 --seed 7 --dump data/router/compare/within25.jsonl"
+npm run router:compare -- data/router/compare/within25.jsonl
+```
+
+TfNSW's answers are kept beside the input, so a second run asks nothing again. The full report, journey by journey, is written beside it as `.report.txt`.
+
+**How the two were made comparable.** Both planners go between the map positions of two stops, not the stops themselves. Asked for a stop, TfNSW boards only at that stop: it answered some journeys hours late where a 300 m walk to a station would have done. Asked for a position, it snaps to the nearest street address and walks along paths, so its walks at the two ends differ from ours by a few minutes either way. Differences of a few minutes are therefore mostly noise.
+
+### What the comparison found wrong with ours, and the fix
+
+Our journeys changed vehicles at one stop with no time to spare: off one bus and onto another in the same second. In 769 changes at one stop in TfNSW's answers, none was under 2 minutes. **A change at one stop now takes at least 2 minutes** (`changeSecs`, a setting of the query; `--change <secs>` on the command line). A walk to another stop still takes the link's own time, and staying aboard a vehicle that runs on as another trip takes none. The search stays exact: the brute-force check now includes this rule and vehicles that run on, and passes on 10,000 queries. Speed is unchanged (median 3.2 ms within 25 km, 8.6 ms for any two stops).
+
+### Result, after the fix
+
+Our fastest arrival against the earliest of TfNSW's (it returns up to 6 journeys):
+
+| | Ends within 25 km | Any two stops |
+|---|---|---|
+| Both planners answer | 198 of 200 | 99 of 100 |
+| Arrive within a minute of each other | 85 (43%) | 41 (41%) |
+| Ours arrives sooner | 102 (52%), median 4 min | 51 (52%), median 3 min |
+| TfNSW arrives sooner | 11 (6%), median 6 min | 7 (7%), median 12 min |
+| One of ours uses exactly the vehicles of one of TfNSW's | 94 (47%) | 37 (37%) |
+| Only TfNSW answers | 2 | 1 |
+
+Before the fix, 38% of the first set arrived within a minute.
+
+**Where TfNSW arrives sooner (18 journeys).** Read one by one; every one has one of these causes, none a fault of the search:
+
+- TfNSW walks further than our limits: up to 1.5 km at an end (ours: 800 m), 670 m between two stops (ours: 400 m), and 1.7 km instead of riding at all.
+- On-demand services (for example D400 around Concord), which are not in the timetable feed.
+- TfNSW allows less time for some walks between stops than our rule does (186 m from a York St stand to a Town Hall platform in 3 minutes; ours needs just under 4).
+
+**Where ours arrives sooner (153 journeys).** By the first cause that fits:
+
+| Cause | Within 25 km | Any two stops |
+|---|---|---|
+| Same vehicles as one of TfNSW's; only the walking at the ends differs | 43 | 20 |
+| Ours changes more often than TfNSW's | 11 | 11 |
+| Ours makes a change on foot with under a minute to spare | 24 | 9 |
+| Ours rides a school bus | 1 | 1 |
+| None of these | 23 | 10 |
+
+- **Walking pace.** TfNSW walks at a median of 1.03 m/s along the path (2,661 walks of 200 m or more). Ours walks at 1.2 m/s along 1.3 times the straight line. The path lengths agree well; the pace does not, so our walks are about 15% quicker. That is most of the first and third rows.
+- **Fewer changes.** TfNSW does not return the earliest arrival; it prefers fewer changes. Our recommended journey (2.67 rides on average in the first set) is closer to its habit than our fastest (2.91); TfNSW's earliest averages 2.85.
+- **TfNSW misses journeys.** In several cases it answers an hour or more later than a journey of ours that replays correctly against the timetable (for example Gorokan to Green Point at 08:34: ours by bus and train arrives 10:10, TfNSW's first arrives 11:04). TfNSW is a sanity check, not the truth.
+
+### Questions for the owner
+
+1. **Walking pace:** stay at 1.2 m/s, or match TfNSW's 1.03 m/s? Slower walking makes changes on foot less tight and brings the two planners closer. It is a setting; changing it rebuilds the walking links.
+2. **Walk limits:** 800 m at the ends and 400 m between stops now. TfNSW goes to about 1.5 km and 670 m. Longer limits cost speed.
+3. **On-demand services** are not in the feed, so no journey uses them. Noted, not fixable from the timetable.
+
+### Owner's answers, and the comparison again (15 Nov 2026)
+
+The owner answered the three questions and the school-bus question of section 17:
+
+| Setting | Was | Now |
+|---|---|---|
+| Walking pace | 1.2 m/s | 1.03 m/s, TfNSW's |
+| Walk to the first stop or from the last, straight line | 800 m | 1,200 m (about 1.5 km on the ground with the 1.3 detour) |
+| Walk between two stops, straight line | 400 m | 500 m (about 650 m on the ground) |
+| School buses | used | left out unless a query asks (`--avoid none`) |
+
+The limits are straight-line figures chosen so that, with the detour, they match the longest walks TfNSW offered. Walking links went from 598,000 to 859,000 (the most at one stop is 68) and the timetable from 57 MB to 80 MB.
+
+The same 300 journeys again:
+
+| | Ends within 25 km | Any two stops |
+|---|---|---|
+| Arrive within a minute of each other | 87 (44%) | 41 (41%) |
+| Ours arrives sooner | 86 (43%), median 3 min | 46 (46%), median 3 min |
+| TfNSW arrives sooner | 25 (13%), median 3 min | 12 (12%), median 15 min |
+| One of ours uses exactly the vehicles of one of TfNSW's | 109 (55%) | 38 (38%) |
+| Rides on average: ours recommended, TfNSW's earliest | 2.56, 2.85 | 3.20, 3.40 |
+| Walking on average: ours fastest, TfNSW's earliest | 16.3 min, 9.9 min | 17.3 min, 10.4 min |
+
+What moved, and why:
+
+- **Ours arrives sooner less often** (153 journeys down to 132). The slower pace removed most of the head start our walks had.
+- **TfNSW arrives sooner more often** (18 up to 37). Eight of the 37 are journeys where TfNSW rides a school bus, which ours now leaves out; eight use on-demand services; most of the rest are the same vehicles with our walk now a minute or three longer than TfNSW's.
+- **The same vehicles more often** in the shorter set (94 up to 109).
+- **Ours walks more**: about 16 minutes a journey against TfNSW's 10. The search still takes the earliest arrival, and with longer limits a long walk to a faster line often wins. Nothing yet prefers less walking; that would be a new preference, like the one for fewer changes.
+
+Speed, 3,000 journeys each: median 2.9 ms and 95th percentile 10.9 ms within 25 km (726 a second on 6 threads); 8.2 ms and 18.3 ms for any two stops (331 a second). Leaving out school buses pays for the longer walks. All 6,000 journeys replay against the timetable.
+
+### Preferring less walking (15 Nov 2026)
+
+At the owner's request the recommended journey now prefers less walking. Two parts, both settings in `Preferences`:
+
+- **Walking costs double.** The recommended journey is the one with the lowest cost: arrival time, plus 5 minutes per vehicle boarded, plus the time walked again (`walkCostPercent` 100).
+- **A second search with shorter walks.** The search finds the earliest arrival for each number of rides, and those often walk a long way to a faster line, so there was nothing with less walking to choose. The router now searches again allowing at most 10 minutes' walk at each end and 4 minutes between stops, and offers the best of that search, labelled `lessWalking`, if its cost is lower than everything from the first. The second search is skipped when no journey of the first walks further than that. The fastest journey is still listed first.
+
+The 100%, 10 minutes and 4 minutes are my choices, not sourced values.
+
+The same 300 journeys, our recommended journey against the earliest of TfNSW's:
+
+| | Ends within 25 km | | Any two stops | |
+|---|---|---|---|---|
+| | Before | Now | Before | Now |
+| Walking in our recommended journey (TfNSW's: 9.9 and 10.4 min) | 16.9 min | 11.7 min | 18.3 min | 14.4 min |
+| Rides in our recommended journey (TfNSW's: 2.85 and 3.40) | 2.56 | 2.75 | 3.20 | 3.35 |
+| Arrive within a minute of each other | 77 (39%) | 82 (41%) | 36 (36%) | 40 (40%) |
+| Ours arrives sooner | 80 (40%) | 74 (37%) | 44 (44%) | 39 (39%) |
+| TfNSW arrives sooner | 41 (21%) | 42 (21%) | 19 (19%) | 20 (20%) |
+| Recommended uses exactly the vehicles of one of TfNSW's | 92 (46%) | 84 (42%) | 33 (33%) | 31 (31%) |
+| Recommended is the one that walks less | none | 71 | none | 31 |
+
+Walking and rides moved to TfNSW's figures and arrival times agree a little more often. The exact-same-vehicles count fell slightly: with less walking ours often rides one more short bus where TfNSW walks a middling distance. Our fastest journey is unchanged, so the earlier table for it still holds.
+
+**Speed got worse**, because about a third of queries now run two searches:
+
+| | Median | 95th percentile | Per second, 6 threads |
+|---|---|---|---|
+| Ends within 25 km | 4.2 ms (was 2.9) | 18.7 ms (was 10.9) | 458 (was 726) |
+| Any two stops | 11.8 ms (was 8.2) | 33.3 ms (was 18.3) | 191 (was 331) |
+
+The any-two-stops set now misses the single-query targets of section 10.3 (10 ms and 30 ms); the within-25 km set still meets them. A caller that does not need the walking preference, such as a bulk run, passes `new Preferences(300, 1800)` and gets the one search at the old speed. All 6,000 journeys replay against the timetable.
+
+### The second search is off unless asked for (15 Nov 2026)
+
+The owner chose speed: keep the longer walks and do not pay for the second search. `Preferences.defaults()` now runs the one search; walking still counts double when choosing among the journeys that search finds, which costs no time. `Preferences.lessWalking()` turns the second search on for a caller that wants it.
+
+The same 300 journeys, our recommended journey against the earliest of TfNSW's:
+
+| | Ends within 25 km | | | Any two stops | | |
+|---|---|---|---|---|---|---|
+| | No walking preference | Walking counts double (now) | With second search | No walking preference | Walking counts double (now) | With second search |
+| Walking in our recommended journey (TfNSW's: 9.9 and 10.4 min) | 16.9 min | 15.8 min | 11.7 min | 18.3 min | 17.2 min | 14.4 min |
+| Rides in our recommended journey (TfNSW's: 2.85 and 3.40) | 2.56 | 2.64 | 2.75 | 3.20 | 3.24 | 3.35 |
+| Arrive within a minute of each other | 77 | 82 | 82 | 36 | 38 | 40 |
+| Ours arrives sooner | 80 | 82 | 74 | 44 | 44 | 39 |
+| TfNSW arrives sooner | 41 | 34 | 42 | 19 | 17 | 20 |
+| Recommended uses exactly the vehicles of one of TfNSW's | 92 | 90 | 84 | 33 | 34 | 31 |
+
+Without the second search the recommended journey walks about a minute less than with no preference at all, not five: the one search rarely finds a journey with less walking to choose.
+
+Speed, 3,000 journeys each, 6 threads: median 3.4 ms and 95th percentile 12.8 ms within 25 km (561 a second); 8.9 ms and 20.1 ms for any two stops (308 a second). Both sets meet the single-query targets of section 10.3 again. These runs came out 10 to 20% slower than the same search measured earlier in the day (2.9 and 10.9 ms; 8.2 and 18.3 ms); the search code is the same, so I take that to be the machine and have not looked further. All 6,000 journeys replay against the timetable.
+
+## 19. Phase 3 findings (17 Nov 2026)
+
+Phase 3 is built: `router-server` loads, reloads and unloads timetables over HTTP, reports on them, and plans one journey per request. `npm run router:dev` starts it. The requests and answers are described in `services/router/README.md`. Of the endpoints in section 8.1, the bulk, load-state and road ones are not built; they belong to phases 4 and 6.
+
+### How it was checked
+
+| Check | Result |
+|---|---|
+| Tests over HTTP on a hand-made feed | 20 tests: health, metadata, a journey with a change, from a point, from a station, a summary, no journey, requests that cannot be read, 200 journeys at once, load by path, by URL and by upload, a reload, a reload that fails, journeys asked throughout 12 reloads, unloading, and dropping the timetable used longest ago. All pass. |
+| The real weekday, by path | Loaded in 1.2 s from the snapshot. Counts match section 15 (59,014 trips; 2,001,666 stop times; 89,444 stops). Central to Bondi Junction at 07:45 is one train, as from the command line. |
+| The real weekday, uploaded | The 179 MB zip arrived in 1 s and was built in 3.0 s. |
+| Reloading under load | 6,000 journeys asked 6 at a time while the weekday was reloaded 9 times, with a second copy of the weekday also held, inside the 768 MB heap. Every request was answered, and no build failed. |
+
+### Speed over HTTP
+
+The saved test journeys of section 18, asked stop to stop on the development machine, with the stops each ride passes in the answer. One run each; other programs were running.
+
+| Test journeys | Asked | Median | 95th percentile | Per second | Search alone, median |
+|---|---|---|---|---|---|
+| Ends within 25 km | one at a time | 4.6 ms | 10.8 ms | 192 | 2.8 ms |
+| Ends within 25 km | 6 at once | 7.2 ms | 20.3 ms | 678 | 4.5 ms |
+| Any two stops | one at a time | 8.9 ms | 17.4 ms | 107 | 7.5 ms |
+| Any two stops | 6 at once | 15.3 ms | 32.5 ms | 365 | 13.0 ms |
+
+HTTP and JSON add about 1.5 to 2 ms to each journey. Asked one at a time, both sets meet the single-query targets of section 10.3. About 3% of these journeys have no answer; they did when asked between map positions in section 18, so the likely reason is stops that only school buses serve, which are now left out. I have not checked.
+
+### What differs from the plan
+
+- **Each timetable has its own planning threads.** Section 9 has one fixed pool. A search keeps about 16 MB of working memory per thread per timetable, held by the thread, and it is only given back when the thread ends. So a timetable's threads end when it is unloaded or replaced; journeys already being planned on it finish first.
+- **One build at a time.** A build is the most memory the service uses. A second load request for an id that is still building is refused (`409`); for another id it waits its turn.
+- **`position`, not `sequence`.** Section 8.2 gives each boarding and alighting stop its `stop_sequence`. The timetable does not keep that number, so the answer gives the stop's place in the trip, counting from 0.
+- **More in a request than section 8.2 lists:** `avoid`, `changeSecs` and `lessWalking`, for the settings added in sections 17 and 18. `timetable` may be left out when one is loaded.
+- **More in an answer:** `recommended` (which journey to suggest), `changes`, and `routeId` beside the route's name.
+- **A `stop` that names a station is taken as the station.** Most "stations" in this feed are a single bus stop (section 15), and a caller with an id cannot tell which it holds.
+- **The version is whatever the caller says it is.** The router does not work out the key of section 6.5; the Node API will, in phase 7. Left out, it is the time of the request.
+- **Old snapshots of fetched and uploaded zips are removed** when a newer one is built for the same id. Snapshots of zips loaded by path are still never removed.
+- **`ROUTER_LOAD`** loads timetables at start. The plan did not have it.
+
+### Not done in phase 3
+
+- **The Docker image was not built or run.** Docker was not running on the development machine. The `Dockerfile` and `docker-compose.yml` were changed for the data folder and are untested.
+- No access control (question 14). The load request reads any file the service can read and fetches any URL it is given.
+- A request for capacity mode `check` or `assign` is refused (`501`) until phase 4.
+- A journey whose caller goes away is still planned to the end.
+- The export without shapes (section 6.1) is not built, so loading by URL from the editor still waits two to five minutes for the export.
+
+## 20. Phase 4 findings (17 Nov 2026)
+
+Phase 4 is built: load states, the capacity switch (`off`, `check`, `assign`) on one journey and on many, the bulk endpoint, and the load-state endpoints. The requests and answers are described in `services/router/README.md`. Of the endpoints in section 8.1 only the two road ones remain.
+
+### How it was checked
+
+| Check | Result |
+|---|---|
+| Brute-force reference with full vehicles | 15,000 random queries on 600 small random timetables, with trips full for all or part of their run, groups of 1 to 3, trips counted full at 90% in a quarter of queries, and up to 3 refused boardings. The search and the simple search agree on the earliest arrival for every limit on rides, and on whether a passenger is stranded. Every journey replays, including that each vehicle boarded had room. |
+| `check` with empty loads equals `off` | 5,000 random queries on random timetables give the same journeys. On the real weekday, 3,000 journeys (the 300 saved test journeys of section 18, ten times) give the same arrival in every one. |
+| Capacity cases on a hand-made line | A full trip is passed over and the next taken; a trip full for part of its run is full only there; a group needs room for all of it; a passenger is stranded when everything is full; a refused boarding is not taken again; a passenger who does not fit further along is routed again. |
+| Assignment | On 40 random timetables with 600 groups of 3 each: no trip is ever over capacity anywhere, and one thread and eight give the same journeys, tries and loads. |
+| Assignment on the real weekday | 6,000 requests of 5 passengers, twice, on two empty load states: the same answers and the same 19,739 loads, none over capacity. |
+| Over HTTP | 12 more tests: load states made, listed, read back as CSV and deleted; a CSV that cannot be read; `check`, `stranded`, `blocked`, `assign`; the bulk stream in each mode; the bulk limit; a bulk run whose caller goes away; a reload discarding load states. 32 server tests in all, all passing. |
+
+### Speed, roughly
+
+Not the benchmark of section 10.2, which is phase 5. One bulk request each on the development machine, with other programs running; the 300 saved test journeys repeated. Runs of the same thing varied by 10 to 15%.
+
+| Run | Per second |
+|---|---|
+| `off`, 3,000 journeys, three runs | 706, 733, 637 |
+| `check` on empty loads, the same journeys, run alternately with those | 654, 621, 578 |
+| `check` on the loads the assignment below left | 546 against 569 for `off` just before; 386 against 410 |
+| `assign`, 6,000 requests of 5 passengers | 257 |
+
+- **`check` on empty loads is about 11% slower than `off`** (the target of section 10.3 is under 10%). Part of that is reporting crowding on every ride, not the search.
+- **`check` on realistic loads was about 5% slower than `off`**, inside the 30% target.
+- **`assign` ran at 257 a second, under the target of 500.** A third of the requests (1,987) were routed again, one at a time, because the test puts 100 passengers on one pair of stops at one moment and a bus holds 65. 120 requests were stranded. Demand shaped like real travel should re-route far less; phase 5's demand generator will say.
+
+### What differs from the plan
+
+- **A passenger who does not fit is routed again at once,** against the loads as they then stand, not held back to be routed with the others who did not fit. The second try then nearly always fits, and the answer is still the same for any number of threads.
+- **A CSV of loads gives `position`, not `stop_sequence`:** the stop's place in the trip, counting from 0. The timetable does not keep `stop_sequence` (section 19).
+- **A bulk line carries one journey,** the recommended one, and no alternatives. `detail` is `summary` in a bulk request unless it says otherwise.
+- **In `off` and `check` the lines are in the order asked,** which section 8.3 did not promise.
+- **A query that cannot be planned does not fail the request.** It gets a line with `"status": "error"`.
+- **The body of a bulk request is read a query at a time,** so 200,000 queries do not have to be held as text. The answers are not held at all.
+- **`group` and `blocked` are accepted on a single journey too.** `blocked` is the simulator's option of section 4.4; it names a trip and a stop.
+- **Stay-aboard under load.** A passenger aboard a vehicle that runs on as another trip stays aboard even if that trip is full for anyone boarding. The plan did not say. It makes those patterns slower to search with loads, because a later trip with room only further along may be the only way onto a full onward trip; 1,076 of the weekday's 59,014 trips run on.
+- **`stranded` costs a second search.** When loads leave no journey, the search runs again without them to tell `stranded` from `noJourney`.
+- **A timetable holds at most 8 load states,** each 8 MB for the weekday.
+
+### Not done in phase 4
+
+- The optional second pass of section 4.2 (empty the loads and assign everyone again until routes settle). The plan recommends leaving it until the simulator shows a need.
+- Crowding as a penalty (section 4.3). `fullAt` is the "comfortable capacity" option of that section.
+- Load states are kept in memory only. They are lost when the service stops or the timetable is reloaded.
+- A bulk request is answered while the caller waits. Jobs (submit, poll, download) are phase 8.
+- The Docker image is still not built or run.
+- One suspicion not followed up, in the search without loads: when a vehicle runs on twice in a row (three trips in one block), the search may offer staying aboard a trip the passenger could not have been on. The brute-force check has not caught it in 10,000 queries, and the weekday has no block of more than two trips.
