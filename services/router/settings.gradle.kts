@@ -11,6 +11,7 @@ include(
     "router-core",
     "router-gtfs",
     "router-road",
+    "router-sim",
     "router-server",
     "router-bench",
 )

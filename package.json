@@ -27,6 +27,8 @@
     "router:route": "cd services/router && .\\gradlew -q :router-gtfs:route",
     "router:compare": "node services/router/tools/compare-tfnsw.mjs",
     "router:dev": "cd services/router && .\\gradlew :router-server:run",
+    "router:demand": "cd services/router && .\\gradlew -q :router-sim:demand",
+    "router:simulate": "cd services/router && .\\gradlew -q :router-sim:simulate",
     "router:bench": "cd services/router && .\\gradlew :router-bench:jmh",
     "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport"
   },

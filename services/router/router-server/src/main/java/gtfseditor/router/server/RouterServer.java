@@ -38,8 +38,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The router's HTTP service: health, loading and unloading timetables, their metadata, and one
- * journey at a time or many, and load states. See section 8 of docs/router-plan.md. Road routing
- * is not built.
+ * journey at a time or many, load states, and simulation runs as jobs. See section 8 of
+ * docs/router-plan.md and section 5.1 of docs/simulator-plan.md. Road routing is not built.
  */
 public final class RouterServer implements AutoCloseable {
 
@@ -51,6 +51,7 @@ public final class RouterServer implements AutoCloseable {
     private final Settings settings;
     private final Timetables timetables;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final Simulations simulations;
     private final Javalin app;
 
     public static void main(String[] args) {
@@ -76,6 +77,7 @@ public final class RouterServer implements AutoCloseable {
     public RouterServer(Settings settings) {
         this.settings = settings;
         this.timetables = new Timetables(settings);
+        this.simulations = new Simulations(settings, timetables, mapper);
         this.app = Javalin.create(config -> {
             config.startup.showJavalinBanner = false;
             config.routes.get("/v1/health", this::health);
@@ -89,6 +91,11 @@ public final class RouterServer implements AutoCloseable {
             config.routes.post("/v1/timetables/{id}/loads", this::createLoads);
             config.routes.get("/v1/timetables/{id}/loads/{name}", this::loads);
             config.routes.delete("/v1/timetables/{id}/loads/{name}", this::deleteLoads);
+            config.routes.post("/v1/simulations", this::simulate);
+            config.routes.get("/v1/simulations", this::listSimulations);
+            config.routes.get("/v1/simulations/{id}", this::simulation);
+            config.routes.get("/v1/simulations/{id}/files/{name}", this::simulationFile);
+            config.routes.delete("/v1/simulations/{id}", this::deleteSimulation);
             config.routes.exception(ApiException.class,
                     (e, ctx) -> ctx.status(e.status()).json(error(e.getMessage())));
             config.routes.exception(JsonProcessingException.class,
@@ -111,6 +118,7 @@ public final class RouterServer implements AutoCloseable {
     @Override
     public void close() {
         app.stop();
+        simulations.close();
         timetables.close();
     }
 
@@ -436,6 +444,41 @@ public final class RouterServer implements AutoCloseable {
                         error(e.getMessage() == null ? e.toString() : e.getMessage())));
                 ctx.res().getOutputStream().write(10);
             }
+        }
+    }
+
+    // ---- simulation runs
+
+    private void simulate(Context ctx) throws IOException {
+        ctx.status(202).json(simulations.submit(mapper.readTree(ctx.body())));
+    }
+
+    private void listSimulations(Context ctx) {
+        ctx.json(JSON.objectNode().<ObjectNode>set("simulations", simulations.list()));
+    }
+
+    private void simulation(Context ctx) {
+        ctx.json(simulations.view(ctx.pathParam("id")));
+    }
+
+    /** One result file, as it lies on disk: the summary as JSON, the rest as gzipped CSV. */
+    private void simulationFile(Context ctx) throws IOException {
+        Path file = simulations.file(ctx.pathParam("id"), ctx.pathParam("name"));
+        ctx.status(200).contentType(file.getFileName().toString().endsWith(".json")
+                ? "application/json" : "application/gzip");
+        ctx.header("Content-Length", Long.toString(Files.size(file)));
+        try (InputStream in = Files.newInputStream(file)) {
+            in.transferTo(ctx.res().getOutputStream());
+        }
+    }
+
+    /** Stops a run that is waiting or running (202, with the run), or discards one that has ended (204). */
+    private void deleteSimulation(Context ctx) {
+        ObjectNode stopped = simulations.delete(ctx.pathParam("id"), "true".equals(ctx.queryParam("force")));
+        if (stopped == null) {
+            ctx.status(204);
+        } else {
+            ctx.status(202).json(stopped);
         }
     }
 

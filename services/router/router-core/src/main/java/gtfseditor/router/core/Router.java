@@ -232,7 +232,17 @@ public final class Router {
                 Math.min(maxRides, this.maxRides), directSecs, directMetres, DEFAULT_AVOID, changeSecs);
     }
 
-    private int pointWalkSecs(double metres) {
+    /**
+     * The stops within a distance of a point and the walk to each, in stop order: what a query from
+     * that point starts from. For callers that build a {@link Query} themselves, as the simulator
+     * does to keep a passenger to their own stop or to let them use any stop near it.
+     */
+    public List<Access> near(double lat, double lon, double maxWalkMetres) {
+        return List.copyOf(reach(new Place.Point(lat, lon), true, maxWalkMetres).values());
+    }
+
+    /** Seconds to walk between a point and a stop this far apart in a straight line. */
+    public int pointWalkSecs(double metres) {
         TransferSettings s = t.transferSettings;
         return (int) Math.ceil(metres * s.detourFactor() / s.walkMetresPerSec());
     }

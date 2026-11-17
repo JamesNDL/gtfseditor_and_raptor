@@ -30,7 +30,7 @@ Remaining work, roughly in order:
 4. The journey router: a standalone Java RAPTOR service, capacity aware with a switch, with bulk and road-routing endpoints. Planned in `docs/router-plan.md`. Phases 0 and 1 of that plan are built: `services/router` is a Gradle project of five modules. It loads the exported weekday zip into memory in about 4 seconds (59,014 trips, 57 MB), saves a snapshot, and plans journeys from the command line (`npm run router:route`); the search agrees with a brute-force check. On test journeys inside the Opal area it meets its single-query speed targets (median 8 ms for any two stops, under 1 ms within 10 km) and meets the bulk target only for short journeys; journeys leave as late as they can, slow alternatives are dropped and one journey is recommended. Its server (port 3002, `npm run router:dev`) loads, reloads and unloads timetables, plans one journey per request (`POST /v1/journeys`) or many (`POST /v1/journeys/bulk`), and keeps named load states so that a request can ignore how full vehicles are, respect it, or respect it and add its passengers (`off`, `check`, `assign`); the editor does not call it yet. Every vehicle capacity is still a placeholder. There is no road routing, and its Docker image has not been rebuilt since the endpoints were added. The plan has 16 questions for the owner, each with a default.
 5. Data: real vehicle capacities (all are placeholders), transfers between nearby stops, capacity on the map.
 6. Export and deployment: MobilityData validator, export progress, a self-hosted routing server, AWS, logins, shrinking the vehicle data, updating to a new feed while keeping scenarios.
-7. The passenger simulator: planned in `docs/simulator-plan.md` (18 Nov 2026), agreed with the owner section by section, nothing built. It sends a file of journeys through the timetable using the journey router, is started from the editor by a wizard, and shows results in the editor. Its build order is section 10 of that file (S0 to S6); the owner's decisions are in its section 12 and the open questions, each with a default, follow them.
+7. The passenger simulator: planned in `docs/simulator-plan.md` (18 Nov 2026), agreed with the owner section by section. It sends a file of journeys through the timetable using the journey router, is started from the editor by a wizard, and shows results in the editor. Its build order is section 10 of that file (S0 to S6). Phases S0 (demand files), S1 (the simulator itself, run from the command line with results as files) and S2 (runs as jobs on the router service: submit, follow, collect, stop) are built in `services/router/router-sim` and `router-server`; what was measured is in sections 14 and 15 of that file. Nothing of it is in the editor yet: the next phase is S3, the editor's back end. The owner's decisions and answers are in its section 12, and no question is open.
 8. Later, as planned: the interchange file, track-level conflicts.
 
 Things a new session needs to know:
@@ -68,7 +68,7 @@ Things a new session needs to know:
 | Users | The organisation. One editor per scenario; others view or branch a copy |
 | Output | Valid GTFS, with non-GTFS data in separate files alongside |
 | Hosting | Local Docker first, AWS eventually |
-| Deferred | Interchange file, track-level conflicts (Level 2), feed rebasing, the passenger simulator |
+| Deferred | Interchange file, track-level conflicts (Level 2), feed rebasing. (The passenger simulator was deferred here; it is now planned and partly built, see "next" item 7.) |
 
 ## Architecture
 

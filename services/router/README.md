@@ -7,7 +7,8 @@ A standalone Java service that will answer journey queries on a GTFS timetable. 
 on it (plain RAPTOR). It can respect how full the vehicles are, and add the passengers it routes to
 them. Journeys can be planned from the command line or over HTTP: the service loads, reloads and
 unloads timetables, keeps named load states, and answers one journey per request or many. Road
-routing is not built, and the editor does not call the service yet.
+routing is not built, and the editor does not call the service yet. The passenger simulator
+(`router-sim`) runs from the command line and as jobs on the service: see "The passenger simulator" below.
 
 ## Requirements
 
@@ -24,6 +25,8 @@ Run these from `services/router`. On Windows use `.\gradlew`; elsewhere use `./g
 | Run the tests only | `.\gradlew test` |
 | Load a GTFS zip and report counts, time and memory | `.\gradlew -q :router-gtfs:loadTimetable` |
 | Start the service (see "The service" below) | `.\gradlew :router-server:run` |
+| Make up or check a demand file (see "The passenger simulator") | `.\gradlew -q :router-sim:demand` |
+| Run a simulation | `.\gradlew -q :router-sim:simulate` |
 | Run the benchmarks (a placeholder for now) | `.\gradlew :router-bench:jmh` |
 | Stop the background build process | `.\gradlew --stop` |
 
@@ -50,6 +53,7 @@ $env:ROUTER_LOAD = "b1=data/exports/check/export.zip"; npm run router:dev
 | `POST /v1/timetables/{id}/loads` | Make a load state: empty, or from a CSV of loads. |
 | `GET /v1/timetables/{id}/loads/{name}` | One load state's totals, or with `?format=csv` every load above 0. |
 | `DELETE /v1/timetables/{id}/loads/{name}` | Discard a load state. |
+| `POST`, `GET`, `DELETE /v1/simulations...` | Simulation runs as jobs; see "Runs on the service" below. |
 
 An id is the caller's choice: up to 64 letters, digits, dots, dashes or underscores, for example
 `b1` or `b1-s7`. An error is a `4xx` or `5xx` status with `{"error": "..."}`.
@@ -277,6 +281,174 @@ Assignment.run(router, requests, Preferences.defaults(),      // many at once, a
         Assignment.Settings.of(CapacityMode.ASSIGN, loads), threads, (request, outcome) -> { });
 ```
 
+## The passenger simulator
+
+`router-sim` sends a file of journeys through a timetable and writes where the passengers ended up.
+The design is in [`docs/simulator-plan.md`](../../docs/simulator-plan.md); phases S0 (demand files)
+(the simulator, from the command line) and S2 (runs as jobs on the HTTP service) are built. The
+editor does not call it yet.
+
+### A demand file
+
+A CSV with a header row, one journey to a row. The columns may be in any order.
+
+| Column | Meaning | Needed |
+|---|---|---|
+| `user_id` | Who is travelling. Any text; one person may have several rows. | Yes |
+| `start_time` | When they tapped on at the origin: `HH:MM`, `HH:MM:SS` or seconds from the start of the service day; after midnight keep counting (`24:30`). | Yes |
+| `origin_stop`, `destination_stop` | GTFS stop or station ids. May be empty in a row that gives that end's position. | Yes |
+| `origin_lat`, `origin_lon`, `destination_lat`, `destination_lon` | Where each end is. Left out, the stop's own position on the published timetable is used. | No |
+| `journey_id` | The caller's id for the row. Left out, it is the row's number in the file, counting from 1. | No |
+| `people` | How many people the row stands for. | No, 1 |
+
+A value may be in double quotes but may not hold a line break. A file whose name ends in `.gz` is
+read and written packed.
+
+```
+npm run router:demand -- "-PsimArgs=check data/sim/demand/mine.csv --zip data/exports/check/export.zip"
+npm run router:demand -- "-PsimArgs=generate data/exports/check/export.zip --out data/sim/demand/made-up.csv.gz --journeys 100000"
+```
+
+`check` reads a file and reports the rows it refuses and why, the users, and the busiest hour; with
+`--zip` it also looks the stop ids up. `generate` makes a set up, for use until real journey data
+exists. A made-up set says nothing about real travel.
+
+| Option of `generate` | Meaning | If left out |
+|---|---|---|
+| `--journeys` | Rows to make. | 100000 |
+| `--seed` | The same seed gives the same set. | 1 |
+| `--area` | `all`, `opal`, `newcastle`, `sydney`, `wollongong`, or `south,west,north,east`. | `opal` |
+| `--within` | The furthest apart the two ends may be, in km; 0 for any distance. | 25 |
+| `--focus` | The power each stop's weight is raised to. At 1 a stop is picked in proportion to its service and hardly any two journeys share a pair of stops; at 2 the big stations take most of them. | 1 |
+| `--people` | How many people each row stands for. | 1 |
+
+Add `--snapshots data/router/snapshots` wherever a zip is named to load it in a second or two.
+
+### A run
+
+There are three kinds. Paths are relative to the repository root and must not contain spaces.
+
+```
+npm run router:simulate -- "-PsimArgs=data/exports/check/export.zip --demand data/sim/demand/made-up.csv.gz --out data/router/sim/bau --area newcastle"
+npm run router:simulate -- "-PsimArgs=data/exports/scenario-7.zip --bau data/router/sim/bau --out data/router/sim/s7"
+npm run router:simulate -- "-PsimArgs=data/exports/check/export.zip --from-plans data/router/sim/bau"
+```
+
+1. **A BAU run** (`--demand`): the published timetable. Everyone travels between the stops in the
+   data. It also works out each person's *margin*: how much better a nearby stop already was on the
+   day, which they did not use.
+2. **A scenario run** (`--bau <folder>`): another timetable, measured against a BAU run. It uses
+   that run's journeys, area, walking distance and time per change of vehicle. A person changes to
+   a stop nearby only if their own stop no longer gets them there, or the other is better by more
+   than their margin plus a threshold. One who would arrive too much later than on the published
+   timetable gives up and is put on no vehicle.
+3. **Capacity added** (`--from-plans <folder>`): puts the kept plans of either kind of run on the
+   vehicles again with capacity on, without planning again. The zip must be the one the run was
+   planned on. The results go in `<folder>/capacity` unless `--out` says otherwise.
+
+| Option | Meaning | If left out |
+|---|---|---|
+| `--area` | BAU only. Keep only journeys that start and end in this box. | `all` |
+| `--walk` | BAU only. How far people will walk to another stop, in metres in a straight line, 0 to 2000. | 500 |
+| `--change-penalty` | BAU only. Seconds a journey with one more vehicle must save to be taken. | 600 |
+| `--share` | BAU only. Simulate one row in this many, each standing for that many times its people. | 1 |
+| `--school-buses` | BAU only. Let people ride school buses. | left out |
+| `--threshold` | Scenario only. Seconds another stop must be better by, beyond the person's margin. | 600 |
+| `--give-up` | Scenario only. Seconds later than the BAU run a person accepts arriving, or `none`. | 3600 |
+| `--capacity` | A full vehicle leaves people behind, and they plan again from where they stand. | off |
+| `--full-at` | The share of its capacity at which a vehicle counts as full. | 1.0 |
+| `--left-behind` | A person left behind more often than this is stranded. | 5 |
+| `--threads` | Searches at once. | processor threads less 2 |
+| `--no-reuse` | Search for every row, even where an earlier search already answers it. Only for measuring. | reuse |
+| `--name` | A name for the run. | made from its choices |
+
+A run uses the task's 768 MB heap; `-PsimHeap=1500m` raises it. A run will not write into a folder
+that already holds one.
+
+Every run is planned with capacity off. With `--capacity`, where no trip is planned over its
+capacity nothing would change, and the run says so and skips the replay.
+
+### What a run writes
+
+| File | Holds |
+|---|---|
+| `summary.json` | Totals, the settings, the trips planned over capacity, time taken. Printed at the end of the run. |
+| `journeys.csv.gz` | One line per journey: status (`ok`, `noJourney`, `gaveUp`, `stranded`), times, rides, walking, waiting, times left behind, the BAU arrival and the difference, the margin, the stop used at each end and whether it is the person's own. A row of several people that a full vehicle split has a line for each `part`. |
+| `legs.csv.gz` | One line per walk, change or ride, with the trip and stops. |
+| `trip_loads.csv.gz` | Each trip at each stop where anything happened: boardings, alightings, passengers aboard on leaving, passengers left behind, capacity. `position` counts the trip's stops from 0. |
+| `stop_activity.csv.gz` | Each stop by quarter hour: boardings, alightings, changes between vehicles, passengers left behind, the most waiting at once. |
+| `plans.bin.gz` | The plans, kept for `--from-plans` and as the reference for scenario runs. |
+| `demand.csv.gz` | A BAU run only: the journeys it ran, each with its positions. Scenario runs read it from there. |
+| `run.properties` | What the run was, for the runs made from it. |
+
+Times in the files are seconds from the start of the service day. Every capacity in the editor's
+export is a placeholder for now, so "left behind" and "stranded" figures are illustrative.
+
+### Runs on the service
+
+The service runs the same three kinds of run as jobs. Its 768 MB heap holds a bounded run or a
+share of the demand; see `docs/simulator-plan.md` section 5.2 for a whole-network run.
+
+| Method and path | Purpose |
+|---|---|
+| `POST /v1/simulations` | Queue a run. Answers `202` at once with the run. |
+| `GET /v1/simulations` | Every run, with its state. |
+| `GET /v1/simulations/{id}` | One run: its state, progress while it runs, and when done its summary and file names. |
+| `GET /v1/simulations/{id}/files/{name}` | One result file of a finished run, as it lies on disk. |
+| `DELETE /v1/simulations/{id}` | Stop a run that is waiting or running (`202`), or discard one that has ended, files and all (`204`). |
+
+```
+curl -X POST localhost:3002/v1/simulations -H "Content-Type: application/json" -d "{\"timetable\":\"b1\",\"id\":\"bau-newcastle\",\"demand\":{\"path\":\"data/sim/demand/made-up.csv.gz\"},\"settings\":{\"area\":\"newcastle\"}}"
+curl -X POST localhost:3002/v1/simulations -H "Content-Type: application/json" -d "{\"timetable\":\"b1-s7\",\"bau\":\"bau-newcastle\"}"
+curl -X POST localhost:3002/v1/simulations -H "Content-Type: application/json" -d "{\"timetable\":\"b1\",\"fromPlans\":\"bau-newcastle\"}"
+curl localhost:3002/v1/simulations/bau-newcastle
+curl -o journeys.csv.gz localhost:3002/v1/simulations/bau-newcastle/files/journeys.csv.gz
+```
+
+| Field of the request | Meaning | If left out |
+|---|---|---|
+| `timetable` | The loaded timetable to run on. | The only one loaded. |
+| `demand` | `{"path": ..}` or `{"url": ..}`: a BAU run of that demand file. | One of these three is needed. |
+| `bau` | A run id: a scenario run against that BAU run, with its journeys and shared settings. | |
+| `fromPlans` | A run id: that run's kept plans with capacity on. The timetable must be the one it was planned on. | |
+| `id` | The run's id: 1 to 64 letters, digits, dots, dashes or underscores. | `run-<date>-<time>-<n>` |
+| `name` | A name for people. | Made from the choices. |
+| `settings` | See below. | The defaults. |
+
+| Setting | For | Default |
+|---|---|---|
+| `area` | BAU. A name (`newcastle`), `"all"`, or `{"south": .., "west": .., "north": .., "east": ..}`. | all |
+| `walkMetres`, `changePenaltySecs`, `shareOneIn`, `schoolBuses` | BAU. | 500, 600, 1, false |
+| `switchThresholdSecs`, `giveUpSecs` (`null` for no limit) | Scenario. | 600, 3600 |
+| `capacity` | BAU and scenario. | false |
+| `fullAt`, `maxLeftBehind` | Any run. | 1.0, 5 |
+
+A setting that this kind of run does not choose is refused, with the reason: a scenario run takes
+`walkMetres` from its BAU run and cannot be given another.
+
+- `state` is `queued`, `running`, `done`, `failed` (with `error`) or `stopped`. While `running`,
+  `progress` has the `stage` (`fetch`, `read`, `plan`, `replay`, `write`) and `done` of `total`. A
+  queued run says how many `runsAhead`.
+- One run at a time; the others wait their turn in the order they were asked for.
+- A run takes hold of its timetable when it is asked for and keeps it to the end. Reloading the
+  timetable meanwhile does not change the run; `timetableVersion` says which version it ran on.
+- The files are in `<ROUTER_DATA>/sim/<run id>/` and are the ones listed under "What a run writes".
+  `files/{name}` serves the result files and a BAU run's `demand.csv.gz`.
+- Finished runs are found again when the service starts, including runs made from the command line
+  into that folder. A run that failed or was stopped leaves no files and is forgotten at a restart.
+- A finished run that others were made from is not discarded unless `?force=true` is added: a
+  scenario run reads its BAU run's demand, and capacity is added from kept plans.
+
+From Java:
+
+```java
+try (Simulation simulation = new Simulation(new Router(timetable), demand, new SimSettings())) {
+    Plans plans = simulation.plan(null, Progress.NONE);            // null: a BAU run
+    Simulation.Outcome outcome = simulation.travel(plans, sink, Progress.NONE);
+}
+SimRun.bau(timetable, demand, report, settings, "BAU", folder, Progress.NONE);  // the same, with files
+```
+
 ## Settings
 
 | Environment variable | Default | Meaning |
@@ -310,7 +482,8 @@ options; the default limits the heap to 75% of the container's memory.
 | `router-core` | Timetable, snapshot, search, load states and bulk assignment. | Nothing, and it must stay that way. |
 | `router-gtfs` | GTFS zip loader, walking links, snapshot cache, the load and route commands. | `router-core` |
 | `router-road` | Road routing. Empty until phase 6. | `router-core` |
-| `router-server` | The HTTP service (Javalin). | The three above |
+| `router-server` | The HTTP service (Javalin). | The three above and `router-sim` |
+| `router-sim` | The passenger simulator: demand files, planning, the replay in time order, result files, and its commands. | `router-core`; `router-gtfs` for the commands |
 | `router-bench` | Benchmarks (JMH). | `router-core` |
 
 Library versions are in `gradle/libs.versions.toml`. The Gradle version is in

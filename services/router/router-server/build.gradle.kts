@@ -8,6 +8,7 @@ dependencies {
     "implementation"(project(":router-core"))
     "implementation"(project(":router-gtfs"))
     "implementation"(project(":router-road"))
+    "implementation"(project(":router-sim"))
     "implementation"(libs.javalin)
     "implementation"(libs.jackson.databind)
     "runtimeOnly"(libs.slf4j.simple)

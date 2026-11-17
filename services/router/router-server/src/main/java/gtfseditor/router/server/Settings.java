@@ -59,6 +59,11 @@ public record Settings(int port, int threads, int maxTimetables, Path data, Map<
         return data.resolve("snapshots");
     }
 
+    /** Where simulation runs keep their files, a folder for each. */
+    public Path sims() {
+        return data.resolve("sim");
+    }
+
     /** Where fetched and uploaded zips are kept. */
     public Path zips() {
         return data.resolve("zips");

@@ -1,6 +1,6 @@
 # Passenger simulator plan
 
-Written 17 Nov 2026. Nothing in this plan is built. It joins the two things that are: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
+Written 17 Nov 2026. Phases S0, S1 and S2 are built (18 Nov 2026): what was found, measured and done differently is in sections 14 and 15, and the rest is not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
 
 ## 1. Summary
 
@@ -19,7 +19,7 @@ Main recommendations:
 | In the editor | A short wizard to set up a run (section 7.1), a summary, passengers on the existing line, trip, station and timeline views, how full each vehicle is on the map, one person's journey by `user_id`, and two runs side by side. |
 | Not in the first version | Delays caused by crowds, people choosing differently because of crowding, a person's later journeys depending on their earlier ones. |
 
-Estimated size of the first usable version: about 6 to 8 weeks of focused work (phases S0 to S6 in section 10).
+Estimated size: about 5 to 6 weeks of focused work to the first usable version (phases S0 to S4 in section 10), and 6 to 8 weeks for everything to S6.
 
 ## 2. What exists, and what is missing
 
@@ -54,7 +54,7 @@ A CSV with a header row. One row is one journey.
 |---|---|---|
 | `user_id` | Who is travelling. Any text. One person may have several rows. | Yes |
 | `start_time` | When they tapped on at the origin stop: `HH:MM`, `HH:MM:SS` or seconds from the start of the service day. After midnight keep counting (`24:30`). | Yes |
-| `origin_stop`, `destination_stop` | GTFS stop or station ids, as in the editor's export. | Yes |
+| `origin_stop`, `destination_stop` | GTFS stop or station ids, as in the editor's export. | The columns, yes. A value may be left empty in a row that gives that end's position. |
 | `origin_lat`, `origin_lon`, `destination_lat`, `destination_lon` | Where each end is. Used in place of the stop's own position, and needed only for a stop id the published timetable does not have. | No |
 | `journey_id` | The caller's own id for the row. Left out, it is the row number. | No |
 | `people` | How many people the row stands for. They travel as individuals, not as a group that must fit together. Lets a 10% sample stand for everyone. | No, default 1 |
@@ -136,7 +136,7 @@ Every run is planned with capacity off, on all threads. Capacity never enters th
 2. **Capacity can be switched on afterwards without planning again.** The plans of a run are kept with its results. "Run again with capacity" replays them: seconds, plus planning again for whoever is left behind.
 3. **Where no trip is planned over its capacity, capacity changes nothing,** and the run with capacity on is the run with capacity off. Nobody can be refused on a trip that was never going to be full.
 
-Passengers who are left behind plan again without looking at loads (they do not know how full things are; section 4.4), so everyone left behind by the same vehicle at the same stop is planned again at once on all threads, and those going to the same place share one search. The answer stays the same whatever the number of threads.
+Passengers who are left behind plan again without looking at loads (they do not know how full things are; section 4.4), so everyone left behind in the same second is planned again at once on all threads, and those at the same stop going to the same place share one search. The answer stays the same whatever the number of threads.
 
 An idea set aside on 18 Nov: ignoring capacity until a set number of people are on the network. It is not needed, because planning never waits on capacity in this design.
 
@@ -152,14 +152,14 @@ An idea set aside on 18 Nov: ignoring capacity until a set number of people are 
 
 Two journeys are planned for each person on each timetable:
 
-- **Own stops:** from the stop they started at to the stop they went to, with no walking to another stop at either end.
+- **Own stops:** from the stop they started at to the stop they went to, with no walking to another stop at either end. Another stop under the same parent stop counts as their own (see "Parent stops" below).
 - **Any stop near:** from the position of the first to the position of the second, boarding and leaving at any stops within the walking distance, walking the rest. Their own stops are among these, at no walk, so this journey is never worse than the first.
 
 Each journey has a cost, worked out the way the router already does to recommend a journey: arrival time, plus 10 minutes for each vehicle boarded, plus the time walked counted again (accepted 18 Nov; to be adjusted later if needed).
 
 **People do not change vehicles to save a few minutes** (decided 18 Nov). The 10 minutes per vehicle is the owner's figure: a journey with one more change is taken only if it arrives more than 10 minutes sooner. It applies wherever journeys are scored: in choosing each person's recommended journey, on BAU and scenario runs alike, and in comparing their own stops with stops near. The journey planner's own default stays at 5 minutes; the simulator passes its figure with each search.
 
-1. **On the published timetable** the person takes the own-stops journey, because that is what they did. The difference in cost between the two journeys is their **margin**: how much better a nearby stop already was on the day, and they did not use it. It is 0 for most people and it is kept with the reference (below).
+1. **On the published timetable** the person takes the own-stops journey, because that is what they did. If there is none (nothing runs between their two stops after their start), they have no journey on the published timetable, whatever is nearby: nobody changes stop there. The difference in cost between the two journeys is their **margin**: how much better a nearby stop already was on the day, and they did not use it. It is 0 for most people and it is kept with the reference (below).
 2. **On a changed timetable** both are planned again. The person changes stop only if the any-stop-near journey now beats the own-stops journey by more than their margin plus a threshold (10 minutes by default). Otherwise they stay.
 3. **If the own-stops journey does not exist** on the changed timetable (the stop is gone, nothing calls there, or nothing from it reaches the destination), they take the any-stop-near journey if there is one.
 
@@ -191,13 +191,13 @@ What this gives:
 What follows, to be clear about:
 
 - **Planning takes about twice as long,** because each person is planned twice. Plans are shared between people with the same stops and times as before (section 5.2). To be measured in S1.
-- **Two runs are only comparable with the same three settings.** The comparison view warns when they differ.
-- **Parent stops** (answered 18 Nov). Any stop under the same parent stop counts as the person's own stop, at the walking times between them, so nobody is left on a platform their train no longer uses. In this feed 67,179 parents have one stop in use and 9,990 have two (section 15 of the router plan), so for most bus stops this changes nothing, and for some it lets a person use the other stop of the pair. Stops of one parent more than 1 km apart are not treated as one, as in the router.
+- **Two runs are only comparable on the same people and plans.** The walking distance and the time a change of vehicle must save decide each person's margin, so a scenario run takes them from its BAU run and they cannot differ (section 6.4). The threshold for changing stop, the give-up limit and capacity are chosen for each scenario run; the comparison view notes where two runs differ in them.
+- **Parent stops** (answered 18 Nov). Any stop under the same parent stop counts as the person's own stop, so nobody is left on a platform their train no longer uses. The stop in the data is used at no walk; another stop of the same parent is reached at the timetable's walking time between the two. A row that gives a station id may use any of the station's stops at no walk. In this feed 67,179 parents have one stop in use and 9,990 have two (section 15 of the router plan), so for most bus stops this changes nothing, and for some it lets a person use the other stop of the pair. Stops of one parent more than 1 km apart are not treated as one, as in the router.
 - **In the middle of a journey** nothing changes: a change between vehicles may walk up to 500 m between stops, and a person left behind by a full vehicle plans again from where they stand. The data says where the journey began and ended, not how it went in between.
 - **The margin is one day's evidence.** A person with a large margin (a much better stop nearby that they did not use) most likely lives or works nearer their own stop than its position suggests. The margin stands in for that, which is why it is kept, but it is a single number for a choice with more behind it.
 - **What is reported** for each journey: the reference arrival, the arrival now and the difference; the margin; whether they changed stop at each end, the stop used, how far they walked, and why (their stop was gone, or another was better). In the summary: how many people changed stop and for which reason, how many found no other stop within the distance, and how many gave up.
 
-**Change needed in the router.** Today a journey from a stop may begin with a walk to a stop nearby (section 16 of the router plan). The own-stops journey must not. The search already takes its starting and finishing stops as a list, so the simulator builds both lists itself: the one stop (or its station's platforms) with no walk, and the stops within the distance of the position. A stop the timetable has dropped is never looked up by id.
+**Change needed in the router.** Today a journey from a stop may begin with a walk to a stop nearby (section 16 of the router plan). The own-stops journey must not. The search already takes its starting and finishing stops as a list, so the simulator builds both lists itself: the one stop with no walk and the other stops of its parent at their walking times, and the stops within the distance of the position. A stop the timetable has dropped is never looked up by id.
 
 ### 4.7 The area of a run
 
@@ -236,13 +236,13 @@ Later, if wanted: keep journeys with one end inside, which needs whole trips kep
 | A separate service calling the router over HTTP | Could be written in any language. | Slower, and a million plans as JSON is a lot of text for no gain. |
 | In the Node API | Next to the database. | Wrong language for the arithmetic; the bulk endpoint would have to stream millions of journeys to it. |
 
-**Recommendation: the first.** `router-sim` depends on `router-core` only, so it is also usable as a library and from the command line (`npm run router:simulate`), with no service and no editor. `router-server` exposes it as jobs.
+**Recommendation: the first.** The simulator in `router-sim` needs only `router-core`, so it is usable as a library; the module also depends on `router-gtfs`, for its command line (`npm run router:simulate`), which has to load a zip. Neither needs the service or the editor. `router-server` exposes it as jobs.
 
 ### 5.1 Jobs on the router service
 
 | Method and path | Purpose |
 |---|---|
-| `POST /v1/simulations` | Start a run: the timetable id, where the demand file is (a path or a URL), and the settings. Answers at once with a run id. |
+| `POST /v1/simulations` | Start a run: the timetable id and the settings, and one of: where the demand file is (a BAU run), the BAU run to measure against (a scenario run), or the run whose kept plans to replay with capacity on. Answers at once with a run id. |
 | `GET /v1/simulations/{id}` | Stage, journeys done of how many, time so far, and at the end the summary. |
 | `GET /v1/simulations/{id}/files/{name}` | One result file. |
 | `DELETE /v1/simulations/{id}` | Stop a run, or discard a finished one. |
@@ -253,14 +253,14 @@ One run at a time; a second waits its turn. A run keeps hold of its timetable, s
 
 The router plans 300 to 700 journeys a second on this machine. A day of real data is about 1.7 million journeys (answered 18 Nov). Planned one by one that is 40 to 95 minutes, and each person is planned twice (section 4.6), so up to twice that. That is too slow for "change the timetable, simulate, look". In order of how much each should help:
 
-1. **Reuse a plan for everyone it fits, exactly.** The router returns a journey that leaves as late as it can. A plan made for a start at 07:40 that actually leaves at 07:52 is also the right answer for anyone on the same pair of places starting between 07:40 and 07:52. Rows are grouped by origin and destination and sorted by time, and one search serves each such window. Real tap data is between a limited set of stop pairs, so this should remove most searches; made-up demand will benefit less. To be measured.
+1. **Reuse a plan for everyone it fits.** The router returns journeys that leave as late as they can. A search made for a start at 07:40 whose journeys all leave at 07:52 or later is also the answer for anyone on the same pair of places starting between 07:40 and 07:52. (As built, the window ends at the earliest departure among all the journeys the search offers, not only the recommended one: section 14.) Rows are grouped by origin and destination and sorted by time, and one search serves each such window. Real tap data is between a limited set of stop pairs, so this should remove most searches; made-up demand will benefit less. To be measured.
 2. **A share of the demand.** Simulate every tenth row with `people` set to 10. Quicker by ten, coarser on quiet lines.
 3. **Range RAPTOR** (phase 8 of the router plan): all departures in a window from one origin in one search.
 4. Later: after a small edit, plan again only the journeys the edit could touch. This is not exact without care (a new trip can help someone who did not use the old ones), so it is not in the first version.
 
 Stage 2 is cheap: a few million events, each a handful of array operations. With capacity on it also plans again for passengers left behind, in batches on all threads (section 4.5). Seconds, unless a large share of passengers are left behind.
 
-Memory: a planned journey is kept as a few numbers per leg, about 100 bytes (estimate), and each person has two plans, so 1.7 million journeys is about 350 MB on top of the timetable's 80 MB. That does not fit comfortably in the service's 768 MB heap beside two timetables and the search threads, so a whole-network run needs the heap raised to about 1.5 GB, an area (section 4.7), or a share of the demand. Results are written as they are settled, not held.
+Memory: a planned journey is kept as a few numbers per leg, about 100 bytes (estimate). As built, only the journey a person takes is kept in full, and the other as its arrival and cost, so 1.7 million journeys is about 170 MB at most on top of the timetable's 80 MB, and less where plans are shared. That does not fit comfortably in the service's 768 MB heap beside two timetables and the search threads, so a whole-network run needs the heap raised to about 1.5 GB, an area (section 4.7), or a share of the demand. Results are written as they are settled, not held.
 
 ## 6. Starting a run from the editor
 
@@ -303,7 +303,7 @@ The router is still started separately, not by `npm run dev`. If it is not runni
 
 A run on the published timetable is a **BAU run** (business as usual). It is made on purpose, given a name, and kept. A scenario run does not make one for itself: the owner picks which BAU run it is measured against (decided 18 Nov). Nothing on the published timetable is ever run twice unless the owner asks for it.
 
-**A BAU run** is an ordinary run that can be opened and looked at. It keeps everything: each person's two plans, their margin and reference arrival (section 4.6), the journeys, the loads on every trip, the stop figures and the summary. It has a name, suggested from its choices and editable: "BAU, whole network", "BAU bounded Newcastle". There can be as many as are wanted, for different areas, demand sets or walking distances.
+**A BAU run** is an ordinary run that can be opened and looked at. It keeps everything: each person's planned journey, the arrival and cost of the journey they did not take, their margin and reference arrival (section 4.6), the journeys, the loads on every trip, the stop figures and the summary. It has a name, suggested from its choices and editable: "BAU, whole network", "BAU bounded Newcastle". There can be as many as are wanted, for different areas, demand sets or walking distances.
 
 **A scenario run is made against one BAU run,** chosen in the wizard (section 7.1). The BAU run supplies the reference: who the people are, what they did on the published timetable, and how strongly each prefers their own stop. So the scenario run takes these from it and the wizard does not ask for them again:
 
@@ -319,7 +319,7 @@ Chosen freely for each scenario run: the scenario, the threshold for changing st
 
 **Which BAU runs are offered.** Those made on the published day the scenario is built on. Each is listed with its name, demand set, area, walking distance, number of journeys and date. If there is none, the wizard says so and offers to make one; it does not make one unasked.
 
-**Comparing afterwards.** A scenario run always shows its figures against its BAU run. In the results, "Compare with" also offers any other run made against the same BAU run, so two scenarios can be set side by side on the same people (section 7, "Two runs"). Runs made against different BAU runs are not offered to each other: their people, area or walking distance differ.
+**Comparing afterwards.** A scenario run always shows its figures against its BAU run. In the results, "Compare with" also offers any other run made against the same BAU run, so two scenarios can be set side by side on the same people (section 7, "Two runs"). Runs made against different BAU runs are not offered to each other: their people, area, walking distance or another of the shared settings above differ.
 
 **Keeping and removing:**
 
@@ -411,14 +411,14 @@ Real vehicle capacities are not part of this plan but decide how much the crowdi
 |---|---|
 | Hand-made lines with known answers | A full vehicle leaves people behind and they take the next; someone boarding up the line gets the place ahead of someone down the line who set off earlier (the case bulk assignment gets wrong); a passenger with no way left is stranded; staying aboard a vehicle that runs on. |
 | Rules that must always hold, on random timetables and demand | No trip ever leaves a stop over capacity. Boardings equal alightings on every trip. Everyone is `ok`, `noJourney`, `gaveUp` or `stranded`, once. Nobody who gave up or had no journey is aboard anything. Every journey taken replays against the timetable (`JourneyChecker`). |
-| Capacity off equals the router | With capacity off, each journey is the one `POST /v1/journeys/bulk` gives in `off`. |
+| Capacity off equals the router | With capacity off, each journey is the one the router recommends when asked the simulator's own question: between the person's own stops, with 10 minutes per vehicle. (It is not what `POST /v1/journeys/bulk` gives, which lets a journey begin with a walk to a nearby stop and counts 5 minutes per vehicle.) |
 | Very large capacity equals capacity off | Nothing is lost by switching capacity on when nothing is full. |
 | Which stops a person uses (section 4.6), on hand-made lines | On the published timetable nobody changes stop, whatever is nearby. A change elsewhere moves nobody. A person going to a stop nothing calls at gets off at a served stop within the distance and walks; with the distance at 0, or nothing within it, they have no journey. A person whose stop keeps a poor service changes when the nearby one is better by more than margin plus threshold, and not when it is better by less. A person with a margin of 10 minutes needs 20. A new stop near a person is used when it is better by enough. A person whose platform loses its trains uses another platform of the same station. A row that is a position and not a stop walks to the stops around it. A person arriving later than the limit gave up and is on no vehicle. |
 | The same, on the real weekday | A BAU run changes nobody's stop. Close a stretch in a scenario: people bound for the closed stops still arrive, on foot from a stop near it. Add a line: some people near it use it. |
 | The area (section 4.7) | Only journeys with both ends inside are run, and the counts left out add up to the demand set. No stop outside the widened box is in the cut export; every trip in it has two or more calls and times that run forwards. A journey well inside the box is the same on the cut timetable as on the whole one. |
 | The library (section 6.5) | A run made in one browser is listed in another. A run can be filed, moved and found by name, folder, date and maker; a scenario run is listed under its BAU run. Nothing is removed without being asked. An archived run still opens and compares in total, and comes back whole when restored. |
-| BAU runs (section 6.4) | A scenario run plans nothing on the published timetable, and takes its demand set, area and walking distance from the BAU run chosen. Two scenario runs against one BAU run can be compared; runs against different BAU runs are not offered to each other. A scenario on another published day is not offered the BAU run. Capacity on a BAU run replays the kept plans. Removing a BAU run with scenario runs depending on it asks first. |
-| Plan reuse is exact | With reuse on and off, the same journeys. |
+| BAU runs (section 6.4) | A scenario run plans nothing on the published timetable, and takes its demand set, area, walking distance and the other shared settings of section 6.4 from the BAU run chosen. Two scenario runs against one BAU run can be compared; runs against different BAU runs are not offered to each other. A scenario on another published day is not offered the BAU run. Capacity on a BAU run replays the kept plans. Removing a BAU run with scenario runs depending on it asks first. |
+| Plan reuse changes nothing that matters | With reuse on and off: the same status, arrival, costs and margin for every row, and every reused journey replays for the person it is given to. The legs may differ where two ways of making a journey tie. |
 | Planned loads tell the truth (section 4.5) | Where no trip is planned over capacity, a run with capacity on leaves nobody behind and equals the run with capacity off. Where some are, nobody whose journey ends before the first overloaded departure is affected. |
 | Capacity from kept plans | A capacity run started from the plans of a capacity-off run equals a capacity run made from scratch. |
 | Same answer every time | One thread and eight; two runs in a row. |
@@ -451,9 +451,9 @@ S0 to S2 need nothing from the editor except one exported zip. S3 is the first w
 | Placeholder capacities | Every "left behind" and "stranded" figure is illustrative. | Say so on every crowding figure; capacity off is always available; enter real capacities. |
 | Planning 1.7 million journeys twice takes one to three hours | Too slow to use while editing. | Plan reuse; BAU runs made once (section 6.4); an area (section 4.7); a share of the demand; measure on a made-up set in S1 before building the editor side. |
 | An area hides what crosses its edge | A local change looks smaller than it is, and vehicles near the edge look emptier. | The count of journeys left out is shown with every result; the whole network is always a choice. |
-| No real demand data yet | The format, the size and the stop ids are guesses. | Stop ids for now; the open questions in section 12; a made-up set until a real file arrives. |
+| No real demand data yet | The size and the stop ids are answered (section 12); how journeys are spread over stop pairs, which decides how much plan reuse saves, is not known. | A made-up set until a real file arrives; measure reuse again on the first real file. |
 | Everyone takes the one recommended journey | Loads are lumpier than life. | Stated with the results; spreading over alternatives is first on the later list. |
-| Memory on the development machine | The router, PostgreSQL, the dev servers and a run may not fit together. | Run at a share of demand; results streamed to disk; heap limit stays. |
+| Memory on the development machine | The router, PostgreSQL, the dev servers and a run may not fit together. | An area or a share of the demand fits in the usual 768 MB heap; results are streamed to disk. Only a whole-network run needs the heap raised to about 1.5 GB (section 5.2). |
 | Results fill the database | Several million rows a run. | Nothing is removed automatically. The library shows sizes and warns when the disk is filling; a run can be archived (its bulk moved out of the database) or removed, each in one statement (tables partitioned by run). An area keeps runs small. |
 | Results shown against an edited timetable | Wrong figures on changed trips. | The version key and the out-of-date mark. |
 | The export, even without shapes, is slow | Minutes before every run on a changed scenario. | Measure in S3; the database reader of the router plan's phase 8 is the fix. |
@@ -515,6 +515,88 @@ Made to get a first version working. Each is wrong in a known way.
 | People keep their recorded start time | With a less frequent service people leave earlier to arrive on time. The simulator starts them when the data says and lets them arrive late. | Plan to arrive by the reference arrival (needs arrive-by search, which the router does not have). |
 | One walking distance for everyone | Some people will walk further than others, and further to a train than to a bus. | A distance per row, or per kind of vehicle. |
 | Everyone takes the recommended journey | Real passengers spread over alternatives. | A rule for sharing people among the journeys the router offers. |
-| People do not know about crowding | Regular travellers avoid the full train. | Level 3 of section 4.1, and the margin idea of section 4.5. |
+| People do not know about crowding | Regular travellers avoid the full train. | Level 3 of section 4.1. |
 | Vehicles are always on time | Crowds slow boarding; late vehicles break connections. | Level 2 of section 4.1; door counts and boarding rates in the vehicle catalogue. |
 | Capacity is seated plus standing, from placeholders | The figures are round numbers. | Real capacities in the fleet screen. |
+
+## 14. S0 and S1 findings (18 Nov 2026)
+
+S0 and S1 are built as a new module, `services/router/router-sim`. A demand file can be checked or made up (`npm run router:demand`), and a run made from the command line with its results as files (`npm run router:simulate`): a BAU run, a scenario run against one, or capacity added to either from its kept plans. How to use them is in `services/router/README.md`. 48 tests cover section 9's rows for these two phases. (S2, the HTTP service, followed: section 15. Nothing is in the editor yet; that is S3.)
+
+### Measured on the published weekday
+
+One run each on the development machine, 10 threads, the usual 768 MB heap, other programs running. Demand is made up, so the figures say how the simulator behaves, not how people travel. Every capacity is a placeholder.
+
+| Measure | Plan's estimate | Measured |
+|---|---|---|
+| Planning, whole network, 100,000 journeys in the Opal area | 300 to 700 journeys a second, halved by planning twice | 186 s: 538 journeys a second, which is 1,076 searches a second. Other runs: 602, 649 and 794 a second. |
+| 1.7 million journeys at that rate | one to three hours | 35 to 55 minutes, if real data shares no plans at all |
+| Planning bounded to Newcastle (6,383 of those journeys; 93,313 wholly outside and 304 with one end inside left out) | "much quicker" | 3.8 s: 1,686 journeys a second, three times the whole-network rate, on the whole timetable. The cut of the timetable itself comes with S3. |
+| Capacity off: putting 100,000 planned journeys on the vehicles | cheap | 3.9 s, and 6 s to write 100,000 journeys, 517,705 legs, 1.2 million trip-stop rows and 321,292 stop-quarter rows |
+| Searches saved by reuse | "most", on real data | 1 of 200,000 on the made-up set, and 62 with the demand concentrated on busy stops. Made-up journeys do not share stop pairs. In the tests, where a few pairs carry most journeys, reuse saves over a quarter. **Still to be measured on real data.** |
+| Trips planned over capacity, 100,000 single journeys | not estimated | None. The capacity step is skipped, as section 4.5 says. |
+| The same journeys with each row standing for 17 people (1.7 million people) | not estimated | 15,424 trips planned over capacity. 48% of people left behind at least once; 230,111 stranded. |
+| The capacity step against planning, on that run | "seconds, unless a large share are left behind" | 113 s of replay against 154 s of planning: 177,423 searches for those left behind. A set concentrated on busy stops gave the same 113 s (53% left behind). This is a deliberately overloaded set, with people in lumps of 17 and bus capacities of 65. |
+| Loading the timetable for a run | 4 s | Under 1 s from the snapshot |
+
+### Checked on the published weekday
+
+| Check | Result |
+|---|---|
+| A BAU run changes nobody's stop | 0 of 100,000, with capacity off and on. |
+| A scenario run on the same timetable as its BAU run (Newcastle, 6,383 journeys) | Nobody changes stop, nobody gains or loses a journey, and all 5,615 arrivals are within a minute of the reference. |
+| A stand-in scenario: every call at the three busiest destination stops in Newcastle removed (717 stop times) | Everyone who travelled on the BAU run still arrives. 74 people change stop because theirs is gone and 31 because another is now better by more than their margin and the threshold; 64 arrive later, by 12 minutes on average. Nobody gives up. This zip was made by a script, not by the editor; a real scenario export is the test once S3 exists. |
+| A capacity run's files, read back by a separate script | No trip leaves any stop over capacity; boardings equal alightings on every trip; the legs file and the trip loads agree. |
+
+### What differs from the plan
+
+- **A bus that leaves two stops in the same second could be overfilled.** Section 4.2 says only the boarding stop's load matters. That fails where a vehicle has the same time at consecutive stops, which is common in this feed: someone planned again in that second boards at the earlier stop after the later one has been dealt with. The first real run had 127 departures over capacity. A boarding now needs room along the whole ride, which is the same test in every other case. Found by reading the result files back, not by the tests; a test now covers it.
+- **Someone left behind plans again from the stop they are at, or another stop of the same parent.** A first version let them walk to any linked stop, and a BAU run with capacity then showed 199,771 people "changing stop", against section 4.6. They no longer walk off to another stop.
+- **Someone with no journey on the published timetable is not handed one by an unchanged timetable.** Rule 3 of section 4.6 as written gave them the any-stop-near journey in any scenario, so a scenario identical to the published timetable "newly served" 3,749 of 100,000 made-up journeys. They now take it only if the scenario has made it better than it was on the published timetable by more than the threshold. Real journeys were all made, so this should be rare on real data.
+- **Plan reuse is a little narrower than section 5.2 described, and not leg-for-leg exact.** One search answers later starts up to the earliest departure among all the journeys it offers, because the recommended journey is chosen by cost and a later start can lose a competitor. Status, arrival, costs and margin are then the same as a fresh search; where two ways tie, the legs can differ (under 1% of journeys in the tests). A search that offers walking the whole way is never reused.
+- **Only the journey a person takes is kept in full;** the other is kept as its arrival and cost. That is all the margin and the results need, and it halves the memory.
+- **A row split by a full vehicle has several lines** in the journeys and legs files, told apart by a `part` column.
+- **"Seats only" is not available.** The timetable holds one capacity per trip (seated plus standing). A run takes `--full-at`, the share of capacity that counts as full; the editor will have to supply the seated share for the wizard's "seats only" (section 7.1).
+- **The area filters journeys only** from the command line. Cutting the timetable to the box is an option of the editor's export, in S3.
+- **Positions are looked up by the BAU run,** which keeps the located demand in its folder; scenario runs read it from there. In S3 the Node API does this at upload (section 3.1).
+- **The generator has two options the plan did not ask for:** `--focus`, to concentrate journeys on busy stops, and `--people`, to make each row stand for several. Both exist to give the measurements above something to measure. The router's own test journeys (`RouteCli --random`) still use their own copy of the same draw.
+- **The router gained one public method,** `Router.near`, so that the simulator can list the stops near a position. Nothing else in the router changed.
+
+### Not done
+
+- The two real-weekday rows of section 9 that need an editor scenario ("close a stretch", "add a line") were stood in for by the scripted zip above.
+- A whole-network run of 1.7 million rows was not made. The 100,000-row runs fit in 768 MB.
+- Speeding up the capacity step when many are left behind. Searches for them run together only when they fall in the same second, so it is far less parallel than planning. Worth doing only if real loads with real capacities leave many behind.
+
+## 15. S2 findings (18 Nov 2026)
+
+S2 is built: the router service runs simulations as jobs. The four endpoints of section 5.1 are there, with a fifth that lists every run. How to call them is in `services/router/README.md`. Six tests drive them over HTTP on a hand-made feed.
+
+The owner confirmed on 18 Nov that comparisons are only valid on the same demand, and that this is how runs will be made. That is how a scenario run already works: it has no demand of its own, and reads the journeys its BAU run kept (section 6.4). The service refuses a scenario run that tries to set anything its BAU run decides.
+
+### Tried on the published weekday
+
+One service with the weekday and the closed-stops stand-in of section 14 both loaded, driven over HTTP.
+
+| Tried | Result |
+|---|---|
+| A BAU run bounded to Newcastle | Done in 6 s; the same figures as from the command line (5,615 of 6,383 travel). |
+| A scenario run against it and capacity from its plans, asked for together | The second waited behind the first; both finished, with the same figures as section 14. |
+| A whole-network run stopped while planning | Stopped at once, and left no files. |
+| Discarding the BAU run while the other two exist | Refused, naming them. |
+| Runs made earlier from the command line into `data/router/sim` | Listed when the service started. |
+
+### What differs from the plan
+
+- **Finished runs outlive a restart.** Section 5.1 did not say. A scenario run needs its BAU run, so the service lists again every finished run it finds in its folder. A run that failed or was stopped leaves nothing.
+- **A fifth endpoint,** `GET /v1/simulations`, lists the runs.
+- **Stop and discard are one call,** as planned, but a run stopped while waiting or running stays listed as `stopped` until it is deleted a second time, so that whoever is following it can see what became of it.
+- **A run others were made from is not discarded** without `?force=true`. Section 6.4 has the editor ask first; the service makes that hard to get wrong.
+- **A run holds its timetable from the moment it is asked for,** not from when it starts, so a run waiting in the queue is not changed by a reload either.
+- **The caller may choose the run's id.** The Node API can then use its own.
+- **A stop is an interrupt.** Planning gives up at the next pair of stops and the replay at the next second of the day; neither waits for the stage to end.
+
+### Not done
+
+- The service still runs in the 768 MB heap. A whole-network run of 1.7 million journeys will need it raised (section 5.2); nothing checks before starting, and a run that runs out of memory fails with a message saying so.
+- A demand file given as a URL is fetched whole before it is read; nothing is streamed.
