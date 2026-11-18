@@ -288,7 +288,8 @@ Assignment.run(router, requests, Preferences.defaults(),      // many at once, a
 `router-sim` sends a file of journeys through a timetable and writes where the passengers ended up.
 The design is in [`docs/simulator-plan.md`](../../docs/simulator-plan.md); phases S0 (demand files)
 (the simulator, from the command line), S2 (runs as jobs on the HTTP service) and S3 (the editor's
-API starts runs and keeps their results) are built. The web app has no panels for it yet.
+API starts runs and keeps their results) are built, and S4 put it in the web app: see the root
+`README.md`.
 
 ### A demand file
 

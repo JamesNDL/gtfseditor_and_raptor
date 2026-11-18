@@ -107,6 +107,34 @@ export function distanceToPathM(coords: Coord[], lon: number, lat: number): numb
   return best;
 }
 
+/** How close two paths come to each other, in metres: nothing where they cross. */
+export function distanceBetweenPathsM(a: Coord[], b: Coord[]): number {
+  if (!a.length || !b.length) return Infinity;
+  const side = (p: Coord, q: Coord, r: Coord) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  // The box round b, so that most of a long path is passed over quickly.
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  for (const p of b) {
+    west = Math.min(west, p[0]);
+    east = Math.max(east, p[0]);
+    south = Math.min(south, p[1]);
+    north = Math.max(north, p[1]);
+  }
+  for (let i = 1; i < a.length; i++) {
+    const p = a[i - 1];
+    const q = a[i];
+    if (Math.max(p[0], q[0]) < west || Math.min(p[0], q[0]) > east || Math.max(p[1], q[1]) < south || Math.min(p[1], q[1]) > north) continue;
+    for (let j = 1; j < b.length; j++) {
+      const r = b[j - 1];
+      const s = b[j];
+      if (side(p, q, r) !== side(p, q, s) && side(r, s, p) !== side(r, s, q)) return 0;
+    }
+  }
+  let best = Infinity;
+  for (const p of a) best = Math.min(best, distanceToPathM(b, p[0], p[1]));
+  for (const p of b) best = Math.min(best, distanceToPathM(a, p[0], p[1]));
+  return best;
+}
+
 /** One call of a trip as it is now. */
 export interface OldCall {
   arr: number;

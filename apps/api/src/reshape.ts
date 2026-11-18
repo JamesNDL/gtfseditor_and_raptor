@@ -21,7 +21,7 @@ import {
   type ReshapeSection,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { describeMethod, linePath, METHOD_STRENGTH, ROAD_MODES, type Avoid, type PathMethod } from './roads.ts';
+import { describeMethod, entersAvoid, linePath,METHOD_STRENGTH, ROAD_MODES, type Avoid, type PathMethod } from './roads.ts';
 import { visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
@@ -54,6 +54,12 @@ export interface ReshapeOptions {
   platformIndex: number;
   /** A closed area: any stretch of the published path that enters it is replaced by a way round. */
   avoid?: Avoid;
+  /**
+   * With `avoid`: the stops either side of a gap are joined by a new stretch with its own run time,
+   * not by a detour timed from the stretch it replaces. For a line that went through a closure and
+   * came back, and now turns round before it.
+   */
+  joinAcross?: boolean;
 }
 
 interface StopRow {
@@ -267,7 +273,7 @@ export async function planReshape(
   const reusable = (i: number) => {
     if (!inOrder(i) || (keptAt[i] !== keptAt[i - 1] + 1 && direct)) return false;
     // A stretch that runs into a closed area cannot be used as it is.
-    return !avoid || distanceToPathM(oldPiece(i), avoid.lon, avoid.lat) > avoid.radiusM;
+    return !avoid || !entersAvoid(oldPiece(i), avoid);
   };
   const stopVertex: number[] = [0];
   const sections: ReshapeSection[] = [];
@@ -288,7 +294,7 @@ export async function planReshape(
     while (end + 1 < stops.length && !reusable(end + 1)) end++;
     const run = stops.slice(i - 1, end + 1);
     // A stretch between two stops the line keeps, sent another way because of a closure.
-    const detour = avoid !== undefined && run.length === 2 && inOrder(i);
+    const detour = avoid !== undefined && !options.joinAcross && run.length === 2 && inOrder(i);
     const found = await linePath(tx, baselineId, pattern.mode_id, run.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat, stationId: s.parentId })), {
       follow: options.followRoads || avoid !== undefined,
       avoid,
@@ -406,9 +412,13 @@ export async function applyReshape(
   plan: ReshapePlan,
   part: number,
   deps: ReshapeDeps,
-  /** A closure that splits trips in two rebuilds the same trips twice; the tag keeps their ids apart. */
-  options: { keepVehicle?: boolean; tag?: string } = {},
+  /**
+   * A closure that splits trips in two rebuilds the same trips twice; the tag keeps their ids apart.
+   * `routeId` puts the new stop pattern and its trips on another line: a part of the original.
+   */
+  options: { keepVehicle?: boolean; tag?: string; routeId?: number } = {},
 ) {
+  const routeId = options.routeId ?? plan.routeId;
   const last = plan.stops[plan.stops.length - 1];
   const terminusChanged = last.id !== plan.oldStops[plan.oldStops.length - 1].id;
   const headsign = terminusChanged ? tidyName(last.name) : plan.headsign;
@@ -421,7 +431,7 @@ export async function applyReshape(
   const stopIds = plan.stops.map((s) => s.id);
   const [pattern] = await tx`
     insert into patterns (baseline_id, route_id, direction_id, shape_id, headsign, stop_ids, trip_count, key, scenario_id, created_edit)
-    values (${plan.baselineId}, ${plan.routeId}, ${plan.direction}, ${shape.id}, ${headsign}, ${stopIds}::bigint[], 0,
+    values (${plan.baselineId}, ${routeId}, ${plan.direction}, ${shape.id}, ${headsign}, ${stopIds}::bigint[], 0,
             ${`reshape-${sc.id}-${seq}-${part}`}, ${sc.id}, ${seq})
     returning id`;
 
@@ -476,7 +486,7 @@ export async function applyReshape(
            as u(trip_id, seq, stop_id, arr, dep, dist, pickup, drop_off, old_trip, old_seq)
     left join stop_times o on o.trip_id = u.old_trip and o.seq = u.old_seq`;
   await tx`
-    update trips t set pattern_id = ${pattern.id}, shape_id = ${shape.id}, start_secs = u.s, end_secs = u.e,
+    update trips t set pattern_id = ${pattern.id}, shape_id = ${shape.id}, route_id = ${routeId}, start_secs = u.s, end_secs = u.e,
            first_stop_id = ${stopIds[0]}, last_stop_id = ${stopIds[stopIds.length - 1]},
            headsign = case when ${terminusChanged} then ${headsign} else t.headsign end
     from unnest(${ids}::bigint[], ${starts}::int[], ${ends}::int[]) as u(id, s, e) where t.id = u.id`;

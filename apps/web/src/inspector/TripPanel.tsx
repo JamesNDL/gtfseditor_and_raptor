@@ -2,6 +2,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
 import { getJson, useApi, type TripDetail, type TripSummary } from '../api.ts';
 import { clock } from '../clock.ts';
+import { TripPassengers } from '../sim/SimFigures.tsx';
 import { useStore } from '../store.ts';
 import { applyEdit } from '../scenario.ts';
 import { Badge, duration, fmt, Loading, shortStop, Tag } from './parts.tsx';
@@ -122,6 +123,8 @@ export function TripPanel({ tripId }: { tripId: number }) {
           </ul>
         </section>
       )}
+
+      <TripPassengers tripId={t.id} />
 
       <section>
         <h3>Stops ({t.stopTimes.length})</h3>

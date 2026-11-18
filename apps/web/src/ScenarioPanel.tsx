@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { startClosing } from './builder.ts';
 import { clock } from './clock.ts';
 import { applyEdit, createScenario, deleteScenario, fixAll, redo, selectScenario, undo, type Conflict } from './scenario.ts';
 import { useStore } from './store.ts';
@@ -30,7 +29,7 @@ export function ScenarioPanel() {
 
   return (
     <div className="panel scenario">
-      {/* The scenario chooser and the two tools stay put; only what is below them scrolls. */}
+      {/* The scenario chooser stays put; only what is below it scrolls. */}
       <div className="scenario-tools">
       <div className="scenario-head">
         <select
@@ -49,20 +48,10 @@ export function ScenarioPanel() {
         <button className="button small-button" onClick={createScenario} title="Start a new scenario from the published timetable">
           New
         </button>
+        <button className="button small-button" onClick={() => set({ scenariosOpen: true })} title="Every scenario of this day: open, rename, delete">
+          Manage
+        </button>
       </div>
-
-      <button
-        className="button draw-button"
-        title="Create a new line by clicking stops on the map"
-        onClick={() =>
-          set({ builder: { name: '', modeId: 'bus', color: 'FF4FA3', headwayMin: 15, followRoads: true, loop: false, stops: [] }, builderPath: null, closing: null, closingPreview: null })
-        }
-      >
-        + Draw a new line
-      </button>
-      <button className="button draw-button close-button" title="Close a stretch of road, or a line between two stations, and see what happens to the services through it" onClick={startClosing}>
-        ✕ Close a road or a line
-      </button>
       </div>
 
       <div className="scenario-body">

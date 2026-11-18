@@ -112,19 +112,28 @@ export async function startReshape(route: { id: number; name: string; modeId: st
   });
 }
 
-/** A stop was clicked on the map while a line closure is being set up: the first click is one side, the second the other. */
-export function pickClosureStop(stop: MapStop) {
+/** The map was clicked while a closure is being drawn: the line goes on to that point. */
+export function addClosurePoint(lon: number, lat: number) {
   const { closing, set } = useStore.getState();
-  if (!closing || closing.what === 'road') return;
-  const picked: BuilderStop = { id: stop.id, name: stop.name, lon: stop.lon, lat: stop.lat, parentId: null };
-  if (!closing.from || closing.to) set({ closing: { ...closing, from: picked, to: null }, closingPreview: null });
-  else if (closing.from.id !== stop.id) set({ closing: { ...closing, to: picked } });
+  if (closing && closing.line.length < 60) set({ closing: { ...closing, line: [...closing.line, [lon, lat]] } });
 }
 
-/** The map was clicked while a road closure is being set up. */
-export function pickClosurePoint(lon: number, lat: number) {
-  const { closing, set } = useStore.getState();
-  if (closing?.what === 'road') set({ closing: { ...closing, point: { lon, lat } } });
+/** A part of a line was clicked, in the list or on the map: a part that is kept is dropped, and one that is dropped is kept again. */
+export function togglePart(routeId: number, side: string) {
+  const { closing, closingPreview, set } = useStore.getState();
+  const line = closingPreview?.lines.find((l) => l.routeId === routeId);
+  const part = line?.parts.find((p) => p.side === side);
+  if (!closing || !line || !part) return;
+  const kept = line.parts.filter((p) => (p.side === side ? !p.kept : p.kept)).map((p) => p.side);
+  const keep = kept.length === line.parts.length ? 'both' : (kept[0] ?? 'none');
+  const lines = { ...closing.lines };
+  const mine = { ...lines[routeId] };
+  // The same as the choice for every line: nothing of its own to remember.
+  if (keep === closing.keep) delete mine.keep;
+  else mine.keep = keep;
+  if (mine.how || mine.keep) lines[routeId] = mine;
+  else delete lines[routeId];
+  set({ closing: { ...closing, lines } });
 }
 
 /** Starts setting up a closure, putting away any line being drawn. */
@@ -134,6 +143,8 @@ export function startClosing() {
     builderPath: null,
     placing: null,
     closingPreview: null,
-    closing: { what: 'road', radiusM: 100, point: null, from: null, to: null, allDay: true, startAt: '10:00', endAt: '14:00' },
+    closingFocus: null,
+    closingOnly: null,
+    closing: { line: [], widthM: 20, exceptModes: [], roads: 'split', keep: 'both', lines: {}, allDay: true, startAt: '10:00', endAt: '14:00' },
   });
 }

@@ -25,7 +25,7 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 | `npm run packs` | Rebuild the vehicle animation files for existing baselines |
 | `npm test` | Unit tests for the core logic |
 | `npm run export:check [-- scenarioId]` | Export the first day (or a scenario) as GTFS through the running API and check it; for the published day, compare it with the original feed |
-| `npm run test:ui` | Drive the real interface in a headless browser (click, type, drag, shortcuts) against the running app; screenshots go to `data/ui-test/` |
+| `npm run test:ui` | Drive the real interface in a headless browser (click, type, drag, shortcuts) against the running app; screenshots go to `data/ui-test/`. With the router running it also sets up and runs simulations |
 | `npm run test:e2e` | End-to-end test of scenario editing against the running API (creates and deletes its own scenario) |
 | `npm run test:sim` | End-to-end test of the simulator through the running API and router (makes and removes its own journeys, runs and scenario) |
 | `npm run router:dev` | Start the journey router service, which also runs the simulator |
@@ -33,7 +33,17 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 
 ## The passenger simulator
 
-The simulator sends a file of journeys through a timetable and records where the passengers ended up. It is planned in `docs/simulator-plan.md`. The simulator itself runs in the journey router service (`services/router`); the API keeps the journeys, the runs and their results. There are no panels for it in the web app yet, so for now it is used through the API.
+The simulator sends a file of journeys through a timetable and records where the passengers ended up. It is planned in `docs/simulator-plan.md`. The simulator itself runs in the journey router service (`services/router`); the API keeps the journeys, the runs and their results.
+
+In the web app it is the **Simulation** panel, under the scenario panel on the left:
+
+- **New simulation** opens a four-step wizard. With no scenario open it sets up a BAU run on the published timetable: pick, upload or make up the journeys, choose an area (the whole network, a saved area, what is on screen, or a box dragged on the map), and how people travel. With a scenario open it sets up a run of that scenario against a BAU run you pick.
+- The panel follows the run in progress, then shows the chosen run's summary, offers "Run again with capacity", and looks one person up by `user_id`, drawing their journeys on the map.
+- While a run is chosen, the line, trip and station panels gain a "Passengers" section. The figures show when the timetable the run was made on is the one open.
+- **Library** lists every run, by folder or by date, with scenario runs under their BAU run: open, rename, move, archive, remove.
+- A link can name the run to show: `#route=<id>&sim=<run id>`.
+
+The same things are available through the API:
 
 It needs the router running as well as the API: `npm run router:dev` (port 3002, see `services/router/README.md`). The API has the router load whatever timetable a run needs.
 
@@ -43,6 +53,7 @@ It needs the router running as well as the API: `npm run router:dev` (port 3002,
 | `POST /api/demand?name=&madeBy=` | Upload a demand CSV as the body (`text/csv`, or `application/gzip`). Answers the set with the report of its check. The format is in `services/router/README.md` |
 | `POST /api/demand/generate` | Make a set up: `{ name, baselineId, journeys, seed, areaId, withinKm, focus, people }` |
 | `GET /api/demand`, `GET /api/demand/:id?baseline=`, `DELETE /api/demand/:id` | List; one set, with the stop ids that day does not have; remove |
+| `GET /api/demand/:id/coverage?baseline=&s=&south=&west=&north=&east=&walk=` | How many journey ends lie inside a box, and how many name a stop nothing calls at |
 | `GET`, `POST /api/sim-areas`, `DELETE /api/sim-areas/:id` | Boxes a run can be limited to. Four come with the editor |
 | `GET`, `POST /api/sim-folders`, `PATCH`, `DELETE /api/sim-folders/:id` | Folders of the library |
 | `POST /api/sim-runs` | Start a run (below). Answers at once with the run |
@@ -52,7 +63,7 @@ It needs the router running as well as the API: `npm run router:dev` (port 3002,
 | `DELETE /api/sim-runs/:id` | Stop a run that is going, or remove one that has ended |
 | `POST /api/sim-runs/:id/archive`, `/restore` | Take a run's journeys and legs out of the database, and bring them back |
 | `GET /api/sim-runs/:id/journeys?user=` | One person's journeys, with their legs |
-| `GET /api/sim-runs/:id/trips/:tripId`, `/stops/:stopId` | Passengers along one trip; one stop or station by quarter hour |
+| `GET /api/sim-runs/:id/routes/:routeId`, `/trips/:tripId`, `/stops/:stopId` | A line's passengers and how full it gets; passengers along one trip; one stop or station by quarter hour |
 | `GET /api/sim-runs/:id/files/:name` | A result file as the simulator wrote it |
 
 A run is one of three kinds, told apart by what the request names:

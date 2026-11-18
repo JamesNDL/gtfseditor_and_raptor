@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Baseline, Mode, RouteListItem } from './api.ts';
 import type { ScenarioInfo, ScenarioSummary } from './scenario.ts';
+import type { SimBox, SimJourney, SimRun } from './sim/simApi.ts';
 
 export type Selection =
   | { kind: 'route'; id: number }
@@ -21,14 +22,23 @@ export interface BuilderStop {
   parentId?: number | null;
 }
 
-/** A closure being set up: a stretch of road around a point, or a line between two stations. */
+/** The colours of the two sides of a closure being set up, on the map and in its panel. */
+export const SIDE_COLORS = ['#30d5c8', '#ff9f0a'];
+
+/** A closure being set up: a line drawn on the map that nothing runs through. */
 export interface Closing {
-  /** 'road', or the mode whose line is closed. */
-  what: string;
-  radiusM: number;
-  point: { lon: number; lat: number } | null;
-  from: BuilderStop | null;
-  to: BuilderStop | null;
+  /** The points clicked so far, as [lon, lat]. Two or more make a closure. */
+  line: [number, number][];
+  /** How far either side of the line is closed, in metres. */
+  widthM: number;
+  /** Modes left running through it. */
+  exceptModes: string[];
+  /** Buses and coaches: each line is split at the closure, or sent round it by other roads. */
+  roads: 'split' | 'detour';
+  /** Which parts of a split line are kept: 'both', or one side of the closure ('N', 'S', 'E' or 'W'). */
+  keep: string;
+  /** A different choice for single lines, by route id. */
+  lines: Record<number, { how?: 'split' | 'detour' | 'leave'; keep?: string }>;
   /** False for a closure that lasts part of the day, between the two times ("HH:MM"). */
   allDay: boolean;
   startAt: string;
@@ -89,6 +99,8 @@ interface AppState {
   editError: string | null;
   /** The vehicle catalogue screen. */
   fleetOpen: boolean;
+  /** The screen that lists every scenario, to open, rename or delete. */
+  scenariosOpen: boolean;
   /** A new line being drawn on the map, or null. Stops are in calling order. */
   builder: {
     name: string;
@@ -119,11 +131,39 @@ interface AppState {
   /** A road or line being closed, or null. */
   closing: Closing | null;
   /** What the closure being set up would do, for the map. */
-  closingPreview: { zone: GeoJSON.Geometry; paths: [number, number][][] } | null;
+  closingPreview: {
+    zone: GeoJSON.Geometry;
+    /** Ways round, for lines that are sent round. */
+    paths: [number, number][][];
+    /** The part of each split line on each side, kept or dropped, and the stops where vehicles turn back. */
+    parts: { side: string; kept: boolean; coords: [number, number][]; routeIds: number[] }[];
+    /** Each line the closure crosses: its name, which side is kept, and its parts. */
+    lines: { routeId: number; name: string; keep: string; parts: { side: string; kept: boolean }[] }[];
+    turns: { name: string; lon: number; lat: number; side: string; kept: boolean }[];
+    /** The two sides, in the order of their colours. */
+    sides: string[];
+  } | null;
+  /** The line of a closure that the pointer is on, in the list or on the map: it stands out on both. */
+  closingFocus: number | null;
+  /** Lines picked by a click on the map where several run together: the list shows only these. */
+  closingOnly: number[] | null;
   /** A new stop that has been named and is waiting for a click on the map to place it. */
   placing: { name: string; pair: boolean; platforms: number } | null;
   /** Whether skipping a stop changes one trip or every trip with the same stopping pattern. */
   stopScope: 'trip' | 'pattern';
+
+  /** The simulation library for the chosen day, refreshed while a run is going. */
+  simRuns: SimRun[];
+  /** The run whose passenger figures are shown on lines, trips and stations; null for none. */
+  simRunId: number | null;
+  /** The library or the wizard, when one is open. */
+  simScreen: 'library' | 'wizard' | null;
+  /** True while a box for a run's area is being dragged on the map; the wizard steps aside. */
+  simDrawing: boolean;
+  /** The area of the run being set up, drawn on the map. */
+  simBox: SimBox | null;
+  /** One person's journeys in the chosen run, drawn on the map. */
+  simPerson: { user: string; journeys: SimJourney[] } | null;
 
   timeline: TimelineState;
   /** Time window shown by every timeline view, in seconds since the start of the service day. */
@@ -178,12 +218,21 @@ export const useStore = create<AppState>((set) => ({
   editBusy: false,
   editError: null,
   fleetOpen: false,
+  scenariosOpen: false,
   builder: null,
   builderPath: null,
   closing: null,
   closingPreview: null,
+  closingFocus: null,
+  closingOnly: null,
   placing: null,
   stopScope: 'trip',
+  simRuns: [],
+  simRunId: null,
+  simScreen: null,
+  simDrawing: false,
+  simBox: null,
+  simPerson: null,
   timeline: CLOSED_TIMELINE,
   view: [6 * 3600, 10 * 3600],
 

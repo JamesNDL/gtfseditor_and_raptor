@@ -118,6 +118,8 @@ const findOnMap = async (pattern, box) => {
 const api = async (p, method = 'GET') => (await fetch(API + p, { method })).json();
 const [baseline] = await api('/api/baselines');
 const scenariosBefore = new Set((await api(`/api/scenarios?baseline=${baseline.id}`)).map((s) => s.id));
+const simRunsBefore = new Set((await api(`/api/sim-runs?baseline=${baseline.id}`).catch(() => [])).map((r) => r.id));
+const demandBefore = new Set((await api("/api/demand").catch(() => [])).map((d) => d.id));
 let failed = null;
 try {
   // Connect to the page.
@@ -157,6 +159,110 @@ try {
   assert.notEqual(await text('.clock-time'), clockA, 'the clock advances while playing');
   await shot('loaded');
   step(`app loads; ${await text('.moving-count')} vehicles moving`);
+
+  // 1b. The passenger simulator (docs/simulator-plan.md, phase S4): make up a few journeys, run them
+  // through the published timetable in Newcastle, read the summary, look one person up, and see
+  // passengers on a line and on a trip. Needs the journey router (`npm run router:dev`).
+  /** Chooses an option of a select by its text, the way a person would. */
+  const choose = (selector, optionText) =>
+    js(`(() => {
+      const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => [...e.options].some((o) => o.textContent.includes(${JSON.stringify(optionText)})));
+      if (!el) return false;
+      const option = [...el.options].find((o) => o.textContent.includes(${JSON.stringify(optionText)}));
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, option.value);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+  /** Replaces what is in a text box. */
+  const fill = async (selector, value) => {
+    await click(selector);
+    await key('a', 'KeyA', 2, 65);
+    await type(value);
+  };
+  /** Opens an address afresh; changing only what follows the # would not load the page again. */
+  const goTo = async (url) => {
+    await cdp('Page.navigate', { url: 'about:blank' });
+    await sleep(300);
+    await cdp('Page.navigate', { url });
+  };
+  const simStatus = await api('/api/sim/status');
+  let simBauMade = false;
+  if (!simStatus.router || process.env.UI_SKIP === 'sim') {
+    step(simStatus.router ? 'simulator: left out (UI_SKIP=sim)' : 'simulator: the journey router is not running (not checked)');
+  } else {
+    await click('.sim-head button', 'New simulation');
+    await waitFor(`!!document.querySelector('.sim-wizard')`, 'the wizard');
+    assert.match(await text('.sim-choice.on'), /published timetable/, 'with no scenario open, a BAU run is already chosen');
+    await click('.sim-footer button', 'Next');
+    await fill('.sim-wizard input[aria-label="How many journeys to make up"]', '2500');
+    // The area can be dragged on the map: the wizard steps aside and comes back with the box.
+    await click('.sim-wizard button', 'Draw on the map');
+    await waitFor(`document.querySelector('.sim-wizard')?.offsetParent === null`, 'the wizard to step aside');
+    await mouse('mouseMoved', 700, 300, { buttons: 0 });
+    await mouse('mousePressed', 700, 300);
+    for (let i = 1; i <= 6; i++) await mouse('mouseMoved', 700 + i * 40, 300 + i * 30);
+    await shot('sim-drawing-a-box');
+    await mouse('mouseReleased', 940, 480);
+    await waitFor(`document.querySelector('.sim-wizard')?.offsetParent != null`, 'the wizard to come back');
+    assert.match(await js(`document.querySelector('.sim-wizard select[aria-label="Area of the run"]').selectedOptions[0].textContent`), /box of my own/);
+    assert.match(await text('.sim-wizard'), /-3\d\.\d+, 15\d\.\d+ to -3\d\.\d+, 15\d\.\d+/, 'the box drawn is shown');
+    assert.equal(await js(`!!document.querySelector('.inspector h2')`), false, 'drawing the box opened nothing on the map');
+    assert.ok(await choose('.sim-wizard select[aria-label="Area of the run"]', 'Newcastle'), 'the Newcastle area is offered');
+    assert.match(await js(`document.querySelector('.sim-wizard select[aria-label="Area of the run"]').selectedOptions[0].textContent`), /Newcastle/);
+    await click('.sim-wizard button', 'Make up');
+    // The first time, the router has to load the published timetable before it can make journeys up.
+    await waitFor(`/2,500 journeys by/.test(document.querySelector('.sim-report')?.textContent ?? '')`, 'the made-up journeys', 240000);
+    assert.match(await js(`document.querySelector('.sim-wizard select[aria-label="Area of the run"]').selectedOptions[0].textContent`), /Newcastle/, 'the area chosen stays chosen');
+    await shot('sim-wizard-who-and-where');
+    await click('.sim-footer button', 'Next');
+    assert.match(await text('.sim-settings'), /500 m, about 11 min/, 'the walk to another stop starts at 500 m');
+    await click('.sim-footer button', 'Next');
+    await fill('.sim-wizard input[aria-label="Name of the run"]', 'UI test BAU');
+    await fill('.sim-wizard input[aria-label="Your name"]', 'ui-test');
+    await shot('sim-wizard-check');
+    await click('.sim-footer button', 'Run the simulation');
+    await waitFor(`!document.querySelector('.sim-wizard')`, 'the wizard to close', 20000);
+    await waitFor(`!!document.querySelector('.sim-going')`, 'the run in progress');
+    await waitFor(`!!document.querySelector('.sim-stats')`, 'the run to finish and its summary to show', 240000);
+    const travel = await text('.sim-stats .stat-value');
+    assert.ok(Number(travel.replace(/,/g, '')) > 500, `people travel: ${travel}`);
+    assert.match(await text('.sim-summary'), /Journey time/);
+    await shot('sim-summary');
+    step(`simulation set up in the wizard and run: ${travel} of 2,500 made-up people travel`);
+
+    // One person, by their id, listed and drawn on the map.
+    const simRun = (await api(`/api/sim-runs?baseline=${baseline.id}`)).find((r) => r.name === 'UI test BAU');
+    let rider = null;
+    for (let n = 1; n < 400 && !rider; n++) {
+      const user = `u${String(n).padStart(7, '0')}`;
+      const journeys = await api(`/api/sim-runs/${simRun.id}/journeys?user=${user}`);
+      const journey = journeys.find((j) => j.status === 'ok' && j.legs.some((l) => l.kind === 'ride' && l.routeId));
+      if (journey) rider = { user, ride: journey.legs.find((l) => l.kind === 'ride' && l.routeId) };
+    }
+    assert.ok(rider, 'someone rides something');
+    await fill('.sim-person input', rider.user);
+    await click('.sim-person button', 'Find');
+    await waitFor(`document.querySelectorAll('.sim-journeys li').length > 0`, 'their journeys');
+    assert.match(await text('.sim-journeys'), / from .+ to /);
+    await sleep(1200);
+    await shot('sim-one-person');
+    step(`one person looked up by user_id (${rider.user}) and drawn on the map`);
+
+    // A link names the run, so passenger figures show on the line and the trip it opens.
+    await goTo(`${APP}/#route=${rider.ride.routeId}&sim=${simRun.id}`);
+    await waitFor(`/passengers a day/.test(document.querySelector('.inspector .sim-figures')?.textContent ?? '')`, 'passengers on the line panel', 60000);
+    const onLine = await text('.inspector .sim-figures .tile-value');
+    await shot('sim-line-passengers');
+    await goTo(`${APP}/#trip=${rider.ride.tripId}&sim=${simRun.id}`);
+    await waitFor(`document.querySelectorAll('.inspector .sim-loads li').length >= 2`, 'passengers along the trip', 60000);
+    await shot('sim-trip-passengers');
+    step(`passenger figures on a line (${onLine} a day) and along a trip`);
+    simBauMade = true;
+
+    await goTo(APP);
+    await waitFor(`Number(document.querySelector('.moving-count')?.textContent.replace(/,/g, '')) > 100`, 'vehicles on the map again', 60000);
+  }
+  if (process.env.UI_ONLY === 'sim') throw new Error('UI_ONLY');
 
   // 2. Space pauses.
   await clickAt(800, 300); // focus the page without hitting a panel
@@ -360,58 +466,94 @@ try {
   step('the drawing panel offers a one-way loop');
   await click('.inspector .icon-button');
 
-  // 11e. Close a train line between two stations, see what it does, apply it, and undo it.
-  await click('.close-button');
-  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Close a road or a line'`, 'the closure panel');
-  await js(`(() => { const s = document.querySelector('.inspector select'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'train'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await waitFor(`document.querySelector('.inspector .stops')?.textContent.includes('Click a station')`, 'the prompt for the first station');
+  // 11e. Close a line: draw a line on the map round a station, see what it cuts, apply it, and undo it.
   const published = (tip) => !/UI Halt/.test(tip);
-  let sideA = null;
-  for (const box of [{ x0: 500, x1: 1100, y0: 150, y1: 450 }, { x0: 380, x1: 1100, y0: 450, y1: 760 }]) {
-    const candidate = await findOnMap(/the closure is on one side of here/, box);
+  let shut = null;
+  for (const box of [{ x0: 500, x1: 1000, y0: 220, y1: 450 }, { x0: 500, x1: 1000, y0: 450, y1: 680 }]) {
+    const candidate = await findOnMap(/click for station details/, box);
     if (candidate && published(candidate.tip)) {
-      sideA = candidate;
+      shut = candidate;
       break;
     }
   }
-  assert.ok(sideA, 'found a station for one side of the closure');
-  await clickAt(sideA.x, sideA.y);
-  await waitFor(`document.querySelector('.inspector .stops')?.textContent.includes('Click the station on the other side')`, 'the prompt for the second station');
-  let sideB = null;
-  for (const box of [{ x0: 380, x1: 1100, y0: sideA.y + 30, y1: 760 }, { x0: 380, x1: sideA.x - 30, y0: 150, y1: 760 }, { x0: sideA.x + 30, x1: 1100, y0: 150, y1: 760 }]) {
-    const candidate = await findOnMap(/the closure is between here and/, box);
-    if (candidate && published(candidate.tip) && candidate.tip.split(' · ')[0] !== sideA.tip.split(' · ')[0]) {
-      sideB = candidate;
-      break;
-    }
+  assert.ok(shut, 'found a station to close the line at');
+  const shutName = shut.tip.split(' · ')[0];
+  assert.ok(await js(`(() => { const b = document.querySelector('.map-tools .close-button'); const r = b?.getBoundingClientRect(); return !!r && r.height > 30 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.close-button') === b; })()`), 'the closing tool is in plain sight on the map');
+  await click('.map-tools .close-button');
+  await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Close a road or a line'`, 'the closure panel');
+  assert.ok((await text('.inspector-body')).includes('Not drawn yet'), 'the panel asks for a line');
+  // Four clicks round the station, and a fifth back at the start: whichever way the track runs, the line crosses it.
+  const corners = [[-70, -70], [70, -70], [70, 70], [-70, 70], [-70, -70]];
+  for (const [i, [dx, dy]] of corners.entries()) {
+    await clickAt(shut.x + dx, shut.y + dy);
+    if (i === 0) await waitFor(`document.querySelector('.inspector-body')?.textContent.includes('One point placed')`, 'the first point of the line');
   }
-  assert.ok(sideB, 'found a station for the other side of the closure');
-  await clickAt(sideB.x, sideB.y);
-  await waitFor(`/closed between|Nothing runs through|No train service/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of the closure', 60000);
+  await waitFor(`/closed [0-9]+ m either side/.test(document.querySelector('.inspector-body')?.textContent ?? '')`, 'the line to be drawn');
+  const previewReady = `/Closed near|Nothing runs through/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`;
+  await waitFor(previewReady, 'the preview of the closure', 180000);
+  // The line cuts every kind of service it crosses. To keep this quick, leave all but the trains running.
+  const kinds = await js(`[...document.querySelectorAll('.closure-modes label')].map((l) => l.textContent.trim())`);
+  for (const kind of kinds) {
+    if (/^Train/.test(kind)) continue;
+    await js(`[...document.querySelectorAll('.closure-modes label')].find((l) => l.textContent.trim() === ${JSON.stringify(kind)})?.querySelector('input').click()`);
+  }
+  if (kinds.some((k) => !/^Train/.test(k))) await waitFor(`/leaving .* running|Nothing runs through/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview without the other kinds', 180000);
   const closureText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
   await shot('closing');
+  // Each line is split into a part on each side, named after it; one side can be dropped and brought back.
+  const press = (label) => js(`[...document.querySelectorAll('.inspector .speeds button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})?.click()`);
+  const settled = `!document.querySelector('.reshape-preview .stale')`;
+  const partNames = await js(`[...document.querySelectorAll('.closure-part strong')].map((e) => e.textContent.trim())`);
+  if (/Train/.test(kinds.join())) assert.ok(partNames.some((n) => /-[NSEW]$/.test(n)), `the parts are named after their line: ${partNames.slice(0, 6).join(', ')}`);
+  const sideChoices = await js(`[...document.querySelectorAll('[aria-label="Which side to keep"] button')].map((b) => b.textContent.trim())`);
+  if (partNames.length > 1 && sideChoices.length === 3) {
+    await press(sideChoices[1]);
+    await waitFor(`document.querySelectorAll('.closure-part.dropped').length > 0 && ${settled}`, 'the parts on the other side to be dropped', 60000);
+    await shot('closing-one-side');
+    await press('Both');
+    await waitFor(`document.querySelectorAll('.closure-part.dropped').length === 0 && ${settled}`, 'both sides to be kept again', 60000);
+    step(`split into ${partNames.slice(0, 4).join(', ')}; "${sideChoices[1]}" drops the other side, "Both" brings it back`);
+  }
+  // The list and the map pick out the same line: pointing at a row marks it, and a part clicked on the map is kept, dropped or listed.
+  const lineRow = await find('.closure-lines li');
+  await mouse('mouseMoved', lineRow.x, lineRow.y, { buttons: 0 });
+  await waitFor(`!!document.querySelector('.closure-lines li.focus')`, 'the row under the pointer to be marked');
+  await shot('closing-focus');
+  const onPart = await findOnMap(/click to drop this part|click to list these lines/, { x0: 400, x1: 1100, y0: 150, y1: 760 });
+  assert.ok(onPart, 'a part of a split line can be pointed at on the map');
+  await clickAt(onPart.x, onPart.y);
+  await waitFor(`!!document.querySelector('.closure-only') || document.querySelectorAll('.closure-part.dropped').length > 0`, 'the click on the map to act on the part', 60000);
+  await shot('closing-part-clicked');
+  if (await js(`!!document.querySelector('.closure-only')`)) await js(`document.querySelector('.closure-only button').click()`);
+  else {
+    await clickAt(onPart.x, onPart.y);
+    await waitFor(`document.querySelectorAll('.closure-part.dropped').length === 0 && ${settled}`, 'a second click to keep both parts again', 60000);
+  }
+  step(`a part pointed at on the map (${onPart.tip.slice(0, 60)}) answers a click`);
+  step(`a line drawn round ${shutName} crosses: ${kinds.join(', ') || 'nothing'}`);
   // For part of the day: the preview names the hours, and going back to all day restores it.
-  await click('.inspector .speeds button', 'Part of the day');
-  await waitFor(`/10:00 to 14:00|between those times/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of a part-day closure', 60000);
+  await press('Part of the day');
+  await waitFor(`/10:00 to 14:00|between those times/.test(document.querySelector('.reshape-preview')?.textContent ?? '')`, 'the preview of a part-day closure', 180000);
   const partDayText = (await text('.reshape-preview')).replace(/\s+/g, ' ');
   assert.equal(await js(`document.querySelectorAll('.closure-times input[type=time]').length`), 2, 'a start and an end time are offered');
   await shot('closing-part-day');
-  await click('.inspector .speeds button', 'All day');
-  await waitFor(`(() => { const t = document.querySelector('.reshape-preview')?.textContent ?? ''; return !/10:00 to 14:00|between those times/.test(t) && /closed between|Nothing runs through|No train service/.test(t); })()`, 'the all-day preview again', 60000);
+  await press('All day');
+  await waitFor(`(() => { const t = document.querySelector('.reshape-preview')?.textContent ?? ''; return !/10:00 to 14:00|between those times/.test(t) && /Closed near|Nothing runs through/.test(t); })()`, 'the all-day preview again', 180000);
   step(`part-day closure previewed: ${partDayText.slice(18, 160)}`);
-  if (/closed between/.test(closureText)) {
+  if (/Closed near/.test(closureText) && /Train/.test(kinds.join())) {
     const changesBefore = Number((await text('.scenario-actions')).match(/(\d+) change/)[1]);
     await click('.inspector .button', 'Close it and change');
     await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('${changesBefore + 1} changes')`, 'the closure to apply', 240000);
     await waitFor(`!document.querySelector('.inspector strong') || document.querySelector('.inspector strong').textContent !== 'Close a road or a line'`, 'the closure panel to close');
     await shot('closed');
-    step(`line closed between ${sideA.tip.split(' · ')[0]} and ${sideB.tip.split(' · ')[0]}: ${closureText.slice(18, 200)}`);
+    assert.match(await text('.edits li'), /the parts run as/, 'the change names the parts');
+    step(`closed at ${shutName}: ${closureText.slice(18, 200)}`);
     await js(`document.activeElement?.blur()`);
     await key('z', 'KeyZ', 2, 90);
     await waitFor(`document.querySelector('.scenario-actions')?.textContent.includes('${changesBefore} changes')`, 'undo to reopen the line', 60000);
     step('Ctrl+Z reopens the line');
   } else {
-    step(`closure panel answered for ${sideA.tip.split(' · ')[0]} and ${sideB.tip.split(' · ')[0]}: ${closureText.slice(0, 120)}`);
+    step(`closure panel answered at ${shutName}: ${closureText.slice(0, 120)}`);
     await click('.inspector .icon-button');
   }
 
@@ -432,18 +574,18 @@ try {
     step('no clashes to fix');
   }
 
-  // 13. The two tool buttons stay in view however far the scenario panel is scrolled.
+  // 13. The two tools are on the map, in view however far the scenario panel is scrolled.
   await js(`(() => { const b = document.querySelector('.scenario-body'); if (b) b.scrollTop = b.scrollHeight; })()`);
   await sleep(200);
-  const drawVisible = await js(`(() => {
-    const b = [...document.querySelectorAll('.scenario .draw-button')].find((x) => x.textContent.includes('Draw a new line'));
+  const toolsVisible = await js(`['.draw-button', '.close-button'].every((c) => {
+    const b = document.querySelector('.map-tools ' + c);
     if (!b) return false;
     const r = b.getBoundingClientRect();
     const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && (top === b || b.contains(top));
-  })()`);
-  assert.ok(drawVisible, '"Draw a new line" should stay visible when the scenario panel is scrolled to the bottom');
-  step('the drawing and closing buttons stay in view when the scenario panel is scrolled');
+  })`);
+  assert.ok(toolsVisible, 'the drawing and closing tools should be in view on the map');
+  step('the drawing and closing tools are in view on the map');
 
   // 14. A trip added to a line from its panel, at a typed time.
   await click('.search-input');
@@ -552,11 +694,73 @@ try {
       step(`call dragged onto another platform on the platform chart (tooltip while dragging: "${platformTip}")`);
     }
   }
+
+  // 17b. Delete a whole line from its panel, in two clicks, and bring it back with Ctrl+Z.
+  await key('Escape', 'Escape', 0, 27);
+  await click('.search-input');
+  await type('F1');
+  await click('.search-results button', 'F1');
+  await waitFor(`/Manly|Circular Quay/.test(document.querySelector('.inspector')?.textContent ?? '') && !!document.querySelector('.inspector .tile-value')`, 'the F1 panel');
+  const ferryTrips = await text('.inspector .tile-value');
+  before = await changeCount();
+  await click('.inspector .actions button', 'Delete line');
+  await click('.inspector .actions button', 'Delete all');
+  await waitFor(`/no trips in this scenario/.test(document.querySelector('.inspector')?.textContent ?? '')`, 'the line to be deleted', 30000);
+  assert.equal(await changeCount(), before + 1);
+  assert.match(await text('.edits li'), /Deleted line F1/);
+  await shot('line-deleted');
+  await click('.scenario-actions button', 'Undo');
+  await waitFor(`document.querySelector('.inspector .tile-value')?.textContent === ${JSON.stringify(ferryTrips)}`, 'undo to bring the line back', 30000);
+  step(`line deleted from its panel (F1, ${ferryTrips} trips) and brought back with undo`);
+
+  // 18. A scenario run, set up in the wizard against the BAU run of step 1b. The scenario is the one
+  // this test has been editing; the same people are sent through it.
+  if (simBauMade) {
+    await click('.sim-head button', 'New simulation');
+    await waitFor(`!!document.querySelector('.sim-wizard')`, 'the wizard');
+    assert.match(await text('.sim-choice.on'), /scenario on screen/, 'with a scenario open, a scenario run is already chosen');
+    await click('.sim-footer button', 'Next');
+    await waitFor(`!!document.querySelector('.sim-wizard select[aria-label="BAU run to compare with"]')`, 'the BAU runs to compare with');
+    assert.ok(await choose('.sim-wizard select[aria-label="BAU run to compare with"]', 'UI test BAU'), 'the BAU run made earlier is offered');
+    await waitFor(`/Newcastle/.test(document.querySelector('.sim-report')?.textContent ?? '')`, 'what is taken from that BAU run');
+    assert.match(await text('.sim-report'), /Walk to another stop: 500 m/, 'what is taken from the BAU run is shown, not asked for');
+    await click('.sim-footer button', 'Next');
+    assert.match(await text('.sim-settings'), /before they give up/);
+    await click('.sim-footer button', 'Next');
+    await shot('sim-wizard-scenario-check');
+    await click('.sim-footer button', 'Run the simulation');
+    await waitFor(`!document.querySelector('.sim-wizard')`, 'the wizard to close', 20000);
+    await waitFor(`/Against the published timetable/.test(document.querySelector('.sim-summary')?.textContent ?? '')`, 'the scenario run to finish', 300000);
+    await shot('sim-scenario-summary');
+    step(`scenario run against the BAU run: ${(await text('.sim-summary .scenario-section')).replace('Against the published timetable', '').slice(0, 90)}`);
+
+    // The library lists the run; it can be removed from there.
+    await click('.sim-head button', 'Library');
+    await waitFor(`[...document.querySelectorAll('.sim-run')].some((r) => r.textContent.includes('UI test BAU'))`, 'the run in the library');
+    assert.match(await js(`[...document.querySelectorAll('.sim-run')].find((r) => r.textContent.includes('UI test BAU')).textContent`), /ui-test/, 'who made it is shown');
+    assert.equal(await js(`(() => { const rows = [...document.querySelectorAll('.sim-run')]; const i = rows.findIndex((r) => r.querySelector('strong').textContent === 'UI test BAU'); return rows[i + 1]?.style.marginLeft; })()`), '22px', 'the scenario run is listed under its BAU run');
+    await shot('sim-library');
+    await js(`[...document.querySelectorAll('.sim-run')].find((r) => r.textContent.includes('UI test BAU')).querySelector('.sim-run-tools button:last-of-type').click()`);
+    await waitFor(`[...document.querySelectorAll('.sim-run button')].some((b) => b.textContent.startsWith('Remove, though'))`, 'the second click to remove');
+    await click('.sim-run button', 'Remove, though 1 run depends on it');
+    await waitFor(`![...document.querySelectorAll('.sim-run strong')].some((r) => r.textContent === 'UI test BAU')`, 'the run to go from the library', 30000);
+    assert.equal(await js(`[...document.querySelectorAll('.sim-run')].some((r) => r.textContent.includes('scenario'))`), true, 'the scenario run stays, without its BAU run');
+    await key('Escape', 'Escape', 0, 27);
+    step('the library lists the scenario run under its BAU run, and removes the BAU run on the second click');
+  }
 } catch (err) {
-  failed = err;
-  await shot('failure').catch(() => {});
+  if (err.message !== 'UI_ONLY') {
+    failed = err;
+    await shot('failure').catch(() => {});
+  }
 } finally {
-  // Remove whatever scenario the test created.
+  // Remove whatever scenario the test created, and what its simulation left.
+  for (const run of await api(`/api/sim-runs?baseline=${baseline.id}`).catch(() => [])) {
+    if (!simRunsBefore.has(run.id)) await api(`/api/sim-runs/${run.id}?force=true`, 'DELETE').catch(() => {});
+  }
+  for (const set of await api('/api/demand').catch(() => [])) {
+    if (set.madeUp && !demandBefore.has(set.id)) await api(`/api/demand/${set.id}?force=true`, 'DELETE').catch(() => {});
+  }
   for (const s of await api(`/api/scenarios?baseline=${baseline.id}`)) {
     if (!scenariosBefore.has(s.id)) await api(`/api/scenarios/${s.id}`, 'DELETE');
   }

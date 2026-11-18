@@ -6,6 +6,7 @@ import { applyEdit } from '../scenario.ts';
 import { useStore } from '../store.ts';
 import { VehicleTypePicker } from '../FleetPanel.tsx';
 import { FrequencyEditor } from './FrequencyEditor.tsx';
+import { RoutePassengers } from '../sim/SimFigures.tsx';
 import { HourlyChart } from './HourlyChart.tsx';
 import { Badge, duration, fmt, Loading, shortStop, Tag, Tile } from './parts.tsx';
 
@@ -22,6 +23,7 @@ export function RoutePanel({ routeId }: { routeId: number }) {
   const busy = useStore((s) => s.editBusy);
   const [newTripAt, setNewTripAt] = useState('12:00');
   const [newTripWay, setNewTripWay] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const r = route.data;
   useEffect(() => {
@@ -91,7 +93,34 @@ export function RoutePanel({ routeId }: { routeId: number }) {
             Change route
           </button>
         )}
+        {editing && r.tripCount > 0 && (confirmDelete ? (
+          <>
+            <button
+              className="button danger"
+              disabled={busy}
+              title="Takes every trip of this line out of the scenario. Ctrl+Z brings it back."
+              onClick={async () => {
+                await applyEdit({ kind: 'deleteLine', routeId: r.id });
+                setConfirmDelete(false);
+              }}
+            >
+              Delete all {fmt(r.tripCount)} trips
+            </button>
+            <button className="button" onClick={() => setConfirmDelete(false)}>
+              Keep
+            </button>
+          </>
+        ) : (
+          <button className="button" title="Take this line out of the scenario: every trip, in both directions" onClick={() => setConfirmDelete(true)}>
+            Delete line
+          </button>
+        ))}
       </div>
+      {r.tripCount === 0 && (
+        <p className="note">This line has no trips in this scenario{r.before && r.before.tripCount > 0 ? `: all ${fmt(r.before.tripCount)} were deleted. Undo (Ctrl+Z) brings them back` : ''}.</p>
+      )}
+
+      <RoutePassengers routeId={r.id} places={r.hourly} directions={r.directions} />
 
       {editing && <FrequencyEditor key={r.id} route={r} />}
 

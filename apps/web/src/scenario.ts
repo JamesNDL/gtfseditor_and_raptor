@@ -9,6 +9,9 @@ export interface ScenarioSummary {
   head: number;
   baselineId: number;
   editCount: number;
+  createdAt?: string;
+  /** Simulation runs made on this scenario. */
+  simRuns?: number;
 }
 
 export interface ScenarioEdit {
@@ -118,6 +121,12 @@ export async function createScenario() {
   const created = await send<ScenarioSummary>('POST', '/api/scenarios', { baselineId });
   await loadScenarios(baselineId);
   await selectScenario(created.id);
+}
+
+export async function renameScenario(id: number, name: string) {
+  const { baselineId } = useStore.getState();
+  await send('PATCH', `/api/scenarios/${id}`, { name });
+  if (baselineId !== null) await loadScenarios(baselineId);
 }
 
 export async function deleteScenario(id: number) {

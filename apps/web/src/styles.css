@@ -1526,3 +1526,612 @@ select.cell {
   gap: 6px;
   margin: 6px 0;
 }
+
+/* ---------------------------------------------------------------- simulator */
+/* The Simulate panel sits under the scenario panel and gives way before the tools above it do. */
+.sim-panel {
+  flex: 0 2 auto;
+  min-height: 46px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sim-panel.open {
+  flex: 0 1 auto;
+  min-height: 150px;
+}
+
+.sim-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.sim-title {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.sim-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sim-going {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sim-going .grow {
+  min-width: 0;
+}
+
+.sim-progress {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.sim-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.sim-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-summary p {
+  margin: 0;
+}
+
+.sim-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.sim-line span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-person {
+  display: flex;
+  gap: 6px;
+}
+
+.sim-person .day-select {
+  min-width: 0;
+}
+
+.sim-journeys {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sim-limits ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+/* Passenger figures in the line, trip and station panels. */
+.sim-figures h3 .tag {
+  margin-left: 4px;
+}
+
+.sim-hours {
+  height: 72px;
+}
+
+.sim-places {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  border: 1px solid var(--before);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+}
+
+.station-bar.sim-over,
+.sim-load-bar .sim-over {
+  background: var(--warn);
+}
+
+.sim-pair-bars {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.station-bar.sim-off,
+.sim-legend-off {
+  background: var(--before);
+}
+
+.sim-legend-off {
+  border: 0;
+}
+
+.sim-loads {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-loads li {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 70px 34px 78px;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.sim-load-bar {
+  position: relative;
+  height: 8px;
+  background: var(--hairline);
+  border-radius: 2px;
+}
+
+.sim-load-bar span {
+  display: block;
+  height: 100%;
+  background: var(--series-1);
+  border-radius: 2px;
+}
+
+/* Where the vehicle is full. */
+.sim-load-bar i {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text);
+}
+
+.sim-load-n {
+  text-align: right;
+}
+
+/* The wizard. */
+.sim-wizard {
+  width: min(720px, 100%);
+}
+
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sim-steps .on {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sim-steps .done {
+  color: var(--text);
+}
+
+.sim-step {
+  padding: 4px 18px 12px;
+  min-height: 250px;
+}
+
+.sim-step h3 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+}
+
+.sim-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sim-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.sim-choice.on {
+  border-color: var(--accent);
+}
+
+.sim-choice.off {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.sim-number {
+  width: 84px;
+}
+
+.sim-report {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sim-report ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sim-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.sim-settings label:not(.check) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.sim-settings b {
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sim-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The library. */
+.sim-library {
+  width: min(1180px, 100%);
+  height: min(780px, calc(100vh - 48px));
+}
+
+.sim-library-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  border-top: 1px solid var(--hairline);
+}
+
+.sim-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-right: 1px solid var(--hairline);
+  overflow-y: auto;
+}
+
+.sim-folders > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sim-folders > button.on {
+  background: var(--hairline);
+}
+
+.sim-new-folder,
+.sim-folder-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sim-new-folder .day-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.sim-runs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sim-filters {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.sim-filters .check {
+  margin: 0;
+}
+
+.sim-run-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+}
+
+.sim-run-list h3 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.sim-run {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 2px solid transparent;
+}
+
+.sim-run.on {
+  border-left-color: var(--accent);
+}
+
+.sim-run-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.sim-run-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sim-run-tools {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  max-width: 440px;
+}
+
+.sim-run-tools .day-select {
+  max-width: 130px;
+}
+
+.sim-rename {
+  width: 190px;
+}
+
+/* Managing scenarios, and the run on show. */
+.scenario-manager {
+  width: min(760px, 100%);
+}
+
+.scenario-manager .fleet-scroll {
+  padding: 0 14px 14px;
+}
+
+.scenario-rename {
+  width: 100%;
+}
+
+.sim-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The tools that change the network, on the map itself beside the left column. */
+.map-tools {
+  position: absolute;
+  top: 78px;
+  left: 326px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.map-tools > * {
+  pointer-events: auto;
+}
+
+.map-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 650;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.map-tool.close-button {
+  margin-top: 0;
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.map-tool.on {
+  background: var(--accent);
+  color: var(--panel);
+}
+
+.map-tool.close-button.on {
+  background: var(--danger-text);
+  color: var(--panel);
+}
+
+.map-tool-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.map-tools-hint {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.closure-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+/* A closure's list of lines: each with what happens to it and the parts it is split into. */
+.closure-lines li {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.closure-line-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.closure-choice {
+  flex: none;
+  width: auto;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.closure-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.closure-part {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.closure-part:hover {
+  border-color: var(--accent);
+}
+
+.closure-part.dropped {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.side-dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+.reshape-preview .stale {
+  opacity: 0.55;
+}
+
+/* The line the pointer is on, in the closure's list or on the map. */
+.closure-lines li.focus {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: -8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent), 8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.closure-only {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 13px;
+}

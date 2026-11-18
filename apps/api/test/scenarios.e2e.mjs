@@ -597,6 +597,58 @@ try {
     assert.equal((await get(`/api/scenarios/${S}`)).stats.trips, statsBefore.trips);
     step('undo reopens the line');
 
+    // The same cut as the interface makes it: a line drawn on the map across the track between the two
+    // stations. It cuts whatever crosses it, of any mode; here everything but the trains is left running.
+    const [mx, my] = [(sideA.lon + sideB.lon) / 2, (sideA.lat + sideB.lat) / 2];
+    const [ax, ay] = [sideB.lon - sideA.lon, sideB.lat - sideA.lat];
+    const reach = 0.004 / Math.hypot(ax, ay); // about 400 m either side of the track
+    const drawnBody = { what: 'cut', line: [[mx - ay * reach, my + ax * reach], [mx + ay * reach, my - ax * reach]], widthM: 20 };
+    assert.equal((await send('POST', `/api/close-preview${q}`, { what: 'cut', line: [[mx, my]] })).status, 400, 'a drawn closure needs two points');
+    const drawnAll = await send('POST', `/api/close-preview${q}`, drawnBody);
+    assert.equal(drawnAll.status, 200, JSON.stringify(drawnAll.body));
+    assert.ok(drawnAll.body.modes.some((m) => m.id === 'train'), 'the drawn line finds the trains it crosses');
+    drawnBody.exceptModes = drawnAll.body.modes.map((m) => m.id).filter((id) => id !== 'train');
+    const drawnPreview = await send('POST', `/api/close-preview${q}`, drawnBody);
+    assert.equal(drawnPreview.status, 200, JSON.stringify(drawnPreview.body));
+    assert.ok(drawnPreview.body.lines.some((l) => l.routeId === t1.id), 'the line the drawn closure crosses is listed');
+    assert.ok(drawnPreview.body.trips.split > 0);
+    assert.equal(drawnPreview.body.modes.length, drawnAll.body.modes.length, 'modes left running are still listed, to be ticked again');
+    const drawn1 = await edit({ kind: 'close', ...drawnBody });
+    assert.equal(drawn1.status, 200, JSON.stringify(drawn1.body));
+    for (const p of (await get(`/api/routes/${t1.id}${q}`)).patterns) {
+      const stations = stationsOf((await get(`/api/patterns/${p.id}/stops`)).stops);
+      assert.ok(!(stations.has(stationA) && stations.has(stationB)), `no stop pattern of ${t1.shortName} crosses the drawn closure`);
+    }
+    assert.equal((await get(`/api/scenarios/${S}`)).stats.unassigned, 0, 'every part of a split trip has a vehicle');
+    assert.equal((await get(`/api/scenarios/${S}/closures`)).features.length, 1, 'the drawn closure is on the map');
+    // Each side's part is a line of its own, named after the original, and the original keeps no trip through the closure.
+    assert.equal(drawnPreview.body.sides.length, 2, 'a drawn closure has two sides');
+    const sideCodes = drawnPreview.body.sides.map((x) => x.code);
+    const partNames = sideCodes.map((code) => `${t1.shortName}-${code}`);
+    assert.match(drawn1.body.summary, /the parts run as/);
+    const routesCut = await get(`/api/baselines/${baseline.id}/routes${q}`);
+    const variants = partNames.map((name) => routesCut.find((r) => r.shortName === name));
+    assert.ok(variants.every(Boolean), `the parts run as ${partNames.join(' and ')}`);
+    for (const v of variants) assert.ok((await get(`/api/routes/${v.id}${q}`)).tripCount > 0, `${v.shortName} has trips`);
+    step(`closure drawn across the track: ${drawn1.body.summary}`);
+    await undoTo(headBeforeCut);
+    assert.equal((await get(`/api/scenarios/${S}`)).stats.trips, statsBefore.trips);
+    assert.ok(!(await get(`/api/baselines/${baseline.id}/routes${q}`)).some((r) => partNames.includes(r.shortName)), 'undo takes the parts away');
+
+    // Keeping one side only: no trip runs in two parts, and the part on the other side is marked as dropped.
+    const oneSide = await send('POST', `/api/close-preview${q}`, { ...drawnBody, keep: sideCodes[0] });
+    assert.equal(oneSide.status, 200, JSON.stringify(oneSide.body));
+    assert.equal(oneSide.body.trips.split, 0, 'with one side kept nothing runs in two parts');
+    assert.ok(oneSide.body.trips.shortened > 0);
+    const t1Sides = oneSide.body.lines.find((l) => l.routeId === t1.id).parts;
+    assert.deepEqual(t1Sides.filter((x) => x.kept).map((x) => x.side), [sideCodes[0]], 'only the chosen side is kept');
+    assert.ok(oneSide.body.parts.some((x) => !x.kept) && oneSide.body.turns.length > 0, 'the map is given the dropped parts and the turn-back stops');
+    // One line can be left running through while the rest are cut.
+    const leftAlone = await send('POST', `/api/close-preview${q}`, { ...drawnBody, lines: { [t1.id]: { how: 'leave' } } });
+    assert.deepEqual(leftAlone.body.lines.find((l) => l.routeId === t1.id).actions, ['left'], 'a line can be left running');
+    assert.ok(leftAlone.body.trips.split < drawnPreview.body.trips.split);
+    step(`one side kept (${sideCodes[0]}): ${oneSide.body.trips.shortened} trips keep one part; ${t1.shortName} can be left running`);
+
     // The same cut for part of the day: only trips in the closed stretch between 10:00 and 14:00 change.
     const partBody = { ...cutBody, fromSecs: 10 * 3600, toSecs: 14 * 3600 };
     assert.equal((await send('POST', `/api/close-preview${q}`, { ...cutBody, fromSecs: 14 * 3600, toSecs: 10 * 3600 })).status, 400, 'a closure must end after it starts');

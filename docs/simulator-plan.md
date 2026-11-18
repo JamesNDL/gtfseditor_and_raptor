@@ -1,6 +1,6 @@
 # Passenger simulator plan
 
-Written 17 Nov 2026. Phases S0 to S3 are built (18 Nov 2026): what was found, measured and done differently is in sections 14 to 16, and the rest is not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
+Written 17 Nov 2026. Phases S0 to S4 are built (18 Nov 2026), which makes the first version usable from the editor: what was found, measured and done differently is in sections 14 to 17. S5 and S6 are not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
 
 ## 1. Summary
 
@@ -635,3 +635,35 @@ That scenario run is the "add a line: some people near it use it" check of secti
 - **"Seats only"** is still not offered: the export gives seated and standing per vehicle type, but the router adds them into one figure.
 - **Who may rename or remove** is open to everyone, as section 6.5 says until there are logins.
 - The check in the browser (`npm run test:ui`) has nothing to drive until S4.
+
+## 17. S4 findings (18 Nov 2026)
+
+S4 is built: the simulator can be used from the editor. This is the first usable version of section 10. `npm run test:ui` sets up and runs a BAU run and a scenario run through the interface, with the router running.
+
+### What is in the editor
+
+| Where | What |
+|---|---|
+| Simulation panel, left column | "New simulation" and "Library". The run in progress with its stage, a count and Stop. A chooser of finished runs. The chosen run's summary: who travels, journey times, against the published timetable, who changed stop, trips planned over capacity, crowding where capacity is on, the note on placeholder capacities and the limits of section 4.4. "Run again with capacity". One person by `user_id`, listed and drawn on the map. |
+| Wizard | The four steps of section 7.1, both paths. Upload a CSV and see its check report, or make journeys up. The area: whole network, a saved area, what is on screen, or a box dragged on the map, which can be saved under a name. The last step names the run, files it, and warns. The choices of the last run are remembered in the browser, as is the name typed for "who". |
+| Library | Every run of the chosen day, by folder or by date, with scenario runs and capacity runs listed under the run they were made from. Search by name; filter by kind, maker and "out of date". Open, rename, move, archive and restore, stop, remove (two clicks, and it says when other runs depend on it). Folders are made, renamed and removed there. Each run's size, and the total. |
+| Line panel | Passengers a day, trips full and over 80%, the fullest point with its time, and passengers against places by hour for each direction. |
+| Trip panel | Passengers aboard along the trip's stops against its capacity, with boardings, alightings and anyone left behind. |
+| Station panel | Boardings, alightings and changes, left behind, the most waiting at once, and boardings and alightings by hour. |
+| Links | `&sim=<run id>` in the address names the run whose figures to show. |
+
+### What differs from the plan
+
+- **The wizard counts journey ends inside an area, not journeys.** Section 7.1 asks for "the count of journeys inside it". The API knows how many journey ends name each stop, not which pairs go together, so before a run the wizard says what share of journey ends are inside the box and estimates the journeys from that. The exact counts (inside, across the edge, outside) are in the run's summary, as before.
+- **Capacity added afterwards is its own entry** in the library and in the chooser, under the run it came from, as section 16 said. "Run again with capacity" makes it.
+- **Figures show only on the timetable the run was made on.** With a BAU run chosen and a scenario open, the panel says so and offers to open the published timetable. Trips a scenario has changed since a run have no figures, because an edited trip is a new trip.
+- **The rough time** is the number of journeys over the average planning rate of earlier runs. It does not allow for a smaller area being quicker per journey, so it errs on the long side for bounded runs.
+- **"Who" is a name typed in the wizard's last step** and kept by the browser, as section 6.5 says until there are logins.
+- **The panel is in the left column, folded to its heading** until it is opened or a run is going or chosen; the left column is short of room with the scenario panel above it.
+
+### Not done
+
+- Step 3's extra capacity settings (what counts as full, how many times someone may be left behind) are not in the wizard; the defaults are used. The API takes both.
+- The wizard's last step does not say how long preparing the timetable will take beyond "up to half a minute".
+- Nothing warns when the disk is filling. The library shows each run's size and the total.
+- The map and timelines are S5 (vehicles coloured by how full, lines by passengers, stops by boardings). The side-by-side comparison of two runs is S6; until then a scenario run's summary shows its figures against its BAU run.

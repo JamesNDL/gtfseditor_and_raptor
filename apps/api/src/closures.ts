@@ -1,4 +1,10 @@
-// Closures: a stretch of road, or a line between two stations, that nothing can run through.
+// Closures: a line drawn on the map that nothing can run through, whatever kind of service it is.
+// Each line it crosses is split there: the part on each side becomes a line of its own (B1 becomes
+// B1-N and B1-S), with its own path and timetable, and its vehicles turn back at the last stop
+// before the closure. Either part can be dropped. A bus or coach line can be sent round by other
+// roads instead.
+// (Two older forms are still taken: a stretch of road round a point, and one mode's line between
+// two stations.)
 //
 // A closure is an area on the map. Every stop pattern whose path enters it is changed, using the
 // same machinery as "Change route":
@@ -10,7 +16,7 @@ import { distanceM, distanceToPathM, formatClock, pathDistances, slicePath, type
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { applyReshape, describeChange, planReshape, type ReshapeDeps, type ReshapePlan } from './reshape.ts';
-import { ROAD_MODES, type Avoid } from './roads.ts';
+import { entersAvoid, ROAD_MODES, type Avoid } from './roads.ts';
 import { scenarioOf, visible, type Scenario } from './scenarios.ts';
 import { trackPath } from './tracks.ts';
 
@@ -22,9 +28,19 @@ export interface ClosureDeps extends ReshapeDeps {
 }
 
 export interface CloseBody {
-  /** 'road', or the mode whose line is closed: train, metro, light_rail or ferry. */
+  /** 'cut' for a line drawn on the map; or 'road', or the mode whose line is closed: train, metro, light_rail or ferry. */
   what: string;
   baselineId?: number;
+  /** Cut: the points of the drawn line, how far either side of it is closed, and the modes to leave running. */
+  line?: [number, number][];
+  widthM?: number;
+  exceptModes?: string[];
+  /** Cut: what happens to buses and coaches: each line is split at the closure (the default), or sent round it. */
+  roads?: 'split' | 'detour';
+  /** Cut: which parts of a split line are kept: 'both', one side of the closure ('N', 'S', 'E' or 'W'), or 'none'. */
+  keep?: string;
+  /** Cut: a different choice for single lines, by route id. 'leave' leaves the line running through. */
+  lines?: Record<string, { how?: 'split' | 'detour' | 'leave'; keep?: string }>;
   /** Road: the middle of the closed stretch and how far it reaches. */
   lon?: number;
   lat?: number;
@@ -44,16 +60,40 @@ const TRACK_MODES = new Set(['train', 'metro', 'light_rail', 'ferry']);
 // How far either side of the closed line another service's path can be and still count as using it.
 // Ferry paths are drawn loosely, so they get more room.
 const CORRIDOR_M: Record<string, number> = { train: 40, metro: 40, light_rail: 30, ferry: 150 };
-// Road closures change at most this many stop patterns in one go; a bigger closure is better made in parts.
-const MAX_PATTERNS = 80;
+// A closure sends at most this many bus and coach stop patterns another way in one go: each one is a
+// set of questions to the routing server. (It was 80 until 18 Nov; the Harbour Bridge carries 162.)
+const MAX_PATTERNS = 400;
 
-type Action = 'detour' | 'shortened' | 'split' | 'removed' | 'blocked' | 'failed';
+// joined: a line that crossed the closure and came back now turns round before it, as one trip.
+// left: the line was chosen to be left running through.
+type Action = 'detour' | 'shortened' | 'split' | 'joined' | 'removed' | 'blocked' | 'failed' | 'left';
+
+/** One part of a line that a closure splits. */
+interface Piece {
+  /** The side of the closure it is on: 'N', 'S', 'E' or 'W'; empty for a closure that has no sides. */
+  side: string;
+  stopIds: number[];
+  /** The stop where its vehicles now turn back. */
+  turnsAt: { name: string; lon: number; lat: number };
+  kept: boolean;
+  /** The stretches of the published path it keeps, as fractions of its length: for the map. */
+  ranges: [number, number][];
+}
+
+const SIDE_NAME: Record<string, string> = { N: 'north', S: 'south', E: 'east', W: 'west' };
 
 interface Item {
   patternId: number;
   routeId: number;
   name: string;
   color: string;
+  modeId: string;
+  /** A bus or coach line, which can be sent round by other roads. */
+  road: boolean;
+  /** What was chosen for the line, and which parts of it are kept. */
+  how: 'split' | 'detour' | 'leave';
+  keep: string;
+  pieces: Piece[];
   trips: number;
   /** For a closure that lasts part of the day: the trips that would be in it then. The rest are left alone. */
   tripIds?: number[];
@@ -63,6 +103,8 @@ interface Item {
   reason?: string;
   /** One plan for a detour or a line cut short; two when trips are split either side of the closure. */
   plans: ReshapePlan[];
+  /** The side of the closure each plan is for, where the closure has sides. */
+  planSides: string[];
 }
 
 interface ClosurePlan {
@@ -75,6 +117,10 @@ interface ClosurePlan {
   items: Item[];
   /** Stop patterns over the limit, left as they are. */
   skipped: number;
+  /** Every mode with services through the closed area, whether or not it was left running. */
+  modes: { id: string; name: string; lines: number }[];
+  /** The two sides of a drawn closure, or null for one that has none. */
+  sides: [string, string] | null;
 }
 
 const tidy = (name: string) => name.replace(/,.*$/, '').replace(/ Station$/, '');
@@ -84,11 +130,13 @@ const clock = (secs: number) => {
 };
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Works out everything a closure would do, without changing anything. `full` also plans each new path. */
-export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: number, body: CloseBody, deps: ClosureDeps, full: boolean): Promise<ClosurePlan> {
+/** Works out everything a closure would do, without changing anything. */
+/** `detail` says which new paths are planned: those of road vehicles only (enough for a preview), or all of them. */
+export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: number, body: CloseBody, deps: ClosureDeps, detail: 'roads' | 'all'): Promise<ClosurePlan> {
   const what = String(body.what);
   const road = what === 'road';
-  if (!road && !TRACK_MODES.has(what)) throw fail(400, 'Choose what is closed');
+  const cut = what === 'cut';
+  if (!road && !cut && !TRACK_MODES.has(what)) throw fail(400, 'Choose what is closed');
 
   let window: ClosurePlan['window'] = null;
   if (body.fromSecs != null || body.toSecs != null) {
@@ -102,9 +150,55 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
   let zoneSql;
   let label: string;
   let avoid: Avoid | undefined;
-  let modes: string[];
+  let modes: string[] | null;
   let minInside = 0;
-  if (road) {
+  type Sides = { codes: [string, string]; of: (lon: number, lat: number) => string };
+  let sides: Sides | null = null;
+  /** For a line with no left and right: makes the sides from the stops either side of it on one stop pattern. */
+  let sidesFrom: ((ax: number, ay: number, bx: number, by: number) => Sides) | null = null;
+  const except = new Set(cut && Array.isArray(body.exceptModes) ? body.exceptModes.map(String) : []);
+  if (cut) {
+    const line = (Array.isArray(body.line) ? body.line : []).map((p) => [Number(p?.[0]), Number(p?.[1])] as [number, number]);
+    if (line.length < 2) throw fail(400, 'Draw a line across what is closed: click the map on one side, then on the other');
+    if (line.length > 60 || !line.every(([lon, lat]) => lon > 140 && lon < 160 && lat > -38 && lat < -28)) throw fail(400, 'That line cannot be used');
+    const widthM = Math.round(Number(body.widthM ?? 20));
+    if (!(widthM >= 5 && widthM <= 200)) throw fail(400, 'The closure can reach between 5 and 200 metres either side of the line');
+    const along = pathDistances(line);
+    const length = along[along.length - 1];
+    if (length < 5) throw fail(400, 'That line is too short: click further apart');
+    if (length > 20_000) throw fail(400, 'That line is more than 20 km long: draw a shorter one');
+    const middle = slicePath(line, along, length / 2, length)[0];
+    const reach = Math.max(...line.map((p) => distanceM(p[0], p[1], middle[0], middle[1])));
+    avoid = { lon: middle[0], lat: middle[1], radiusM: reach + widthM, line, widthM };
+    // The two sides of the line, named by compass. A line that runs more or less straight has a left
+    // and a right; one that doubles back (drawn round something) is judged from its middle.
+    const kx = 111_320 * Math.cos((middle[1] * Math.PI) / 180);
+    const ky = 110_540;
+    const [a, b] = [line[0], line[line.length - 1]];
+    const dx = (b[0] - a[0]) * kx;
+    const dy = (b[1] - a[1]) * ky;
+    if (Math.hypot(dx, dy) >= length * 0.5) {
+      const northSouth = Math.abs(dx) >= Math.abs(dy);
+      const left = northSouth ? (dx > 0 ? 'N' : 'S') : dy > 0 ? 'W' : 'E';
+      const right = { N: 'S', S: 'N', E: 'W', W: 'E' }[left]!;
+      sides = { codes: northSouth ? ['N', 'S'] : ['W', 'E'], of: (lon, lat) => (dx * (lat - a[1]) * ky - dy * (lon - a[0]) * kx > 0 ? left : right) };
+    } else {
+      // Which way the sides face is taken from the busiest line through it, further down.
+      sidesFrom = (ax, ay, bx, by) =>
+        Math.abs((bx - ax) * kx) > Math.abs((by - ay) * ky)
+          ? { codes: ['W', 'E'], of: (lon) => (lon < middle[0] ? 'W' : 'E') }
+          : { codes: ['N', 'S'], of: (_lon, lat) => (lat > middle[1] ? 'N' : 'S') };
+    }
+    modes = null;
+    const wkt = `LINESTRING(${line.map((p) => `${p[0]} ${p[1]}`).join(',')})`;
+    zoneSql = tx`ST_Buffer(ST_GeomFromText(${wkt}, 4326)::geography, ${widthM})::geometry`;
+    const [near] = await tx`
+      select coalesce(p.name, s.name) as name from stops s left join stops p on p.id = s.parent_id
+      where s.baseline_id = ${baselineId} and s.scenario_id is null and s.location_type = 0 and cardinality(s.mode_ids) > 0
+      order by s.geom <-> ST_SetSRID(ST_MakePoint(${middle[0]}, ${middle[1]}), 4326) limit 1`;
+    const size = length >= 950 ? `${(length / 1000).toFixed(1)} km` : `${Math.round(length / 10) * 10 || 10} m`;
+    label = `Closed near ${near ? tidy(near.name) : 'here'} (a line ${size} long)`;
+  } else if (road) {
     const lon = Number(body.lon);
     const lat = Number(body.lat);
     const radiusM = Math.round(Number(body.radiusM ?? 100));
@@ -154,15 +248,16 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
     with zone as (select ST_GeomFromText(${zoneWkt}, 4326) as g),
     cand as materialized (
       select p.id, p.route_id, p.stop_ids, sh.geom, zone.g,
-             coalesce(r.short_name, r.long_name, 'Line') as name, coalesce(r.color, m.color) as color
+             coalesce(r.short_name, r.long_name, 'Line') as name, coalesce(r.color, m.color) as color,
+             r.mode_id, m.name as mode_name
       from patterns p
       join routes r on r.id = p.route_id
       join modes m on m.id = r.mode_id
       join shapes sh on sh.id = p.shape_id
       cross join zone
       where p.baseline_id = ${baselineId} and (p.scenario_id is null or ${ownPatterns})
-        and r.mode_id = any(${modes}) and ST_Intersects(sh.geom, zone.g))
-    select c.id, c.route_id, c.stop_ids, c.name, c.color, x.trips, span.f0, span.f1, span.inside,
+        and ${modes ? tx`r.mode_id = any(${modes})` : tx`true`} and ST_Intersects(sh.geom, zone.g))
+    select c.id, c.route_id, c.stop_ids, c.name, c.color, c.mode_id, c.mode_name, x.trips, span.f0, span.f1, span.inside,
            array(select ST_LineLocatePoint(c.geom, s.geom) from unnest(c.stop_ids) with ordinality as o(id, n) join stops s on s.id = o.id order by o.n) as fracs,
            array(select s.name from unnest(c.stop_ids) with ordinality as o(id, n) join stops s on s.id = o.id order by o.n) as names,
            array(select ST_X(s.geom) from unnest(c.stop_ids) with ordinality as o(id, n) join stops s on s.id = o.id order by o.n) as lons,
@@ -180,8 +275,14 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
 
   const items: Item[] = [];
   let skipped = 0;
+  let roadPatterns = 0;
+  const found = new Map<string, { id: string; name: string; routes: Set<number> }>();
   for (const r of rows) {
     if (Number(r.inside) < minInside) continue; // crosses the closed line rather than running along it
+    if (!found.has(r.mode_id)) found.set(r.mode_id, { id: r.mode_id, name: r.mode_name, routes: new Set() });
+    found.get(r.mode_id)!.routes.add(r.route_id);
+    if (except.has(r.mode_id)) continue;
+    const byRoad = ROAD_MODES.has(r.mode_id);
     const ids = r.stop_ids as number[];
     const fracs = (r.fracs as number[]).map(Number);
     const names = r.names as string[];
@@ -193,17 +294,38 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
     let after = n;
     for (let i = n - 1; i > before; i--) if (fracs[i] > r.f1) after = i;
     // A stop is closed if it lies along the closed stretch of the path or, for a road, inside the closed area itself.
-    const closed = ids.map((_, i) => (i > before && i < after) || (avoid !== undefined && distanceM(Number(r.lons[i]), Number(r.lats[i]), avoid.lon, avoid.lat) <= avoid.radiusM));
+    const within = (i: number) =>
+      avoid!.line
+        ? distanceToPathM(avoid!.line, Number(r.lons[i]), Number(r.lats[i])) <= (avoid!.widthM ?? 0)
+        : distanceM(Number(r.lons[i]), Number(r.lats[i]), avoid!.lon, avoid!.lat) <= avoid!.radiusM;
+    // For a drawn line, only stops on the line itself are closed: a line is split or sent round at each
+    // place it crosses, and what lies between two crossings is not shut.
+    const closed = ids.map((_, i) => (!cut && i > before && i < after) || (avoid !== undefined && within(i)));
+    const choice = cut ? body.lines?.[String(r.route_id)] : undefined;
+    const how: Item['how'] = choice?.how === 'leave' ? 'leave' : !byRoad ? 'split' : (choice?.how ?? (cut ? (body.roads ?? 'split') : 'detour')) === 'detour' ? 'detour' : 'split';
+    const keep = cut ? String(choice?.keep ?? body.keep ?? 'both') : 'both';
     const item: Item = {
       patternId: r.id,
       routeId: r.route_id,
       name: r.name,
       color: r.color,
+      modeId: r.mode_id,
+      road: byRoad,
+      how,
+      keep,
+      pieces: [],
       trips: r.trips,
       closedStops: [...new Set(names.filter((_, i) => closed[i]).map(tidy))],
       action: 'removed',
       plans: [],
+      planSides: [],
     };
+    if (how === 'leave') {
+      item.action = 'left';
+      item.closedStops = [];
+      items.push(item);
+      continue;
+    }
     if (window) {
       // A trip is caught if it is between the last stop before the closure and the first one after it
       // at any moment the closure is in force. Where the closure is before the first stop or after the
@@ -223,56 +345,92 @@ export async function planClosure(tx: Sql, sc: Scenario | null, baselineId: numb
     }
     const head = ids.slice(0, before + 1);
     const tail = ids.slice(after);
-    if (road) {
+    if (byRoad && how === 'detour') {
       const kept = ids.filter((_, i) => !closed[i]);
       if (kept.length >= 2) {
         item.action = !closed[0] && !closed[n - 1] ? 'detour' : 'shortened';
-        if (items.filter((i) => i.action !== 'removed').length >= MAX_PATTERNS) {
+        if (roadPatterns++ >= MAX_PATTERNS) {
           skipped++;
           continue;
         }
-        if (full) {
-          try {
-            const plan = await planReshape(tx, sc, r.id, kept, { followRoads: true, direct: false, platformIndex: 0, avoid }, deps);
-            if (item.tripIds) plan.tripIds = item.tripIds;
-            // The path enters the area only before its first stop or after its last: nothing to change.
-            if (plan.rerouted === 0 && plan.added === 0 && plan.removed === 0) continue;
-            // Checked on the whole new path, so that nothing is applied that still runs through the closure.
-            if (plan.blocked || distanceToPathM(plan.coords, avoid!.lon, avoid!.lat) <= avoid!.radiusM) {
-              item.action = 'blocked';
-              item.reason = 'no way round was found';
-            } else item.plans = [plan];
-          } catch (err) {
-            if ((err as { statusCode?: number }).statusCode !== 400) throw err;
-            item.action = 'failed';
-            item.reason = (err as Error).message;
-          }
+        try {
+          const plan = await planReshape(tx, sc, r.id, kept, { followRoads: true, direct: false, platformIndex: 0, avoid }, deps);
+          if (item.tripIds) plan.tripIds = item.tripIds;
+          // The path enters the area only before its first stop or after its last: nothing to change.
+          if (plan.rerouted === 0 && plan.added === 0 && plan.removed === 0) continue;
+          // Checked on the whole new path, so that nothing is applied that still runs through the closure.
+          if (plan.blocked || entersAvoid(plan.coords, avoid!)) {
+            item.action = 'blocked';
+            item.reason = 'no way round was found';
+          } else item.plans = [plan];
+        } catch (err) {
+          if ((err as { statusCode?: number }).statusCode !== 400) throw err;
+          item.action = 'failed';
+          item.reason = (err as Error).message;
         }
       }
     } else {
       if (head.length === n || tail.length === n) continue; // the closed stretch is beyond the end of this line
-      const pieces = [head, tail].filter((p) => p.length >= 2);
-      if (pieces.length) {
-        item.action = pieces.length === 2 ? 'split' : 'shortened';
-        if (full) {
-          try {
-            for (const piece of pieces) {
-              const plan = await planReshape(tx, sc, r.id, piece, { followRoads: false, direct: false, platformIndex: 0 }, deps);
-              if (item.tripIds) plan.tripIds = item.tripIds;
-              item.plans.push(plan);
+      if (!sides && sidesFrom && before >= 0 && after < n) sides = sidesFrom(Number(r.lons[before]), Number(r.lats[before]), Number(r.lons[after]), Number(r.lats[after]));
+      const sideOf = (i: number) => (sides ? sides.of(Number(r.lons[i]), Number(r.lats[i])) : '');
+      const turn = (i: number) => ({ name: tidy(names[i]), lon: Number(r.lons[i]), lat: Number(r.lats[i]) });
+      const keeps = (side: string) => keep === 'both' || keep === side;
+      const plain = { followRoads: false, direct: false, platformIndex: 0 };
+      try {
+        if (byRoad && cut && head.length >= 1 && tail.length >= 1 && sideOf(before) === sideOf(after)) {
+          // The line crosses the closure and comes back to the same side: what lies beyond is dropped,
+          // and the two ends are joined into one trip that turns round before the closure.
+          const side = sideOf(before);
+          const joined = [...head, ...(tail[0] === head[head.length - 1] ? tail.slice(1) : tail)];
+          item.pieces = [{ side, stopIds: joined, turnsAt: turn(before), kept: keeps(side) && joined.length >= 2, ranges: [[fracs[0], fracs[before]], [fracs[after], fracs[n - 1]]] }];
+          if (item.pieces[0].kept) {
+            item.action = 'joined';
+            if (roadPatterns++ >= MAX_PATTERNS) {
+              skipped++;
+              continue;
             }
-          } catch (err) {
-            if ((err as { statusCode?: number }).statusCode !== 400) throw err;
-            item.action = 'failed';
-            item.reason = (err as Error).message;
-            item.plans = [];
+            const plan = await planReshape(tx, sc, r.id, joined, { followRoads: true, direct: true, platformIndex: 0, avoid, joinAcross: true }, deps);
+            if (item.tripIds) plan.tripIds = item.tripIds;
+            if (plan.blocked || entersAvoid(plan.coords, avoid!)) {
+              item.action = 'blocked';
+              item.reason = 'no way was found to turn round before the closure';
+            } else {
+              item.plans = [plan];
+              item.planSides = [side];
+            }
+          }
+        } else {
+          if (head.length >= 2) item.pieces.push({ side: sideOf(before), stopIds: head, turnsAt: turn(before), kept: keeps(sideOf(before)), ranges: [[fracs[0], fracs[before]]] });
+          if (tail.length >= 2) item.pieces.push({ side: sideOf(after), stopIds: tail, turnsAt: turn(after), kept: keeps(sideOf(after)), ranges: [[fracs[after], fracs[n - 1]]] });
+          const kept = item.pieces.filter((p) => p.kept);
+          if (kept.length) {
+            item.action = kept.length === 2 ? 'split' : 'shortened';
+            if (detail === 'all') {
+              for (const piece of kept) {
+                const plan = await planReshape(tx, sc, r.id, piece.stopIds, plain, deps);
+                if (item.tripIds) plan.tripIds = item.tripIds;
+                item.plans.push(plan);
+                item.planSides.push(piece.side);
+              }
+            }
           }
         }
+      } catch (err) {
+        if ((err as { statusCode?: number }).statusCode !== 400) throw err;
+        item.action = 'failed';
+        item.reason = (err as Error).message;
+        item.plans = [];
+        item.planSides = [];
       }
     }
     items.push(item);
   }
-  return { what, label, zoneWkt, zone: JSON.parse(zone.json), window, items, skipped };
+  if (except.size) {
+    const left = [...found.values()].filter((m) => except.has(m.id)).map((m) => m.name.toLowerCase());
+    if (left.length) label += `, leaving ${left.length > 1 ? `${left.slice(0, -1).join(', ')} and ${left[left.length - 1]}` : left[0]} running`;
+  }
+  const modesFound = [...found.values()].map((m) => ({ id: m.id, name: m.name, lines: m.routes.size }));
+  return { what, label, zoneWkt, zone: JSON.parse(zone.json), window, items, skipped, modes: modesFound, sides: sides?.codes ?? (sidesFrom ? ['N', 'S'] : null) };
 }
 
 const median = (values: number[]) => {
@@ -283,37 +441,67 @@ const median = (values: number[]) => {
 
 /** Closes a road or a line and changes every trip that ran through it. */
 export async function editClose(tx: Sql, sc: Scenario, seq: number, body: CloseBody, deps: ClosureDeps) {
-  const plan = await planClosure(tx, sc, sc.baselineId, body, deps, true);
-  if (!plan.items.some((i) => i.action !== 'blocked' && i.action !== 'failed')) {
+  const plan = await planClosure(tx, sc, sc.baselineId, body, deps, 'all');
+  if (!plan.items.some((i) => i.action !== 'blocked' && i.action !== 'failed' && i.action !== 'left')) {
     throw fail(400, plan.items.length ? 'None of the lines through here could be changed' : 'Nothing runs through there, so there is nothing to change');
   }
   const idMap: Record<number, number> = {};
   const replan: number[] = [];
   const changes: number[] = [];
-  const tally = { detour: 0, shortened: 0, split: 0, removed: 0, blocked: 0, failed: 0 } satisfies Record<Action, number>;
+  const tally = { detour: 0, shortened: 0, split: 0, joined: 0, removed: 0, blocked: 0, failed: 0, left: 0 } satisfies Record<Action, number>;
   const tripsBy = { ...tally };
   const lines = new Set<number>();
   const closedStops = new Set<string>();
+  // The part of a line on one side of the closure is a line of its own, named after the original.
+  const variants = new Map<string, { id: number; name: string }>();
+  const variantOf = async (routeId: number, side: string) => {
+    const key = `${routeId}:${side}`;
+    let made = variants.get(key);
+    if (!made) {
+      const [row] = await tx`
+        insert into routes (baseline_id, gtfs_id, agency_gtfs_id, agency_name, short_name, long_name, description, route_type, mode_id,
+                            color, text_color, vehicle_type_id, extra, scenario_id, created_edit)
+        select baseline_id, gtfs_id || '~' || ${side} || '.' || ${sc.id}::int || '.' || ${seq}::int, agency_gtfs_id, agency_name,
+               coalesce(short_name, long_name, 'Line') || '-' || ${side},
+               coalesce(long_name, short_name, 'Line') || ${` (${SIDE_NAME[side] ?? side} of the closure)`},
+               description, route_type, mode_id, color, text_color, vehicle_type_id,
+               extra || jsonb_build_object('variantOf', id, 'side', ${side}::text), ${sc.id}, ${seq}
+        from routes where id = ${routeId}
+        returning id, short_name as name`;
+      variants.set(key, (made = { id: row.id as number, name: row.name as string }));
+    }
+    return made;
+  };
   let part = 0;
   for (const item of plan.items) {
     tally[item.action]++;
     tripsBy[item.action] += item.trips;
-    if (item.action === 'blocked' || item.action === 'failed') continue;
+    if (item.action === 'blocked' || item.action === 'failed' || item.action === 'left') continue;
     lines.add(item.routeId);
     for (const name of item.closedStops) closedStops.add(name);
     if (item.action === 'removed') {
       const ids = item.tripIds ?? (await tx`select t.id from trips t where t.pattern_id = ${item.patternId} and ${visible(tx, 't', sc)}`).map((t) => t.id as number);
       await deps.removeTrips(tx, sc, seq, ids);
-    } else if (item.plans.length === 1) {
+    } else if (item.action === 'detour') {
       const done = await applyReshape(tx, sc, seq, item.plans[0], part++, deps);
       Object.assign(idMap, done.idMap);
-      if (item.action === 'detour') changes.push(done.changeSecs);
+      changes.push(done.changeSecs);
+    } else if (item.action === 'joined') {
+      // Still one trip from the same start to the same end, so it keeps its vehicle.
+      const done = await applyReshape(tx, sc, seq, item.plans[0], part++, deps, { routeId: (await variantOf(item.routeId, item.planSides[0])).id });
+      Object.assign(idMap, done.idMap);
+    } else if (item.plans.length === 1 && !plan.sides) {
+      Object.assign(idMap, (await applyReshape(tx, sc, seq, item.plans[0], part++, deps)).idMap);
     } else {
-      // Each trip becomes two. Neither part can keep the vehicle, which would have to cross the closure.
-      const first = await applyReshape(tx, sc, seq, item.plans[0], part++, deps, { keepVehicle: false, tag: 'a' });
-      const second = await applyReshape(tx, sc, seq, item.plans[1], part++, deps, { keepVehicle: false, tag: 'b' });
-      Object.assign(idMap, first.idMap);
-      const parts = [...Object.values(first.idMap), ...Object.values(second.idMap)];
+      // Each trip becomes one trip for each part that is kept. No part can keep the vehicle, which
+      // would have to cross the closure: they are given vehicles again below, which turn back at the closure.
+      const parts: number[] = [];
+      for (const [k, piecePlan] of item.plans.entries()) {
+        const routeId = plan.sides ? (await variantOf(item.routeId, item.planSides[k])).id : undefined;
+        const done = await applyReshape(tx, sc, seq, piecePlan, part++, deps, { keepVehicle: false, tag: 'ab'[k], routeId });
+        if (k === 0) Object.assign(idMap, done.idMap);
+        parts.push(...Object.values(done.idMap));
+      }
       // A trip that took its vehicle type from its vehicle keeps that type once it is taken off it.
       await tx`
         update trips n set vehicle_type_id = tv.vehicle_type_id
@@ -332,12 +520,17 @@ export async function editClose(tx: Sql, sc: Scenario, seq: number, body: CloseB
   if (tally.detour) parts.push(`${count(tripsBy.detour, 'trip')} sent another way, ${describeChange(median(changes))}`);
   if (tally.split) parts.push(`${count(tripsBy.split, 'trip')} now run in two parts, one either side`);
   if (tally.shortened) parts.push(`${count(tripsBy.shortened, 'trip')} cut short`);
-  if (tally.removed) parts.push(`${count(tripsBy.removed, 'trip')} removed, with fewer than two stops left on either side`);
+  if (tally.joined) parts.push(`${count(tripsBy.joined, 'trip')} now turn round before it`);
+  if (tally.removed) parts.push(`${count(tripsBy.removed, 'trip')} removed`);
+  if (variants.size) {
+    const made = [...variants.values()].map((v) => v.name);
+    parts.push(`the parts run as ${made.slice(0, 6).join(', ')}${made.length > 6 ? ` and ${made.length - 6} more` : ''}`);
+  }
   if (closedStops.size) {
     const list = [...closedStops];
     parts.push(`${count(list.length, 'stop')} closed (${list.slice(0, 4).join(', ')}${list.length > 4 ? ` and ${list.length - 4} more` : ''})`);
   }
-  if (fleet) parts.push(`the split trips were given vehicles again, which took ${count(fleet.added, 'more vehicle')}`);
+  if (fleet) parts.push(`their vehicles were worked out again and turn back at the closure, which took ${count(fleet.added, 'more vehicle')}`);
   if (tally.blocked) parts.push(`${count(tally.blocked, 'stop pattern')} left running through it because no way round was found`);
   if (tally.failed) parts.push(`${count(tally.failed, 'stop pattern')} could not be changed`);
   if (plan.skipped) parts.push(`${count(plan.skipped, 'more stop pattern')} left as they are; close a smaller stretch to change them`);
@@ -359,34 +552,104 @@ export function closureRoutes(
     const sc = await scenarioOf(req, sql);
     const baselineId = sc ? sc.baselineId : Number(body.baselineId);
     if (!Number.isInteger(baselineId)) throw fail(400, 'Unknown day');
-    const plan = await planClosure(sql, sc, baselineId, body, ctx.deps, body.what === 'road');
+    const plan = await planClosure(sql, sc, baselineId, body, ctx.deps, 'roads');
     // One row per line, however many stop patterns it has.
-    const byLine = new Map<number, { routeId: number; name: string; color: string; trips: number; patterns: number; actions: Set<Action> }>();
+    interface Line {
+      routeId: number;
+      name: string;
+      color: string;
+      modeId: string;
+      road: boolean;
+      how: Item['how'];
+      keep: string;
+      trips: number;
+      patterns: number;
+      actions: Set<Action>;
+      /** The parts the line is split into: where each turns back, and whether it is kept. */
+      parts: Map<string, { side: string; trips: number; kept: boolean; turns: Map<string, number> }>;
+    }
+    const byLine = new Map<number, Line>();
     for (const item of plan.items) {
       let line = byLine.get(item.routeId);
-      if (!line) byLine.set(item.routeId, (line = { routeId: item.routeId, name: item.name, color: item.color, trips: 0, patterns: 0, actions: new Set() }));
+      if (!line) {
+        line = { routeId: item.routeId, name: item.name, color: item.color, modeId: item.modeId, road: item.road, how: item.how, keep: item.keep, trips: 0, patterns: 0, actions: new Set(), parts: new Map() };
+        byLine.set(item.routeId, line);
+      }
       line.trips += item.trips;
       line.patterns++;
       line.actions.add(item.action);
+      for (const piece of item.pieces) {
+        let part = line.parts.get(piece.side);
+        if (!part) line.parts.set(piece.side, (part = { side: piece.side, trips: 0, kept: piece.kept, turns: new Map() }));
+        part.trips += item.trips;
+        part.turns.set(piece.turnsAt.name, (part.turns.get(piece.turnsAt.name) ?? 0) + item.trips);
+      }
     }
     const tripsWith = (...actions: Action[]) => plan.items.filter((i) => actions.includes(i.action)).reduce((sum, i) => sum + i.trips, 0);
     const detours = plan.items.filter((i) => i.action === 'detour' && i.plans.length);
+
+    // For the map: the stretch of each published path that every part keeps or loses, and where it turns back.
+    const drawn = plan.items.filter((i) => i.pieces.length).slice(0, 400);
+    const want = drawn.flatMap((item) =>
+      item.pieces.flatMap((piece) => piece.ranges.filter(([a, b]) => b > a).map(([a, b]) => ({ id: item.patternId, a, b, side: piece.side, kept: piece.kept, routeId: item.routeId }))),
+    );
+    const stretches = want.length
+      ? await sql`
+          select u.n::int as n, ST_AsGeoJSON(ST_Simplify(ST_LineSubstring(sh.geom, u.a, u.b), 0.00003), 6) as g
+          from unnest(${want.map((w) => w.id)}::bigint[], ${want.map((w) => w.a)}::float8[], ${want.map((w) => w.b)}::float8[]) with ordinality as u(pid, a, b, n)
+          join patterns p on p.id = u.pid join shapes sh on sh.id = p.shape_id`
+      : [];
+    // Many stop patterns, and many lines, share a path: each stretch is sent once, with the lines that use it.
+    const seen = new Map<string, { side: string; kept: boolean; coords: [number, number][]; routeIds: number[] }>();
+    for (const row of stretches) {
+      const w = want[row.n - 1];
+      const key = `${w.side}${w.kept}${row.g}`;
+      let part = seen.get(key);
+      if (!part) {
+        const geometry = JSON.parse(row.g) as { type: string; coordinates: [number, number][] };
+        if (geometry.type !== 'LineString') continue;
+        seen.set(key, (part = { side: w.side, kept: w.kept, coords: geometry.coordinates, routeIds: [] }));
+      }
+      if (!part.routeIds.includes(w.routeId)) part.routeIds.push(w.routeId);
+    }
+    const parts = [...seen.values()];
+    const turns = new Map<string, { name: string; lon: number; lat: number; side: string; kept: boolean }>();
+    for (const item of drawn) {
+      for (const piece of item.pieces) {
+        const key = `${piece.turnsAt.name}${piece.side}`;
+        const known = turns.get(key);
+        if (!known) turns.set(key, { ...piece.turnsAt, side: piece.side, kept: piece.kept });
+        else if (piece.kept) known.kept = true;
+      }
+    }
     return {
       label: plan.label,
       zone: plan.zone,
       window: plan.window,
-      lines: [...byLine.values()].map((l) => ({ ...l, actions: [...l.actions] })).sort((a, b) => b.trips - a.trips),
+      modes: plan.modes,
+      sides: plan.sides ? plan.sides.map((code) => ({ code, name: SIDE_NAME[code] })) : null,
+      lines: [...byLine.values()]
+        .map((l) => ({
+          ...l,
+          actions: [...l.actions],
+          parts: [...l.parts.values()].map((p) => ({ side: p.side, trips: p.trips, kept: p.kept, turnsAt: [...p.turns.entries()].sort((a, b) => b[1] - a[1])[0][0], turnPlaces: p.turns.size })),
+        }))
+        .sort((a, b) => b.trips - a.trips),
       trips: {
         detour: tripsWith('detour'),
         split: tripsWith('split'),
         shortened: tripsWith('shortened'),
+        joined: tripsWith('joined'),
         removed: tripsWith('removed'),
         blocked: tripsWith('blocked', 'failed'),
+        left: tripsWith('left'),
       },
       closedStops: [...new Set(plan.items.filter((i) => i.action !== 'blocked' && i.action !== 'failed').flatMap((i) => i.closedStops))],
       skipped: plan.skipped,
       // The new paths, for the map. A handful is enough to show where the traffic goes.
       paths: detours.slice(0, 25).map((i) => i.plans[0].coords),
+      parts,
+      turns: [...turns.values()],
     };
   });
 

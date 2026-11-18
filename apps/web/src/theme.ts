@@ -31,6 +31,8 @@ export interface MapPalette {
   paper: string;
   panel: string;
   label: string;
+  /** Network lines while something else is being edited. */
+  faded: string;
   /** The edge drawn under a selected line. */
   casing: string;
   outline: Rgba;
@@ -45,6 +47,7 @@ export const MAP_PALETTE: Record<Theme, MapPalette> = {
     paper: '#f4f6f8',
     panel: '#1c2027',
     label: '#dfe5ec',
+    faded: '#5b6675',
     casing: '#ffffff',
     outline: [8, 10, 14, 255],
     bright: [255, 255, 255, 255],
@@ -56,6 +59,7 @@ export const MAP_PALETTE: Record<Theme, MapPalette> = {
     paper: '#1b2330',
     panel: '#eef1f5',
     label: '#1b2330',
+    faded: '#9aa3ae',
     casing: '#111827',
     outline: [255, 255, 255, 255],
     bright: [17, 24, 39, 255],

@@ -6,7 +6,7 @@
 //      that stretch of its path is reused.
 //   3. A straight line.
 // Trains, trams and ferries follow the network of published services (see tracks.ts).
-import { distanceToPathM, pathDistances, slicePath } from '@gtfs-editor/core';
+import { distanceBetweenPathsM, distanceToPathM, pathDistances, slicePath } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { trackPath } from './tracks.ts';
 
@@ -20,12 +20,25 @@ export interface PathStop {
 
 export type PathMethod = 'roads' | 'bus_paths' | 'track' | 'track_partly' | 'water' | 'water_partly' | 'straight';
 
-/** A circle that a path must stay out of: a closed road. */
+/**
+ * What a path must stay out of: a circle, or a line drawn on the map that nothing may cross or
+ * come within `widthM` of. For a line the circle is the one that encloses it, and says only where
+ * to look for a way round.
+ */
 export interface Avoid {
   lon: number;
   lat: number;
   radiusM: number;
+  line?: [number, number][];
+  widthM?: number;
 }
+
+/** How far a path stays from what is closed, less the reach of the closure: nothing or less means it runs into it. */
+const gapM = (coords: [number, number][], avoid: Avoid) =>
+  avoid.line ? distanceBetweenPathsM(coords, avoid.line) - (avoid.widthM ?? 0) : distanceToPathM(coords, avoid.lon, avoid.lat) - avoid.radiusM;
+
+/** True when a path runs into what is closed. */
+export const entersAvoid = (coords: [number, number][], avoid: Avoid) => gapM(coords, avoid) <= 0;
 
 export interface RoadPath {
   coords: [number, number][];
@@ -117,7 +130,7 @@ async function routed(stops: PathStop[]): Promise<[number, number][] | null> {
 const M_PER_DEG_LAT = 110_540;
 const mPerDegLon = (lat: number) => 111_320 * Math.cos((lat * Math.PI) / 180);
 
-const clearOf = (coords: [number, number][], avoid: Avoid) => distanceToPathM(coords, avoid.lon, avoid.lat) > avoid.radiusM;
+const clearOf = (coords: [number, number][], avoid: Avoid) => !entersAvoid(coords, avoid);
 
 // Every extra waypoint risks a small side trip to reach it, so a chain with fewer is preferred.
 const HOP_PENALTY_M = 150;
@@ -171,7 +184,7 @@ async function routedAround(stops: PathStop[], avoid: Avoid): Promise<[number, n
   let leg = 1;
   let nearest = Infinity;
   for (let i = 1; i < points.length; i++) {
-    const d = distanceToPathM([points[i - 1], points[i]], avoid.lon, avoid.lat);
+    const d = gapM([points[i - 1], points[i]], avoid);
     if (d < nearest) {
       nearest = d;
       leg = i;
@@ -184,8 +197,15 @@ async function routedAround(stops: PathStop[], avoid: Avoid): Promise<[number, n
   }
   const travel = nodes.length;
   // Spots inside the closure: its middle, and a little way towards each side.
-  const inside = avoid.radiusM * 0.6;
-  nodes.push(at(0, 0), at(inside, 0), at(-inside, 0), at(0, inside), at(0, -inside));
+  if (avoid.line) {
+    // Along a drawn line: its ends, and three spots between them.
+    const along = pathDistances(avoid.line);
+    const length = along[along.length - 1];
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) nodes.push(slicePath(avoid.line, along, f * length, length)[0]);
+  } else {
+    const inside = avoid.radiusM * 0.6;
+    nodes.push(at(0, 0), at(inside, 0), at(-inside, 0), at(0, inside), at(0, -inside));
+  }
   const table = await askTable(nodes);
   if (!table) return null;
   const through = (i: number, j: number) => {

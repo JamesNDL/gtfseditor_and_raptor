@@ -15,7 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import type { Scenario } from './scenarios.ts';
+import { visible, type Scenario } from './scenarios.ts';
 
 const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
 
@@ -526,6 +526,58 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     };
   });
 
+  /**
+   * What the wizard's last step warns about, for one demand set on one day (and scenario, with ?s=):
+   * with ?south=&west=&north=&east=, how many journey ends lie inside that box; and how many name a
+   * stop that nothing calls at, and of those how many have a served stop within ?walk= metres.
+   * Journey ends are counted, not journeys: which journeys have both ends inside is known only
+   * once the run has read the file.
+   */
+  app.get('/api/demand/:id/coverage', async (req) => {
+    const id = int((req.params as { id: string }).id, 'id');
+    const query = req.query as Record<string, string | undefined>;
+    const baseline = int(query.baseline, 'baseline');
+    const [row] = await sql`select stop_counts, report from demand_sets where id = ${id}`;
+    if (!row) throw fail(404, 'Demand set not found');
+    const counts = (row.stop_counts ?? {}) as Record<string, number>;
+    const ids = Object.keys(counts).filter((stop) => stop !== '');
+    const total = ids.reduce((sum, stop) => sum + counts[stop], 0) + Number((row.report as any)?.endsWithOwnPosition ?? 0);
+    const scenarioId = query.s ? int(query.s, 's') : null;
+    const [found] = scenarioId === null ? [null] : await sql`select id, baseline_id as "baselineId", head from scenarios where id = ${scenarioId}`;
+    const sc = (found ?? null) as Scenario | null;
+    const walk = Math.min(2000, Math.max(0, Number(query.walk ?? 500)));
+    const box = query.south === undefined ? null : readBox(query as never);
+    // Each stop the journeys name, with its position, whether anything calls there, and for a
+    // stop nothing calls at whether a served stop is within the walk. A station counts through
+    // its platforms.
+    const stops = await sql`
+      with named as (
+        select s.id, s.gtfs_id, s.geom from stops s
+        where s.baseline_id = ${baseline} and s.scenario_id is null and s.gtfs_id = any(${ids})),
+      served as (
+        select n.id, n.gtfs_id, n.geom, exists (
+          select 1 from stops p join stop_times st on st.stop_id = p.id join trips t on t.id = st.trip_id
+          where (p.id = n.id or p.parent_id = n.id) and ${visible(sql, 't', sc)}) as has_service
+        from named n)
+      select v.gtfs_id, v.has_service,
+             ${box ? sql`v.geom && ST_MakeEnvelope(${box.west}, ${box.south}, ${box.east}, ${box.north}, 4326)` : sql`true`} as inside,
+             case when v.has_service then true else exists (
+               select 1 from stops o join stop_times st on st.stop_id = o.id join trips t on t.id = st.trip_id
+               where o.baseline_id = ${baseline} and ST_DWithin(o.geom::geography, v.geom::geography, ${walk}) and ${visible(sql, 't', sc)}) end as near
+      from served v`;
+    let inside = 0;
+    const none = { stops: 0, journeyEnds: 0, withAnotherNear: 0 };
+    for (const stop of stops) {
+      if (stop.inside) inside += counts[stop.gtfs_id];
+      if (!stop.has_service) {
+        none.stops++;
+        none.journeyEnds += counts[stop.gtfs_id];
+        if (stop.near) none.withAnotherNear += counts[stop.gtfs_id];
+      }
+    }
+    return { journeyEnds: total, endsInside: box ? inside : total, noService: none };
+  });
+
   /** The file itself, for a router that cannot read this machine's disk. */
   app.get('/api/demand/:id/download/:file', async (req, reply) => {
     const id = int((req.params as { id: string }).id, 'id');
@@ -669,6 +721,13 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
       left join demand_sets d on d.id = r.demand_set_id
       left join sim_runs b on b.id = r.bau_run_id
       where ${where} order by r.created_at desc, r.id desc`;
+    // What each run's results take up in the database.
+    const sizes = new Map<number, number>(
+      (await sql`
+        select (regexp_match(c.relname, '_r([0-9]+)$'))[1]::int as run, sum(pg_total_relation_size(c.oid))::bigint as bytes
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r' and c.relname ~ '^sim_(journeys|legs|trip_loads|stop_activity)_r[0-9]+$'
+        group by 1`).map((r) => [r.run, Number(r.bytes)]));
     const keys = new Map<string, TimetableKey | null>();
     const out = [];
     for (const row of rows as Record<string, any>[]) {
@@ -691,6 +750,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
         ...run,
         area: area_south === null ? null : { name: area_name, south: area_south, west: area_west, north: area_north, east: area_east },
         timetableVersion: version,
+        sizeBytes: sizes.get(run.id) ?? 0,
+        // Journeys planned a second, for guessing how long the next run will take.
+        planRate: summary?.work?.journeysPlannedPerSecond ?? null,
         outOfDate,
         capacityOutOfDate,
         // The list carries the headline figures; the whole summary is at the run's own address.
@@ -948,6 +1010,37 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
              l.left_behind as "leftBehind", l.capacity
       from sim_trip_loads l left join stops s on s.id = l.stop_id
       where l.run_id = ${int(id, 'id')} and l.trip_id = ${int(trip, 'trip')} order by l.position`;
+  });
+
+  /**
+   * A line's day in a run: passengers, how full its trips get, and passengers by direction and the
+   * hour their trip starts, to set against the places the line's hourly chart already shows.
+   */
+  app.get('/api/sim-runs/:id/routes/:route', async (req) => {
+    const { id, route } = req.params as { id: string; route: string };
+    const run = int(id, 'id');
+    await finished(run);
+    const perTrip = sql`
+      select t.id, t.direction_id, t.start_secs, max(l.capacity) as capacity, max(l.load) as peak,
+             sum(l.boardings)::int as boardings, sum(l.left_behind)::int as left_behind
+      from sim_trip_loads l join trips t on t.id = l.trip_id
+      where l.run_id = ${run} and t.route_id = ${int(route, 'route')} group by t.id`;
+    const [totals] = await sql`
+      select coalesce(sum(boardings), 0)::int as passengers, count(*)::int as trips,
+             count(*) filter (where capacity > 0 and peak >= capacity)::int as "tripsFull",
+             count(*) filter (where capacity > 0 and peak >= 0.8 * capacity)::int as "tripsOver80",
+             coalesce(sum(left_behind), 0)::int as "leftBehind"
+      from (${perTrip}) x`;
+    const hourly = await sql`
+      select coalesce(direction_id, 0) as direction, (start_secs / 3600)::int as hour, sum(boardings)::int as passengers,
+             max(case when capacity > 0 then peak::float / capacity else 0 end) as "peakShare"
+      from (${perTrip}) x group by 1, 2 order by 1, 2`;
+    const [fullest] = await sql`
+      select s.name as stop, l.depart, l.load, l.capacity
+      from sim_trip_loads l join trips t on t.id = l.trip_id left join stops s on s.id = l.stop_id
+      where l.run_id = ${run} and t.route_id = ${int(route, 'route')} and l.capacity > 0
+      order by l.load::float / l.capacity desc, l.load desc limit 1`;
+    return { ...totals, hourly, fullest: fullest && fullest.load > 0 ? fullest : null };
   });
 
   /** One stop, or with a station id every stop under it, by quarter hour. */

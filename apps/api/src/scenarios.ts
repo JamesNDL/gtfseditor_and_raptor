@@ -803,6 +803,18 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     return { summary: ids.length === 1 ? `Deleted ${first.label}` : `Deleted ${ids.length} trips starting with ${first.label}`, idMap: {} };
   }
 
+  /** Takes a whole line out of the scenario: every trip it still runs, in both directions. */
+  async function editDeleteLine(tx: Tx, sc: Scenario, seq: number, body: { routeId: number }) {
+    const routeId = Number(body.routeId);
+    const [route] = await tx`
+      select coalesce(short_name, long_name, 'the line') as name from routes where id = ${routeId} and baseline_id = ${sc.baselineId}`;
+    if (!route) throw fail(404, 'Line not found');
+    const trips = await tx`select t.id from trips t where t.route_id = ${routeId} and ${visible(tx as unknown as Sql, 't', sc)}`;
+    if (!trips.length) throw fail(400, 'That line has no trips left to delete');
+    await removeTrips(tx, sc, seq, trips.map((t) => t.id));
+    return { summary: `Deleted line ${route.name}: ${trips.length} trip${trips.length === 1 ? '' : 's'}`, idMap: {} };
+  }
+
   async function editDuplicate(tx: Tx, sc: Scenario, seq: number, body: { tripId: number; startSecs: number }) {
     const t = await describe(tx, Number(body.tripId));
     const start = Math.round(Number(body.startSecs));
@@ -1135,8 +1147,9 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
   app.get('/api/scenarios', async (req) => {
     const baseline = Number((req.query as Record<string, string>).baseline);
     return sql`
-      select id, name, head, baseline_id as "baselineId",
-             (select count(*)::int from scenario_edits e where e.scenario_id = s.id) as "editCount"
+      select id, name, head, baseline_id as "baselineId", created_at as "createdAt",
+             (select count(*)::int from scenario_edits e where e.scenario_id = s.id) as "editCount",
+             (select count(*)::int from sim_runs r where r.scenario_id = s.id) as "simRuns"
       from scenarios s where ${Number.isInteger(baseline) ? sql`baseline_id = ${baseline}` : sql`true`}
       order by created_at`;
   });
@@ -1149,6 +1162,15 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const name = (body.name ?? '').trim().slice(0, 80) || `Scenario ${n + 1}`;
     const [row] = await sql`insert into scenarios (baseline_id, name) values (${b.id}, ${name}) returning id, name, head, baseline_id as "baselineId"`;
     return { ...row, editCount: 0 };
+  });
+
+  /** Rename a scenario. */
+  app.patch('/api/scenarios/:id', async (req) => {
+    const name = String((req.body as { name?: unknown })?.name ?? '').trim().slice(0, 80);
+    if (!name) throw fail(400, 'Give the scenario a name');
+    const [row] = await sql`update scenarios set name = ${name} where id = ${idParam(req)} returning id, name, head, baseline_id as "baselineId"`;
+    if (!row) throw fail(404, 'Scenario not found');
+    return row;
   });
 
   app.delete('/api/scenarios/:id', async (req) => {
@@ -1217,6 +1239,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
     const run = {
       shift: editShift,
       delete: editDelete,
+      deleteLine: editDeleteLine,
       duplicate: editDuplicate,
       skipStop: editSkipStop,
       headway: editHeadway,

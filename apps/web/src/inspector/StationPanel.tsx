@@ -1,6 +1,7 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useApi } from '../api.ts';
 import { clock } from '../clock.ts';
+import { StationPassengers } from '../sim/SimFigures.tsx';
 import { useStore } from '../store.ts';
 import { Badge, fmt, Loading, Tag, Tile } from './parts.tsx';
 
@@ -55,6 +56,8 @@ export function StationPanel({ stopId }: { stopId: number }) {
           Platform chart
         </button>
       </div>
+
+      <StationPassengers stopId={s.id} />
 
       {s.hourly.length > 0 && (
         <section>

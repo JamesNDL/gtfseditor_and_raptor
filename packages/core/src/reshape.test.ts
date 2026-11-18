@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bandOf, DAY_BANDS } from './time.ts';
-import { distanceToPathM, keptIndexes, locateStops, mirrorStops, pathDistances, retime, slicePath, type Coord, type OldCall } from './reshape.ts';
+import { distanceBetweenPathsM, distanceToPathM,keptIndexes, locateStops, mirrorStops, pathDistances, retime, slicePath, type Coord, type OldCall } from './reshape.ts';
 
 const call = (arr: number, dep = arr, pickup = 0, dropOff = 0): OldCall => ({ arr, dep, pickup, dropOff });
 
@@ -119,6 +119,17 @@ describe('detours and closures', () => {
     expect(off).toBeGreaterThan(105);
     expect(off).toBeLessThan(116);
     expect(distanceToPathM(path, 151.02, -33.9)).toBeGreaterThan(900);
+  });
+  it('measures how close two paths come to each other', () => {
+    const path: Coord[] = [[151, -33.9], [151.01, -33.9], [151.02, -33.9]];
+    // A line drawn across the path, between its points.
+    expect(distanceBetweenPathsM(path, [[151.005, -33.91], [151.005, -33.89]])).toBe(0);
+    // One that stops about 110 m short of it.
+    const short = distanceBetweenPathsM(path, [[151.005, -33.91], [151.005, -33.901]]);
+    expect(short).toBeGreaterThan(105);
+    expect(short).toBeLessThan(116);
+    // One beyond its end.
+    expect(distanceBetweenPathsM(path, [[151.03, -33.91], [151.03, -33.89]])).toBeGreaterThan(900);
   });
 });
 

@@ -5,12 +5,17 @@ import { ClosurePanel } from './ClosurePanel.tsx';
 import { FleetPanel } from './FleetPanel.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
 import { liveStats } from './liveStats.ts';
+import { MapTools } from './MapTools.tsx';
 import { MapView } from './MapView.tsx';
 import { ModePanel } from './ModePanel.tsx';
 import { NewLinePanel } from './NewLinePanel.tsx';
 import { ReshapePanel } from './ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
+import { ScenarioManager } from './ScenarioManager.tsx';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
+import { SimLibrary } from './sim/SimLibrary.tsx';
+import { SimPanel } from './sim/SimPanel.tsx';
+import { SimWizard } from './sim/SimWizard.tsx';
 import { useStore } from './store.ts';
 import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
@@ -63,6 +68,10 @@ export function App() {
       scenarios: [],
       scenarioId: null,
       scenarioInfo: null,
+      simRuns: [],
+      simRunId: null,
+      simPerson: null,
+      simBox: null,
     });
     loadScenarios(baselineId).catch((err) => console.error('Failed to load scenarios', err));
 
@@ -81,6 +90,8 @@ export function App() {
       if (kind) useStore.getState().open({ kind, id: Number(params.get(kind)) }, { replace: true });
       if (Number(params.get('t')) > 0) clock.set(Number(params.get('t')));
       if (params.get('fleet')) useStore.getState().set({ fleetOpen: true });
+      // A link can also name the simulation run whose figures to show: &sim=<run id>.
+      if (Number(params.get('sim')) > 0) useStore.getState().set({ simRunId: Number(params.get('sim')) });
       const tab = params.get('tl');
       if (tab === 'stringline' || tab === 'platforms' || tab === 'vehicles') {
         const station = Number(params.get('station'));
@@ -111,9 +122,11 @@ export function App() {
   useEffect(
     () =>
       useStore.subscribe((state, previous) => {
-        if (state.history === previous.history) return;
+        if (state.history === previous.history && state.simRunId === previous.simRunId) return;
         const current = state.history[state.history.length - 1];
-        const hash = current && current.kind !== 'routeList' ? `#${current.kind}=${current.id}` : '';
+        const shown = current && current.kind !== 'routeList' ? `${current.kind}=${current.id}` : '';
+        const sim = state.simRunId !== null ? `sim=${state.simRunId}` : '';
+        const hash = shown || sim ? `#${[shown, sim].filter(Boolean).join('&')}` : '';
         if (hash !== location.hash) history.replaceState(null, '', location.pathname + location.search + hash);
       }),
     [],
@@ -147,9 +160,11 @@ export function App() {
       {/* The map and the charts draw their own colours, so they are rebuilt when the theme changes. */}
       <MapView key={`map-${theme}`} onVehicleCount={onVehicleCount} />
       <TopBar />
+      <MapTools />
       <div className="left-column">
         <ModePanel />
         <ScenarioPanel />
+        <SimPanel />
       </div>
       <TimelinePanel key={`timeline-${theme}`} />
       <Inspector />
@@ -158,6 +173,9 @@ export function App() {
       <ClosurePanel />
       <TimeBar key={`timebar-${theme}`} />
       <FleetPanel />
+      <ScenarioManager />
+      <SimLibrary />
+      <SimWizard />
     </div>
   );
 }
