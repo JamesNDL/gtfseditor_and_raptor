@@ -84,6 +84,13 @@ try {
   assert.equal(demand.madeUp, true);
   assert.equal(demand.unknownStops.stops, 0, 'made-up journeys use stops the published timetable has');
   assert.ok(demand.report.busiestHourPeople > 0 && demand.users > 1000);
+  // Made-up journeys carry positions of their own, and those are what an area is checked against.
+  const box = (a) => `south=${a.south}&west=${a.west}&north=${a.north}&east=${a.east}`;
+  const inside = await get(`/api/demand/${madeUp.id}/coverage?baseline=${B}&${box(newcastle)}`);
+  assert.equal(inside.journeyEnds, 6000);
+  assert.equal(inside.endsInside, 6000, 'journeys made up for an area lie inside it');
+  const elsewhere = await get(`/api/demand/${madeUp.id}/coverage?baseline=${B}&${box(areas.find((a) => a.name === 'Sydney'))}`);
+  assert.equal(elsewhere.endsInside, 0, 'and outside an area somewhere else');
   step(`made-up demand: ${demand.rows} journeys by ${demand.users} users (the router loaded the published timetable)`);
 
   // Upload: the made-up set again with a row that cannot be read, a stop that does not exist, and
@@ -203,6 +210,84 @@ try {
   assert.equal(crowded.summary.people.ok + crowded.summary.people.stranded + crowded.summary.people.noJourney, 1540);
   step(`capacity from kept plans: ${crowded.summary.capacityResults.timesLeftBehind} times left behind at half capacity`);
 
+  // ---- the results view (docs/simulator-plan.md, section 18) --------------------
+  const overview = await get(`/api/sim-runs/${same.id}/results/overview`);
+  assert.equal(overview.vs.id, bau.id, 'a scenario run is set against its BAU run');
+  assert.equal(overview.compared, bau.summary.people.ok, 'everyone who travels in both is compared');
+  assert.equal(overview.groups.reduce((x, y) => x + y, 0), overview.compared, 'and is in one group of change');
+  assert.equal(overview.groups[4], overview.compared, 'an unedited scenario leaves everyone arriving when they did');
+  assert.equal(overview.lost.people + overview.gained, 0);
+  assert.equal(overview.times.a.people, same.summary.people.ok);
+  assert.equal(overview.byHour.reduce((x, h) => x + h.groups[4], 0), overview.compared, 'the hours add up to the day');
+  const morning = await get(`/api/sim-runs/${same.id}/results/overview?from=23400&to=34200`);
+  assert.ok(morning.compared > 0 && morning.compared < overview.compared, 'a part of the day has part of the people');
+  const lineRows = (await get(`/api/sim-runs/${same.id}/results/lines`)).lines;
+  assert.ok(lineRows.length > 0 && lineRows.every((l) => l.a === l.b), 'every line carries what it did');
+  const lineDetail = await get(`/api/sim-runs/${same.id}/results/lines/${lineRows[0].id}`);
+  assert.ok(lineDetail.hourly.length > 0 && lineDetail.stops.length > 0);
+  assert.equal(lineDetail.went.riders, lineDetail.cameFrom.riders);
+  assert.equal(lineDetail.went.people + lineDetail.cameFrom.people, 0, 'and the same people ride it');
+  const flows = await get(`/api/sim-runs/${same.id}/results/flows`);
+  assert.ok(flows.links.length > 0 && flows.links.every((l) => l[2] === l[3]), 'every stretch carries what it did');
+  assert.ok(flows.links.every((l) => flows.stops.some((s) => s[0] === l[0])), 'and each has somewhere to be drawn');
+  for (const by of ['stop', '1000']) {
+    const places = await get(`/api/sim-runs/${same.id}/results/places?by=${by}`);
+    assert.ok(places.places.length > 0 && places.places.every((p) => p[5] + p[6] + p[7] + p[8] === 0), `nobody is affected anywhere (by ${by})`);
+    // Someone who walks the whole way boards nowhere, so has no stop to be placed by.
+    const placed = places.places.reduce((x, p) => x + p[3], 0);
+    assert.ok(placed > 0 && placed <= overview.compared, `and nobody is counted twice (by ${by})`);
+  }
+  // Capacity is set against the run whose plans it replays: whoever is stranded travelled before.
+  const crowdedView = await get(`/api/sim-runs/${crowded.id}/results/overview`);
+  assert.equal(crowdedView.vs.id, bau.id);
+  assert.equal(crowdedView.lost.people, crowded.summary.people.stranded);
+  assert.equal(crowdedView.lost.stranded, crowded.summary.people.stranded);
+  // A BAU run has nothing to be set against, and says which runs it could be.
+  const alone = await get(`/api/sim-runs/${bau.id}/results/overview`);
+  assert.equal(alone.vs, null);
+  assert.equal(alone.compared, undefined);
+  assert.deepEqual(alone.others.map((o) => o.id).sort(), [same.id, edited.id, crowded.id].sort());
+  assert.equal((await call('GET', `/api/sim-runs/${bau.id}/results/places`)).status, 400, 'who is affected needs two runs');
+  assert.equal((await get(`/api/sim-runs/${bau.id}/results/overview?vs=${same.id}`)).vs.id, same.id, 'but it can be asked for');
+  // Travel patterns: the same boardings by mode and vehicles a journey, and nobody at another stop.
+  const patterns = await get(`/api/sim-runs/${same.id}/results/patterns`);
+  assert.ok(patterns.byMode.length > 0 && patterns.byMode.every((m) => m.a === m.b), 'every mode carries what it did');
+  assert.equal(patterns.byMode.reduce((x, m) => x + m.a, 0), lineRows.reduce((x, l) => x + l.a, 0), 'the modes add up to the lines');
+  assert.deepEqual(patterns.vehicles.a, patterns.vehicles.b);
+  assert.equal(patterns.vehicles.a.reduce((x, y) => x + y, 0), same.summary.people.ok, 'everyone who travels boards some number of vehicles');
+  assert.equal(patterns.stopChange.origin + patterns.stopChange.destination, 0, 'nobody uses another stop');
+  assert.ok(patterns.stations.length > 0 && patterns.stations.every((s) => s.aOn === s.bOn && s.aOff === s.bOff));
+  // People: nobody's journey changed, everyone can be listed, and one of them read both ways.
+  assert.equal((await get(`/api/sim-runs/${same.id}/results/people`)).journeys, 0, 'nobody is listed as changed');
+  const everyone = await get(`/api/sim-runs/${same.id}/results/people?who=all&limit=5`);
+  assert.equal(everyone.people, bau.summary.demand.people);
+  assert.equal(everyone.rows.length, 5);
+  const traveller = (await get(`/api/sim-runs/${same.id}/results/people?who=group:4&limit=1`)).rows[0];
+  assert.ok(traveller.aStatus === 'ok' && traveller.bStatus === 'ok' && Math.abs(traveller.later) < 60);
+  assert.equal((await get(`/api/sim-runs/${same.id}/results/people?who=user:${encodeURIComponent(traveller.user)}`)).rows.some((r) => r.journeyId === traveller.journeyId), true);
+  const bothWays = await get(`/api/sim-runs/${same.id}/results/people/${encodeURIComponent(traveller.journeyId)}`);
+  assert.equal(bothWays.a[0].arrive, bothWays.b[0].arrive, 'the same journey in both runs');
+  assert.ok(bothWays.a[0].legs.length > 0);
+  assert.equal((await call('GET', `/api/sim-runs/${bau.id}/results/people?who=later`)).status, 400, 'nobody is later in a run on its own');
+  // Through here: the riders of the busiest stretch, of a line and of a stop, followed on the map.
+  const busiest = [...flows.links].sort((x, y) => y[2] - x[2])[0];
+  const through = await get(`/api/sim-runs/${same.id}/results/trace?who=link:${busiest[0]}-${busiest[1]}:b`);
+  assert.ok(through.people > 0 && through.people <= busiest[2], 'the people on a stretch are no more than its passengers');
+  const itself = through.links.find((l) => l[0] === busiest[0] && l[1] === busiest[1]);
+  assert.ok(itself && itself[2] === itself[3] && itself[2] >= through.people, 'they ride that stretch in both runs');
+  assert.ok(through.links.every((l) => l[2] === l[3]), 'and every other stretch as before');
+  assert.ok(through.origins.length > 0 && through.origins.reduce((x, o) => x + o[3], 0) <= through.people);
+  const riders = await get(`/api/sim-runs/${same.id}/results/trace?who=line:${lineRows[0].id}:a`);
+  assert.equal(riders.people, lineDetail.went.riders, 'a line\'s riders are the people its card counts');
+  const atStop = await get(`/api/sim-runs/${same.id}/results/trace?who=stop:${patterns.stations[0].id}:a`);
+  assert.ok(atStop.people > 0 && atStop.links.length > 0);
+  assert.equal((await get(`/api/sim-runs/${bau.id}/results/trace?who=line:${lineRows[0].id}:a`)).people, riders.people, 'a run on its own can be followed too');
+  // How full each vehicle is through the day.
+  const loads = await get(`/api/sim-runs/${same.id}/results/vehicle-loads`);
+  assert.ok(loads.trips.length > 0 && loads.trips.every((t) => t.length >= 5 && t.length % 2 === 1 && t[2] > 0), 'every trip answered carries someone');
+  assert.ok(loads.trips.every((t) => t[t.length - 1] === 0), 'and ends empty');
+  step(`results: ${overview.compared} people compared, ${lineRows.length} lines, ${flows.links.length} stretches on the map; ${through.people} people followed through the busiest stretch`);
+
   // ---- the library -----------------------------------------------------------
   const inFolder = await get(`/api/sim-runs?folder=${folder.id}`);
   assert.deepEqual(inFolder.map((r) => r.id).sort(), [bau.id, same.id, edited.id, crowded.id].sort());
@@ -224,6 +309,9 @@ try {
   assert.ok(archived.resultRows < bau.resultRows && archived.resultRows > 0);
   assert.equal((await call('GET', `/api/sim-runs/${bau.id}/journeys?user=e2e-crowd`)).status, 409, 'an archived run has no journeys to look up');
   assert.ok((await get(`/api/sim-runs/${bau.id}`)).summary.people.ok > 0, 'but it still opens');
+  assert.equal((await call('GET', `/api/sim-runs/${same.id}/results/overview`)).status, 409, 'results about people need the journeys of both runs');
+  assert.ok((await get(`/api/sim-runs/${same.id}/results/lines`)).lines.length > 0, 'results about lines do not');
+  assert.ok((await get(`/api/sim-runs/${same.id}/results/flows`)).links.length > 0, 'nor do the flows on the map');
   const restored = await ok('POST', `/api/sim-runs/${bau.id}/restore`);
   assert.equal(restored.archived, false);
   assert.equal(restored.resultRows, bau.resultRows);

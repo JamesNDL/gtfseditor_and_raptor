@@ -14,7 +14,9 @@ import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
 import { ScenarioManager } from './ScenarioManager.tsx';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { SimLibrary } from './sim/SimLibrary.tsx';
+import { SimMapKey } from './sim/SimMapKey.tsx';
 import { SimPanel } from './sim/SimPanel.tsx';
+import { SimResults } from './sim/SimResults.tsx';
 import { SimWizard } from './sim/SimWizard.tsx';
 import { useStore } from './store.ts';
 import { applyTheme } from './theme.ts';
@@ -72,6 +74,8 @@ export function App() {
       simRunId: null,
       simPerson: null,
       simBox: null,
+      simResults: { ...useStore.getState().simResults, open: false, vs: null, lineId: null, who: null },
+      simMap: { ...useStore.getState().simMap, layer: 'none' },
     });
     loadScenarios(baselineId).catch((err) => console.error('Failed to load scenarios', err));
 
@@ -91,7 +95,13 @@ export function App() {
       if (Number(params.get('t')) > 0) clock.set(Number(params.get('t')));
       if (params.get('fleet')) useStore.getState().set({ fleetOpen: true });
       // A link can also name the simulation run whose figures to show: &sim=<run id>.
-      if (Number(params.get('sim')) > 0) useStore.getState().set({ simRunId: Number(params.get('sim')) });
+      if (Number(params.get('sim')) > 0) {
+        useStore.getState().set({
+          simRunId: Number(params.get('sim')),
+          // &results=1 opens the results window on that run.
+          ...(params.get('results') ? { simResults: { ...useStore.getState().simResults, open: true } } : {}),
+        });
+      }
       const tab = params.get('tl');
       if (tab === 'stringline' || tab === 'platforms' || tab === 'vehicles') {
         const station = Number(params.get('station'));
@@ -122,10 +132,10 @@ export function App() {
   useEffect(
     () =>
       useStore.subscribe((state, previous) => {
-        if (state.history === previous.history && state.simRunId === previous.simRunId) return;
+        if (state.history === previous.history && state.simRunId === previous.simRunId && state.simResults.open === previous.simResults.open) return;
         const current = state.history[state.history.length - 1];
         const shown = current && current.kind !== 'routeList' ? `${current.kind}=${current.id}` : '';
-        const sim = state.simRunId !== null ? `sim=${state.simRunId}` : '';
+        const sim = state.simRunId !== null ? `sim=${state.simRunId}${state.simResults.open ? '&results=1' : ''}` : '';
         const hash = shown || sim ? `#${[shown, sim].filter(Boolean).join('&')}` : '';
         if (hash !== location.hash) history.replaceState(null, '', location.pathname + location.search + hash);
       }),
@@ -174,6 +184,8 @@ export function App() {
       <TimeBar key={`timebar-${theme}`} />
       <FleetPanel />
       <ScenarioManager />
+      <SimResults />
+      <SimMapKey />
       <SimLibrary />
       <SimWizard />
     </div>

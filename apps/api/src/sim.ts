@@ -12,10 +12,12 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { visible, type Scenario } from './scenarios.ts';
+import { buildLinkLoads } from './sim-results.ts';
 
 const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
 
@@ -56,6 +58,72 @@ const optionalInt = (value: unknown, label: string) =>
   value === null || value === undefined || value === '' ? null : int(value, label);
 const name = (value: unknown, otherwise: string) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 120) : otherwise);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** One CSV line as its fields. Quotes are honoured; a quoted field does not run over a line end here. */
+function csvFields(line: string): string[] {
+  if (!line.includes('"')) return line.split(',');
+  const fields: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch !== '"') field += ch;
+      else if (line[i + 1] === '"') field += line[i++];
+      else quoted = false;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') {
+      fields.push(field);
+      field = '';
+    } else field += ch;
+  }
+  fields.push(field);
+  return fields;
+}
+
+/**
+ * How many journey ends of a demand file carry a position of their own (origin_lat and so on)
+ * that lies inside a box. Such ends are not in the set's stop counts, whatever stop id they also
+ * name, so the file is the only place to count them. Made-up sets are all of this kind. The file
+ * is read through once per box and the answer kept.
+ */
+const endsInBox = new Map<string, Promise<number>>();
+function positionedEndsInside(file: string, box: Box): Promise<number> {
+  const key = `${file}:${box.south},${box.west},${box.north},${box.east}`;
+  let known = endsInBox.get(key);
+  if (!known) {
+    known = (async () => {
+      const raw = createReadStream(path.join(DEMAND_DIR, file));
+      const lines = createInterface({ input: file.endsWith('.gz') ? raw.pipe(createGunzip()) : raw, crlfDelay: Infinity });
+      let at: number[][] | null = null;
+      let inside = 0;
+      for await (const line of lines) {
+        if (!at) {
+          const names = csvFields(line.replace(/^﻿/, '')).map((n) => n.trim().toLowerCase());
+          at = [['origin_lat', 'origin_lon'], ['destination_lat', 'destination_lon']]
+            .map((pair) => pair.map((n) => names.indexOf(n)))
+            .filter((pair) => pair.every((i) => i >= 0));
+          if (!at.length) break;
+          continue;
+        }
+        const fields = csvFields(line);
+        for (const [latAt, lonAt] of at) {
+          const latText = fields[latAt]?.trim();
+          const lonText = fields[lonAt]?.trim();
+          if (!latText || !lonText) continue;
+          const lat = Number(latText);
+          const lon = Number(lonText);
+          if (lat >= box.south && lat <= box.north && lon >= box.west && lon <= box.east) inside++;
+        }
+      }
+      return inside;
+    })();
+    endsInBox.set(key, known);
+    known.catch(() => endsInBox.delete(key));
+    if (endsInBox.size > 200) endsInBox.delete(endsInBox.keys().next().value!);
+  }
+  return known;
+}
 
 // ---------------------------------------------------------------------------
 // The router service
@@ -362,6 +430,9 @@ async function drive(sql: Sql, id: number, log: (err: unknown, message: string) 
 
     // 4. Copy the results in.
     const rows = await importResults(sql, run as never, RESULT_TABLES);
+    // The flows the results draw on the map. Without them the run is still good: they are worked
+    // out the first time they are asked for.
+    await buildLinkLoads(sql, id).catch((err) => log(err, `could not work out the stretch loads of run ${id}`));
     await setState(sql, id, 'done', { finished_at: new Date(), result_rows: rows, progress: sql.json({}), error: null });
   } catch (err) {
     log(err, `simulation run ${id} failed`);
@@ -531,17 +602,19 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
    * with ?south=&west=&north=&east=, how many journey ends lie inside that box; and how many name a
    * stop that nothing calls at, and of those how many have a served stop within ?walk= metres.
    * Journey ends are counted, not journeys: which journeys have both ends inside is known only
-   * once the run has read the file.
+   * once the run has read the file. An end with a position of its own (every end of a made-up
+   * set) is placed by that position, read from the file; the others by their stop.
    */
   app.get('/api/demand/:id/coverage', async (req) => {
     const id = int((req.params as { id: string }).id, 'id');
     const query = req.query as Record<string, string | undefined>;
     const baseline = int(query.baseline, 'baseline');
-    const [row] = await sql`select stop_counts, report from demand_sets where id = ${id}`;
+    const [row] = await sql`select stop_counts, report, file from demand_sets where id = ${id}`;
     if (!row) throw fail(404, 'Demand set not found');
     const counts = (row.stop_counts ?? {}) as Record<string, number>;
     const ids = Object.keys(counts).filter((stop) => stop !== '');
-    const total = ids.reduce((sum, stop) => sum + counts[stop], 0) + Number((row.report as any)?.endsWithOwnPosition ?? 0);
+    const positioned = Number((row.report as any)?.endsWithOwnPosition ?? 0);
+    const total = ids.reduce((sum, stop) => sum + counts[stop], 0) + positioned;
     const scenarioId = query.s ? int(query.s, 's') : null;
     const [found] = scenarioId === null ? [null] : await sql`select id, baseline_id as "baselineId", head from scenarios where id = ${scenarioId}`;
     const sc = (found ?? null) as Scenario | null;
@@ -565,7 +638,8 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
                select 1 from stops o join stop_times st on st.stop_id = o.id join trips t on t.id = st.trip_id
                where o.baseline_id = ${baseline} and ST_DWithin(o.geom::geography, v.geom::geography, ${walk}) and ${visible(sql, 't', sc)}) end as near
       from served v`;
-    let inside = 0;
+    // Ends with a position of their own are not in the stop counts; they are counted from the file.
+    let inside = box && positioned > 0 && row.file ? Math.min(positioned, await positionedEndsInside(row.file, box)) : 0;
     const none = { stops: 0, journeyEnds: 0, withAnotherNear: 0 };
     for (const stop of stops) {
       if (stop.inside) inside += counts[stop.gtfs_id];

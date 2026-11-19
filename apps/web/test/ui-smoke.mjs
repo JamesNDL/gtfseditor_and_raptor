@@ -219,6 +219,8 @@ try {
     await click('.sim-footer button', 'Next');
     await fill('.sim-wizard input[aria-label="Name of the run"]', 'UI test BAU');
     await fill('.sim-wizard input[aria-label="Your name"]', 'ui-test');
+    // Journeys made up for an area lie inside it: the last step must not say that none do.
+    await waitFor(`/about 2,500 journeys, the 100% of journey ends inside Newcastle/.test(document.querySelector('.sim-wizard')?.textContent ?? '')`, 'the journeys counted inside the area', 30000);
     await shot('sim-wizard-check');
     await click('.sim-footer button', 'Run the simulation');
     await waitFor(`!document.querySelector('.sim-wizard')`, 'the wizard to close', 20000);
@@ -257,6 +259,47 @@ try {
     await waitFor(`document.querySelectorAll('.inspector .sim-loads li').length >= 2`, 'passengers along the trip', 60000);
     await shot('sim-trip-passengers');
     step(`passenger figures on a line (${onLine} a day) and along a trip`);
+
+    // The results window on that run (docs/simulator-plan.md, section 18), and its flows on the map.
+    await goTo(`${APP}/#sim=${simRun.id}&results=1`);
+    await waitFor(`/people travel/.test(document.querySelector('.results')?.textContent ?? '')`, 'the results window', 60000);
+    await click('.results .tabs button', 'Lines');
+    await waitFor(`document.querySelectorAll('.results-line-table tbody tr').length > 0`, 'lines in the results', 60000);
+    const resultLines = await js(`document.querySelectorAll('.results-line-table tbody tr').length`);
+    await shot('sim-results-lines');
+    await click('.map-key .chips button', 'Passenger flow');
+    await waitFor(`/Width is passengers: the widest is/.test(document.querySelector('.map-key')?.textContent ?? '')`, 'passenger flow on the map', 120000);
+    await sleep(1500);
+    await shot('sim-results-flow');
+    step(`results window: ${resultLines} lines listed, and passenger flow drawn on the map`);
+
+    // Travel patterns and People, one person drawn, a line's riders followed, and vehicles by how full.
+    await click('.results .tabs button', 'Travel patterns');
+    await waitFor(`/Passengers boarding, by mode/.test(document.querySelector('.results-body')?.textContent ?? '') && document.querySelectorAll('.results-compare li').length > 5`, 'travel patterns', 60000);
+    await shot('sim-results-patterns');
+    await click('.results .tabs button', 'People');
+    await waitFor(`document.querySelectorAll('.results-people-table tbody tr').length > 0`, 'people in the results', 60000);
+    const listed = await js(`document.querySelectorAll('.results-people-table tbody tr').length`);
+    await click('.results-people-table tbody tr');
+    await waitFor(`document.querySelectorAll('.results-journeys li').length > 0`, 'the journey of one of them', 30000);
+    await sleep(1500);
+    await shot('sim-results-person');
+    await click('.results-line-card .icon-button');
+    await click('.results .tabs button', 'Lines');
+    await click('.results-line-table tbody tr');
+    await click('.results-line-card button', 'Its passengers on the map');
+    await waitFor(`/people:/.test(document.querySelector('.map-key')?.textContent ?? '') && /where they start/.test(document.querySelector('.map-key')?.textContent ?? '')`, 'the riders of a line followed on the map', 120000);
+    const followed = (await text('.map-key')).match(/([\d,]+) people:/)?.[1];
+    await sleep(1500);
+    await shot('sim-results-through');
+    await click('.map-key button', 'Pick again');
+    await waitFor(`/Click a stretch or a stop/.test(document.querySelector('.map-key')?.textContent ?? '')`, 'the stretches to pick from');
+    await sleep(600); // the key changes height as its words change; let it settle before clicking in it
+    await click('.map-key .chips button', 'How full');
+    await waitFor(`/under half/.test(document.querySelector('.map-key')?.textContent ?? '') && !/Working it out/.test(document.querySelector('.map-key')?.textContent ?? '')`, 'vehicles coloured by how full', 120000);
+    await sleep(1000);
+    await shot('sim-results-vehicles');
+    step(`results window: travel patterns, ${listed} people listed and one drawn, ${followed} riders of a line followed on the map, vehicles coloured by how full`);
     simBauMade = true;
 
     await goTo(APP);

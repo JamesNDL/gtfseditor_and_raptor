@@ -2135,3 +2135,693 @@ select.cell {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   font-size: 13px;
 }
+
+/* ------------------------------------------------------ simulation results */
+/* The results window sits beside the map, not over it: what is chosen here is looked at there. */
+.results {
+  position: absolute;
+  top: 78px;
+  right: 14px;
+  bottom: 118px;
+  z-index: 12;
+  /* Narrow enough to leave the tools on the map in reach. */
+  width: min(980px, calc(100% - 740px));
+  min-width: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.results.small-window {
+  bottom: auto;
+  width: 420px;
+  min-width: 0;
+}
+
+.results-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 8px 18px;
+}
+
+.results-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.results-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 0 14px 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.results-bar .tabs {
+  margin: 0;
+}
+
+.results-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.results-pick select {
+  max-width: 230px;
+}
+
+.results-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.results-body h3 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.results-body section > h3:not(:first-child),
+.results-line-card > h3 {
+  margin-top: 16px;
+}
+
+.results-body p {
+  margin: 8px 0 0;
+}
+
+.results-figure .tile-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.results-dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.results-figure .results-dot {
+  margin-right: 0;
+}
+
+.results-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 18px 28px;
+}
+
+.results-chips {
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Rows of label, bar and number. */
+.results-bars,
+.results-stacks,
+.results-along,
+.results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.results-bars li,
+.results-stacks li,
+.results-along li {
+  display: grid;
+  grid-template-columns: 168px 1fr 58px 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.results-stacks li,
+.results-along li,
+.results-shift li {
+  grid-template-columns: 130px 1fr 64px;
+}
+
+.results-stacks li {
+  grid-template-columns: 110px 1fr 110px;
+}
+
+.results-body .results-lead {
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+
+.results-bars-extra {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.results-bar-track {
+  position: relative;
+  display: block;
+  height: 12px;
+}
+
+.results-bar-track i {
+  display: block;
+  height: 100%;
+  min-width: 1px;
+  border-radius: 0 4px 4px 0;
+}
+
+.results-same .results-bar-track {
+  height: auto;
+  font-style: italic;
+}
+
+.results-bar-n,
+.results-bar-share {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-bar-n {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.results-bar-share {
+  font-size: 11.5px;
+}
+
+.results-stack {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.results-stack i {
+  min-width: 1px;
+}
+
+.results-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 8px;
+  min-height: 18px;
+}
+
+.results-legend i {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.results-legend i.same {
+  width: 10px;
+  border: 1px solid var(--border);
+}
+
+.results-legend span:first-child {
+  margin-right: 4px;
+}
+
+.results-legend span:last-child {
+  margin-left: 4px;
+}
+
+.results-hover-text {
+  color: var(--text);
+  min-height: 18px;
+}
+
+/* A bar that grows right for more and left for fewer. */
+.results-delta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+}
+
+.results-delta-track {
+  position: relative;
+  flex: 1;
+  height: 12px;
+  border-left: 0;
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
+}
+
+.results-delta-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+}
+
+.results-delta b {
+  width: 62px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.results-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.results-row:hover {
+  background: var(--surface-2);
+}
+
+.results-row .results-delta {
+  flex: 0 0 210px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.results-table td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.results-table .n {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* People by hour: later above the line, sooner below. */
+.results-hours-plot {
+  position: relative;
+  display: flex;
+  gap: 3px;
+}
+
+.results-hours-zero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+.results-hour {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  text-align: center;
+}
+
+.results-hour.hover,
+.results-time.hover {
+  background: var(--surface-2);
+}
+
+.results-hour-up,
+.results-hour-down {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.results-hour-up {
+  justify-content: flex-end;
+  padding-bottom: 1px;
+}
+
+.results-hour-down {
+  padding-top: 1px;
+}
+
+.results-hour i {
+  display: block;
+  flex: none;
+}
+
+.results-hour span,
+.results-time span {
+  height: 16px;
+  line-height: 16px;
+}
+
+/* Columns of now against before. */
+.results-times {
+  display: flex;
+  gap: 3px;
+  height: 140px;
+}
+
+.results-times-short {
+  height: 96px;
+}
+
+.results-time {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  text-align: center;
+}
+
+.results-time-bars {
+  position: relative;
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.results-time-bars i {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+}
+
+.results-time-bars .now {
+  background: var(--series-1);
+  border-radius: 4px 4px 0 0;
+}
+
+.results-time-bars .before,
+.results-along .before {
+  border: 1.2px dashed var(--before);
+  background: none !important;
+}
+
+.results-time-bars .before {
+  border-bottom: 0;
+}
+
+/* The Lines tab: the table, and the line that is open beside it. */
+.results-lines {
+  display: flex;
+  gap: 18px;
+  min-height: 0;
+  flex: 1;
+}
+
+.results-lines-list {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.results-filters .check {
+  margin: 0;
+}
+
+.results-filters input.grow {
+  min-width: 120px;
+}
+
+.results-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.results-line-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.results-line-table tbody tr {
+  cursor: pointer;
+}
+
+.results-line-table tbody tr:hover,
+.results-line-table tbody tr.on {
+  background: var(--surface-2);
+}
+
+.results-line-table .badge {
+  font-size: 12px;
+}
+
+.results-change {
+  width: 34%;
+}
+
+.results-line-card {
+  flex: 0 0 46%;
+  min-width: 0;
+  overflow-y: auto;
+  padding-left: 18px;
+  border-left: 1px solid var(--hairline);
+}
+
+.results-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-along .results-bar-track {
+  height: 10px;
+}
+
+.results-along .results-bar-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+}
+
+/* The key to what the results draw on the map. */
+.map-key {
+  position: absolute;
+  left: 328px;
+  bottom: 118px;
+  z-index: 9;
+  width: 300px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-key .chips {
+  margin: 0;
+}
+
+.map-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-key-row .day-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-key-wrap {
+  gap: 4px 12px;
+}
+
+.map-key-swatches {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.map-key-swatches i {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.app.timeline-open .map-key {
+  display: none;
+}
+
+/* With a line open beside it, the table keeps to what fits. */
+.results-lines.with-detail .results-line-table th:last-child,
+.results-lines.with-detail .results-line-table td:last-child {
+  display: none;
+}
+
+.results-scroll {
+  overflow-x: hidden;
+}
+
+/* Travel patterns: rows of label, bar, number and change. */
+.results-compare li,
+.results-compare .results-compare-button {
+  grid-template-columns: 150px 1fr 64px;
+}
+
+.results-compare.compared li,
+.results-compare.compared .results-compare-button {
+  grid-template-columns: 150px 1fr 64px 70px;
+}
+
+.results-compare li:has(> .results-compare-button) {
+  display: block;
+}
+
+.results-compare-button {
+  width: 100%;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.results-compare-button:hover,
+.results-clickable:hover {
+  background: var(--surface-2);
+}
+
+.results-clickable {
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.results-compare .results-bar-share {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.results-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 2px 0 10px;
+}
+
+.results-moves {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.results-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+/* People: the list, and one person's journey before and now beside it. */
+.results-find {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.results-find input {
+  width: 110px;
+}
+
+.results-people-table td:first-child {
+  white-space: nowrap;
+}
+
+.results-lines.with-detail .results-people-table th:last-child,
+.results-lines.with-detail .results-people-table td:last-child {
+  display: table-cell;
+}
+
+.results-journeys {
+  margin: 0;
+}
+
+.results-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+}
+
+.results-swatch.now {
+  background: #ff4fa3;
+}
+
+.results-swatch.before {
+  background: #9aa3ae;
+}
+
+.button.small-button.on {
+  border-color: var(--accent, #4cc2ff);
+}
+
+.map-key-end {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.map-key-end.from {
+  background: #30d5c8;
+}
+
+.map-key-end.to {
+  background: #ff9f0a;
+}
+
+.map-key .check {
+  margin: 0;
+}
+
+.timeline-check .map-key-swatches {
+  margin-left: 6px;
+}

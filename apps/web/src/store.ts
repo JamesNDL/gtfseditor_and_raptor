@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Baseline, Mode, RouteListItem } from './api.ts';
 import type { ScenarioInfo, ScenarioSummary } from './scenario.ts';
 import type { SimBox, SimJourney, SimRun } from './sim/simApi.ts';
+import type { SimMapState, SimResultsState } from './sim/results.ts';
 
 export type Selection =
   | { kind: 'route'; id: number }
@@ -163,7 +164,15 @@ interface AppState {
   /** The area of the run being set up, drawn on the map. */
   simBox: SimBox | null;
   /** One person's journeys in the chosen run, drawn on the map. */
-  simPerson: { user: string; journeys: SimJourney[] } | null;
+  simPerson: { user: string; journeys: SimJourney[]; /** The same journeys in the run compared with, drawn underneath. */ before?: SimJourney[] } | null;
+  /** The results window of the chosen run: what it shows and what the run is set against. */
+  simResults: SimResultsState;
+  /** What the results draw on the map. */
+  simMap: SimMapState;
+  /** Bumped by the map each time it has drawn the results, so that the key shows the scale in use. */
+  simMapDrawn: number;
+  /** Trips in the timelines are coloured by how full they are in the chosen run. */
+  simTripColours: boolean;
 
   timeline: TimelineState;
   /** Time window shown by every timeline view, in seconds since the start of the service day. */
@@ -233,6 +242,10 @@ export const useStore = create<AppState>((set) => ({
   simDrawing: false,
   simBox: null,
   simPerson: null,
+  simResults: { open: false, small: false, tab: 'overview', vs: null, band: null, lineId: null, who: null },
+  simMap: { layer: 'none', flow: 'change', by: 'stop', end: 'origin', side: 'b' },
+  simTripColours: false,
+  simMapDrawn: 0,
   timeline: CLOSED_TIMELINE,
   view: [6 * 3600, 10 * 3600],
 

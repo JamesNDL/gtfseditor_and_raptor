@@ -39,6 +39,7 @@ In the web app it is the **Simulation** panel, under the scenario panel on the l
 
 - **New simulation** opens a four-step wizard. With no scenario open it sets up a BAU run on the published timetable: pick, upload or make up the journeys, choose an area (the whole network, a saved area, what is on screen, or a box dragged on the map), and how people travel. With a scenario open it sets up a run of that scenario against a BAU run you pick.
 - The panel follows the run in progress, then shows the chosen run's summary, offers "Run again with capacity", and looks one person up by `user_id`, drawing their journeys on the map.
+- **Results** opens a window beside the map that sets the run against another: Overview, Travel time, Lines, Travel patterns and People. A key beside the left column chooses what the map draws: passenger flow, who is affected, "through here" (click a stretch or a stop to follow its passengers), or vehicles coloured by how full. "How full" in the timeline's header colours trips the same way.
 - While a run is chosen, the line, trip and station panels gain a "Passengers" section. The figures show when the timetable the run was made on is the one open.
 - **Library** lists every run, by folder or by date, with scenario runs under their BAU run: open, rename, move, archive, remove.
 - A link can name the run to show: `#route=<id>&sim=<run id>`.
@@ -53,7 +54,7 @@ It needs the router running as well as the API: `npm run router:dev` (port 3002,
 | `POST /api/demand?name=&madeBy=` | Upload a demand CSV as the body (`text/csv`, or `application/gzip`). Answers the set with the report of its check. The format is in `services/router/README.md` |
 | `POST /api/demand/generate` | Make a set up: `{ name, baselineId, journeys, seed, areaId, withinKm, focus, people }` |
 | `GET /api/demand`, `GET /api/demand/:id?baseline=`, `DELETE /api/demand/:id` | List; one set, with the stop ids that day does not have; remove |
-| `GET /api/demand/:id/coverage?baseline=&s=&south=&west=&north=&east=&walk=` | How many journey ends lie inside a box, and how many name a stop nothing calls at |
+| `GET /api/demand/:id/coverage?baseline=&s=&south=&west=&north=&east=&walk=` | How many journey ends lie inside a box (by the end's own position where the file gives one, as made-up journeys do, otherwise by its stop), and how many name a stop nothing calls at |
 | `GET`, `POST /api/sim-areas`, `DELETE /api/sim-areas/:id` | Boxes a run can be limited to. Four come with the editor |
 | `GET`, `POST /api/sim-folders`, `PATCH`, `DELETE /api/sim-folders/:id` | Folders of the library |
 | `POST /api/sim-runs` | Start a run (below). Answers at once with the run |
@@ -64,6 +65,8 @@ It needs the router running as well as the API: `npm run router:dev` (port 3002,
 | `POST /api/sim-runs/:id/archive`, `/restore` | Take a run's journeys and legs out of the database, and bring them back |
 | `GET /api/sim-runs/:id/journeys?user=` | One person's journeys, with their legs |
 | `GET /api/sim-runs/:id/routes/:routeId`, `/trips/:tripId`, `/stops/:stopId` | A line's passengers and how full it gets; passengers along one trip; one stop or station by quarter hour |
+| `GET /api/sim-runs/:id/results/overview`, `/lines`, `/lines/:lineId`, `/flows`, `/places?by=&end=` | The results view: one run against another made on the same people. Who arrives sooner and later; each line before and now; one line by hour, its stations, and where its passengers went; passengers on each stretch between stops, for the map; and where the people affected start from or are going, by stop or in squares (`by=stop`, or a side in metres). Each takes `vs=` (the run compared with; left out, a scenario run's BAU run) and `from=`, `to=` (seconds, for a part of the day) |
+| `GET /api/sim-runs/:id/results/patterns`, `/people?who=&limit=&offset=&order=`, `/people/:journeyId`, `/trace?who=`, `/vehicle-loads` | More of the results view: how people travel (boardings by mode, vehicles a journey, who uses another stop, the stations that changed most); a set of people listed, worst affected first; one journey in both runs, leg by leg; a set of people followed on the map (the stretches they ride in each run, where they start and end); and how full each vehicle is through the day. `who` is `all`, `changed`, `later`, `sooner`, `lost`, `gained`, `group:<0 to 8>`, `user:<user_id>`, `line:<id>:<a or b>`, `stop:<id>:<a or b>` or `link:<from>-<to>:<a or b>` |
 | `GET /api/sim-runs/:id/files/:name` | A result file as the simulator wrote it |
 
 A run is one of three kinds, told apart by what the request names:

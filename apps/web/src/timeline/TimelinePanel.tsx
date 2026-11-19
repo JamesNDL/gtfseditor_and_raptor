@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useApi, type RouteDetail } from '../api.ts';
 import { clock } from '../clock.ts';
 import { Badge, shortStop } from '../inspector/parts.tsx';
+import { FULL_STEPS } from '../sim/results.ts';
+import { EMPTY_COLOR } from '../sim/loads.ts';
+import { useShownRun } from '../sim/SimFigures.tsx';
 import { useStore, type TimelineTab } from '../store.ts';
 import { PlatformView } from './PlatformView.tsx';
 import { StringlineView } from './StringlineView.tsx';
@@ -21,6 +24,10 @@ export function TimelinePanel() {
   const closeTimeline = useStore((s) => s.closeTimeline);
   const setView = useStore((s) => s.setView);
   const editing = useStore((s) => s.scenarioId !== null);
+  // A simulation run made on the timetable open: its trips can be coloured by how full they are.
+  const simRun = useShownRun();
+  const tripColours = useStore((s) => s.simTripColours);
+  const set = useStore((s) => s.set);
 
   const needsRoute = timeline.tab !== 'platforms';
   const route = useApi<RouteDetail>(timeline.open && needsRoute && timeline.routeId ? `/api/routes/${timeline.routeId}` : null);
@@ -106,6 +113,20 @@ export function TimelinePanel() {
               Other lines
             </label>
           </>
+        )}
+
+        {simRun && (
+          <label className="timeline-check" title={`Colour each trip by how full it is in "${simRun.name}": passengers aboard as a share of its places`}>
+            <input type="checkbox" checked={tripColours} onChange={(e) => set({ simTripColours: e.target.checked })} />
+            How full
+            {tripColours && (
+              <span className="map-key-swatches" title={`Grey is empty, then ${FULL_STEPS.map((step) => step.label).join(', ')}`}>
+                {[EMPTY_COLOR, ...FULL_STEPS.map((step) => step.color)].map((color) => (
+                  <i key={color} style={{ background: color }} />
+                ))}
+              </span>
+            )}
+          </label>
         )}
 
         <div className="timeline-window">

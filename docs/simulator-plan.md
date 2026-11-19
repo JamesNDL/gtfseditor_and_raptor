@@ -1,6 +1,6 @@
 # Passenger simulator plan
 
-Written 17 Nov 2026. Phases S0 to S4 are built (18 Nov 2026), which makes the first version usable from the editor: what was found, measured and done differently is in sections 14 to 17. S5 and S6 are not built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
+Written 17 Nov 2026. Phases S0 to S4 are built (18 Nov 2026), which makes the first version usable from the editor: what was found, measured and done differently is in sections 14 to 17. S5 and S6 are replaced by the results view of section 18 (19 Nov 2026), of which the first two steps are built. The plan joins two things that already existed: the GTFS editor (which exports a timetable with vehicle capacities) and the journey router in `services/router` (which plans journeys on that export). Figures marked "estimate" are not measured. The owner's decisions of 18 Nov are in section 12, and the assumptions to come back to are in section 13.
 
 ## 1. Summary
 
@@ -438,8 +438,7 @@ Sizes are rough days of focused work.
 | S2. Jobs | The four endpoints, progress, stop, one at a time | A run started and collected over HTTP | 2 to 3 |
 | S3. Editor back end | Export without shapes and cut to a box, saved areas, version key, demand sets, runs, named BAU runs and scenario runs made against them, folders, who made a run, archiving, copying results in, out-of-date marking | A run started through the Node API with results in the database | 7 to 8 |
 | S4. Editor panels | Simulate panel, the library (folders, by date, search and filters), the wizard with the box drawn on the map, summary, figures on the line, trip and station panels, one person by `user_id` | **First usable version: run from the editor, read the results** | 6 to 7 |
-| S5. Map and timelines | Vehicles by how full, lines by passengers, stops by boardings, trips coloured in the timelines | Passengers visible on the map | 3 to 4 |
-| S6. Two runs | The comparison of section 7 | Published against scenario, side by side | 3 |
+| S5 and S6, replaced by the results view (section 18) | A results window beside the map, one run against another: overview, travel time and lines (built 19 Nov); passenger flow and who is affected on the map (built 19 Nov); travel patterns, people, and the rest of the map (not built) | Who gains and loses, line by line and on the map | See section 18 |
 | Later, in rough order | Passengers spread over alternatives; a person's journeys in sequence; crowds slowing vehicles (level 2); crowding as discomfort and repeated runs (level 3); planning again only what an edit touched; several days | | Not sized |
 
 S0 to S2 need nothing from the editor except one exported zip. S3 is the first work that touches the Node API.
@@ -667,3 +666,107 @@ S4 is built: the simulator can be used from the editor. This is the first usable
 - The wizard's last step does not say how long preparing the timetable will take beyond "up to half a minute".
 - Nothing warns when the disk is filling. The library shows each run's size and the total.
 - The map and timelines are S5 (vehicles coloured by how full, lines by passengers, stops by boardings). The side-by-side comparison of two runs is S6; until then a scenario run's summary shows its figures against its BAU run.
+
+## 18. The results view (19 Nov 2026)
+
+The owner's words on 19 Nov: the results are hard to analyse. It is hard to see how people's travel patterns have changed, the impact on lines, and how the impact on travel time is spread between people. This section is the design agreed that day, and what of it is built. It replaces S5 and S6 of section 10.
+
+### The design
+
+| Principle | What it means |
+|---|---|
+| Always a comparison | A scenario run opens against its BAU run. "Compare with" offers any other run made on the same BAU run. A capacity run opens against the run whose plans it replays. A BAU run on its own shows the same views without the differences. |
+| A window beside the map | The results window takes the right of the screen and leaves the map in view; it folds to its title bar (Esc) so the whole map can be read. The owner left the form to be decided; a window that covered the map would stop what is chosen in it being looked at on the map. A separate browser window for a second screen can be added later. |
+| Compared by place, not by trip | An edited trip is a new trip and a line cut by a closure becomes new lines, so two runs are never compared trip by trip. People are matched by `journey_id`. Lines are compared with the parts of a split line counted under the line they came from. Stations count their platforms. The map compares the stretch between two consecutive calls. |
+| One part of the day | "When" limits every figure and the map to one of the five parts of the day used elsewhere in the editor, or all day. |
+
+The window has five tabs. All five are built (the last two on 20 Nov).
+
+| Tab | Question | Built |
+|---|---|---|
+| Overview | What happened, in one screen | Yes |
+| Travel time | Who gains and who loses, and by how much | Yes |
+| Lines | The impact on each line, and where its passengers went | Yes |
+| Travel patterns | Boardings by mode, vehicles per journey, who changed stop, stations with the most change | Yes |
+| People | The individuals behind any figure, worst affected first, each drawn before and after | Yes |
+
+On the map, one layer at a time, chosen in a small key beside the left column:
+
+| Layer | What is drawn | Built |
+|---|---|---|
+| Passenger flow | Each stretch between stops as a band as wide as its passengers, each direction on its own side. Coloured by the change against the other run (red fewer, blue more, grey the same), by passengers alone, or by how full | Yes |
+| Who is affected | Where the people who gain or lose time start from, or are going. Red is later, blue sooner; a ring marks people who can no longer travel | Yes, four ways (below) |
+| Through here | Click a stretch or a stop, or pick a line or a group of people in the window: where they come from and go to, and which way the same people go in the other run | Yes |
+| How full | Each vehicle coloured by the passengers aboard as a share of its places, at the time on the clock | Yes |
+
+**How "who is affected" is gathered.** The owner asked to try a few ways. Four are offered: by stop (a platform counts as its station), and in squares of 500 m, 1 km and 2 km. Suburbs are not offered: the editor has no suburb boundaries, and importing them is a job of its own.
+
+### What is built
+
+| Where | What |
+|---|---|
+| Simulation panel | A "Results" button on the chosen run. `&results=1` in a link opens the window. |
+| Overview | People travelling; how many arrive later and sooner and by how much; who can no longer travel (gave up, stranded, no journey) and who now can; the hours of travel gained and lost in total. People by change in arrival time, in nine groups from "30 minutes or more sooner" to "30 minutes or more later". The six lines that changed most. |
+| Travel time | The same nine groups. What the change is made of: waiting, walking, riding and vehicles boarded, before and now, for everyone or only for people whose time changed. Who it changed for, by the length of their journey before. People later and sooner by the hour they set off. Journey times before and now in ten-minute steps. |
+| Lines | Every line that carries anyone: passengers before and now, the change, and how full its fullest vehicle gets. Find by name; order by change, passengers, fullness or name. A line opened beside the list shows passengers boarding by hour before and now; of the people who rode it before and no longer do, which lines they took up; of the people who ride it now and did not before, which lines they gave up; and its stations with passengers on and off. |
+| Map | Passenger flow and who is affected, as above, with what is under the pointer said in words. The network and the vehicles fade while a layer is on. The mode switches on the left hide a mode's flows. |
+| Travel patterns | Passengers boarding by mode, before and now. People by the number of vehicles they board, from walking all the way to four or more. How many people set off from, or end at, another stop than before, with the commonest moves. The twenty stations and stops where passengers on and off changed most (the busiest, for a run on its own); clicking one follows its passengers on the map. |
+| People | The people behind a figure, one row a journey, worst affected first: whose journey changed, later, sooner, can no longer travel, can now travel, everyone, or one `user_id`. Also the riders of a line, of a stretch or of a stop, when one has been picked. A person opened beside the list shows their journey before and now leg by leg, and both are drawn on the map: now in pink, before in grey underneath. |
+| Picking people | A bar of "change in arrival time" (Overview and Travel time), "Its passengers on the map" on a line, a station in Travel patterns, or a click on the map with "Through here" on. One set of people is picked at a time; it is what the People tab lists and what "Through here" draws. For a line, stretch or stop the key asks whether the people who used it before are meant, or those who use it now. |
+| Map: through here | With nothing picked, every stretch is drawn by its passengers and a click on a stretch or a stop picks the people who ride it, or who get on, off or change there. With people picked, the stretches they ride are drawn as wide as there are of them, red where they no longer ride and blue where they now do, with a dot where each starts (teal) and is going (orange). |
+| Map: how full | Vehicles take the colour of how full they are at the clock's time: grey empty, then under half, 50 to 80%, 80 to 100%, over 100%. The pointer says how full a vehicle is now and the most it carries all day. Shown when the timetable open is the one the run was made on. |
+| Timelines | "How full" in the timeline's header (and in the map's key) colours trips the same way: each stretch of a trip in the trip diagram, each part of a bar in the vehicle chart, each call in the platform chart. |
+| API | `GET /api/sim-runs/:id/results/overview`, `/lines`, `/lines/:line`, `/flows`, `/places`, `/patterns`, `/people`, `/people/:journey`, `/trace` and `/vehicle-loads`, each taking `vs`, `from` and `to` (`apps/api/src/sim-results.ts`). `/people` and `/trace` take `who=`: `all`, `changed`, `later`, `sooner`, `lost`, `gained`, `group:<0 to 8>`, `user:<user_id>`, `line:<id>:<a or b>`, `stop:<id>:<a or b>`, `link:<from>-<to>:<a or b>`, where `a` is this run and `b` the one compared with. |
+| Database | `sim_link_loads`: passengers on each stretch by half hour, worked out when a run's results are copied in. |
+
+### Checked on the published weekday
+
+On the 100,000-journey BAU run and the Scenario 7 run of section 16.
+
+| Check | Result |
+|---|---|
+| People compared | 92,381, all who travel. 12 arrive sooner, by 19 minutes on average, and nobody later: the figures of section 16. |
+| What the change is made of, for those 12 | Waiting falls from 37 to 16 minutes, riding rises by 1.4, and they board 0.17 fewer vehicles. |
+| Lines | 848 carry someone; 18 carry more or fewer than before, the most being 5 fewer on the Central Coast and Newcastle line. Those 5 took up the 267, the 13 and the 26. |
+| Map | 36,523 stretches carry someone, 279 of them more or fewer than before. |
+| Time to answer | Overview 2.7 s, lines 1 to 2 s, a line 2 s, who is affected 2 to 3 s; each is kept and answers at once the second time. The stretches of a run took 17 s to work out, once. |
+
+`npm run test:sim` checks the results of an unedited scenario (everyone the same, every line and stretch as before), a part of the day, a capacity run against its plans, a run on its own, and archived runs. `npm run test:ui` opens the window, lists the lines and draws passenger flow.
+
+Checked on 20 Nov on a 20,000-journey Newcastle BAU run and a scenario with bus line 11 removed (126 trips). The scenario and its run were made for the check and removed afterwards.
+
+| Check | Result |
+|---|---|
+| People compared | 17,430. 1,575 arrive later, 791 sooner, 48 can no longer travel. |
+| Travel patterns | Bus boardings fall by 632, train rise by 244 and light rail by 86. 1,064 people set off from another stop than before and 891 end at another. Newcastle Interchange gains 1,122 passengers on and off; the Jesmond shopping centre stop loses 624. |
+| People | The 2,414 people whose journey changed are listed in about a second. The 3,567 who rode line 11 before are found in 3 seconds. |
+| Through here | The 2,708 people on the busiest stretch of line 11 before, with the 3,546 stretches they ride in either run, in 5 seconds. A group of 48 people in under a second. |
+| How full | 2,683 trips carry someone; their loads are sent as the calls where the fullness step changes, in about a second. |
+
+`npm run test:sim` also checks, on the unedited scenario, that the modes add up to the lines, that nobody uses another stop or is listed as changed, one person read both ways, the riders of the busiest stretch, of a line and of a stop followed (every stretch as before), and the vehicle loads. `npm run test:ui` opens the Travel patterns and People tabs, draws one person, follows a line's riders on the map and colours the vehicles by how full.
+
+### Limits
+
+- **A stretch is drawn straight between two stops.** It does not follow the road or the track.
+- **An express and an all-stops train on the same track are different stretches,** because a stretch is what a vehicle runs without calling. Flows on a railway are therefore split between them, not added up along the track. Putting them on the station-to-station links of `apps/api/src/tracks.ts` would fix this.
+- **A line's stations are listed by change or by passengers, not in line order.** A line has several stop patterns and no single order.
+- **Lines are compared by boardings.** Passenger-kilometres and time aboard are not worked out.
+- **A square's colour is the average for the people in it.** A few people badly affected among many unaffected show only in the palest colour; the pointer says how many.
+- **People are placed by the stop they used in the run compared with.** Someone who walks the whole way, or has no journey in either run, is on no map.
+- **Figures about people need the journeys of both runs,** so they are refused when either is archived. Lines and flows still work, except where a line's passengers went.
+- **Runs made before 19 Nov have no stretches kept;** they are worked out the first time passenger flow is asked for, which takes up to half a minute for a whole-network run.
+- **Nothing here is checked against real demand.** The runs are of made-up journeys.
+- **No more than 30,000 journeys are followed on the map at once.** Every stretch of every ride is looked up; a bigger set is refused with the reason, and "Passenger flow" shows everyone.
+- **The people on a stretch are those aboard a vehicle that runs it without calling between.** People on an express past the same two stations are on another stretch, as in the flows.
+- **A person on the map runs straight from stop to stop,** like the flows. Walks to and from a place that is not a stop are not drawn.
+- **The People tab lists at most 500 journeys of a set.** Past that, pick a smaller set.
+- **How full is in five steps, not a figure,** on the map and in the timelines; the pointer gives the trip's fullest moment as a figure. Capacities are placeholders.
+- **Vehicles and timelines show one run, not a comparison,** and only on the timetable the run was made on.
+
+### Still to build, in order
+
+| Step | What |
+|---|---|
+| R3 | Built 20 Nov: the Travel patterns tab, "Through here" on the map, and clicking a bar of the change in arrival time or a line to see those people on the map. |
+| R4 | Built 20 Nov: the People tab, with each person's journey before and after; vehicles coloured by how full at the clock's time; trips coloured in the timelines. |
+| Later | Flows that follow the road and the track. A separate browser window for a second screen. Clicking a bar of "by the hour people set off" or of the journey-time chart. |

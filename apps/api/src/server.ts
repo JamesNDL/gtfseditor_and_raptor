@@ -9,6 +9,7 @@ import { registerExportRoutes } from './export.ts';
 import { registerFleetRoutes } from './fleet.ts';
 import { registerScenarioRoutes, scenarioOf, visible } from './scenarios.ts';
 import { registerSimRoutes } from './sim.ts';
+import { registerSimResultRoutes } from './sim-results.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Packs live under <repo>/data/packs regardless of where the server is started from.
@@ -549,6 +550,7 @@ registerScenarioRoutes(app, sql);
 registerFleetRoutes(app, sql);
 registerExportRoutes(app, sql);
 registerSimRoutes(app, sql);
+registerSimResultRoutes(app, sql);
 
 app.get('/api/health', async () => ({ ok: true }));
 

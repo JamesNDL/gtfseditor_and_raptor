@@ -3,6 +3,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo } from 'react';
 import { useApi } from '../api.ts';
 import { applyEdit } from '../scenario.ts';
+import { stepAt, stepColor, useTripColours } from '../sim/loads.ts';
 import { useStore } from '../store.ts';
 import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
@@ -37,6 +38,8 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
   const open = useStore((s) => s.open);
   const focusStopId = useStore((s) => s.timeline.focusStopId);
   const editing = useStore((s) => s.baselineId !== null);
+  // Calls coloured by how full the vehicle is in the chosen simulation run, when that is switched on.
+  const loaded = useTripColours() !== null;
   const stationName = data?.station.name;
   useEffect(() => {
     if (stationName) onStationName(stationName);
@@ -117,7 +120,8 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       const y = rowTop(env, r) + inset;
       const h = rowH - 2 * inset;
       const [x, w] = barX(env, c.arr, c.dep);
-      const fill = model.color.get(c.routeId) ?? COLORS.muted;
+      // The fuller of how it arrives and how it leaves: a train that empties here arrived full.
+      const fill = loaded ? stepColor(Math.max(stepAt(c.tripId, c.arr - 1), stepAt(c.tripId, c.dep))) : (model.color.get(c.routeId) ?? COLORS.muted);
       if (c.passing) {
         // Runs through without stopping: a thin tick rather than a bar.
         ctx.globalAlpha = 0.55;

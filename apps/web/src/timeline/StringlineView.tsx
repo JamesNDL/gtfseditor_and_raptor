@@ -3,6 +3,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
 import { useApi } from '../api.ts';
 import { applyEdit } from '../scenario.ts';
+import { peakText, stepAt, stepColor, useTripColours } from '../sim/loads.ts';
 import { useStore } from '../store.ts';
 import { COLORS, fitText, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
@@ -24,6 +25,8 @@ export function StringlineView({ patternId, others }: { patternId: number; other
   const { data, error } = useApi<StringlineData>(`/api/patterns/${patternId}/stringline?others=${others ? 1 : 0}`);
   const open = useStore((s) => s.open);
   const editing = useStore((s) => s.baselineId !== null);
+  // Trips coloured by how full they are in the chosen simulation run, when that is switched on.
+  const loaded = useTripColours() !== null;
 
   const model = useMemo(() => {
     if (!data) return null;
@@ -60,6 +63,31 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       else ctx.lineTo(xa, y);
       if (calls[i + 2] !== calls[i + 1]) ctx.lineTo(env.x(calls[i + 2] + shift), y);
     }
+  };
+
+  /** Strokes a trip stretch by stretch, each in the colour of how full the vehicle is as it leaves. */
+  const strokeLoaded = (env: Env, tripId: number, calls: number[]) => {
+    const { ctx } = env;
+    let step = stepAt(tripId, calls[2]);
+    ctx.beginPath();
+    ctx.moveTo(env.x(calls[1]), yOf(env, calls[0]));
+    ctx.lineTo(env.x(calls[2]), yOf(env, calls[0]));
+    for (let i = 4; i < calls.length; i += 4) {
+      const y = yOf(env, calls[i]);
+      const xa = env.x(calls[i + 1]);
+      ctx.lineTo(xa, y);
+      const next = stepAt(tripId, calls[i + 2]);
+      if (next !== step) {
+        ctx.strokeStyle = stepColor(step);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(xa, y);
+        step = next;
+      }
+      if (calls[i + 2] !== calls[i + 1]) ctx.lineTo(env.x(calls[i + 2]), y);
+    }
+    ctx.strokeStyle = stepColor(step);
+    ctx.stroke();
   };
 
   const render = (env: Env) => {
@@ -120,6 +148,12 @@ export function StringlineView({ patternId, others }: { patternId: number; other
         ctx.strokeStyle = COLORS.highlight;
         ctx.lineWidth = 1;
       }
+      if (loaded) {
+        ctx.globalAlpha = t.own ? 1 : 0.6;
+        ctx.lineWidth = t.id === env.hoverTripId ? 3 : t.own ? 2 : 1.3;
+        strokeLoaded(env, t.id, t.calls);
+        continue;
+      }
       tracePath(env, t.calls);
       ctx.stroke();
       if (showDots && t.own) {
@@ -140,10 +174,14 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       ctx.lineWidth = 5;
       tracePath(env, selected.calls);
       ctx.stroke();
-      ctx.strokeStyle = model.color.get(selected.routeId) ?? COLORS.muted;
       ctx.lineWidth = 2.5;
-      tracePath(env, selected.calls);
-      ctx.stroke();
+      if (loaded) {
+        strokeLoaded(env, selected.id, selected.calls);
+      } else {
+        ctx.strokeStyle = model.color.get(selected.routeId) ?? COLORS.muted;
+        tracePath(env, selected.calls);
+        ctx.stroke();
+      }
     }
     // A trip being dragged: a dashed white ghost at the time it would move to.
     const dragged = env.dragTripId !== null ? model.trips.find((t) => t.id === env.dragTripId) : undefined;
@@ -191,6 +229,7 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       tooltip: [
         `${model.name.get(best.trip.routeId) ?? '?'} · ${formatSecs(best.trip.min)} to ${formatSecs(best.trip.max)}`,
         `${c[best.call + 3] ? 'Passes' : 'At'} ${station} ${formatSecs(c[best.call + 2])}`,
+        ...(loaded ? [peakText(best.trip.id) ?? 'Carries nobody'] : []),
       ],
     };
   };

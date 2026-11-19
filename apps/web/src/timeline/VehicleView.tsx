@@ -3,6 +3,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
 import { useApi } from '../api.ts';
 import { applyEdit } from '../scenario.ts';
+import { EMPTY_COLOR, peakText, stepColor, tripLoads, useTripColours } from '../sim/loads.ts';
 import { currentSelection, useStore } from '../store.ts';
 import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
@@ -43,6 +44,8 @@ export function VehicleView({ routeId }: { routeId: number }) {
   const selection = useStore(currentSelection);
   const selectedDayId = selection?.kind === 'vehicleDay' ? selection.id : null;
   const editing = useStore((s) => s.baselineId !== null);
+  // Trips coloured by how full they are in the chosen simulation run, when that is switched on.
+  const loaded = useTripColours() !== null;
 
   const stay = useMemo(() => new Set((data?.stayAboard ?? []).map(([a, b]) => `${a}>${b}`)), [data]);
 
@@ -106,8 +109,23 @@ export function VehicleView({ routeId }: { routeId: number }) {
         // A 1px surface gap keeps back-to-back trips reading as separate bars.
         const w = Math.max(MIN_BAR, env.x(t.endSecs) - x - 1);
         roundRect(ctx, x, y + 4, w, ROW_H - 8, 3);
-        ctx.fillStyle = `#${t.color}`;
+        ctx.fillStyle = loaded ? EMPTY_COLOR : `#${t.color}`;
         ctx.fill();
+        const load = loaded ? tripLoads.byTrip.get(t.id) : undefined;
+        if (load) {
+          // Along the bar, each part of the trip in the colour of how full the vehicle is then.
+          ctx.save();
+          roundRect(ctx, x, y + 4, w, ROW_H - 8, 3);
+          ctx.clip();
+          for (let k = 0; k < load.times.length; k++) {
+            if (load.steps[k] <= 0) continue;
+            const from = env.x(Math.max(load.times[k], t.startSecs));
+            const to = env.x(Math.min(load.times[k + 1] ?? t.endSecs, t.endSecs));
+            ctx.fillStyle = stepColor(load.steps[k]);
+            ctx.fillRect(from, y + 4, Math.max(1, to - from), ROW_H - 8);
+          }
+          ctx.restore();
+        }
         if (t.id === env.selectedTripId || t.id === env.hoverTripId) {
           ctx.strokeStyle = COLORS.highlight;
           ctx.lineWidth = t.id === env.selectedTripId ? 2.5 : 1.5;
@@ -183,6 +201,7 @@ export function VehicleView({ routeId }: { routeId: number }) {
             `${t.shortName ?? '?'}${t.headsign ? ` to ${t.headsign}` : ''}`,
             `${formatSecs(t.startSecs)} to ${formatSecs(t.endSecs)}`,
             day.label,
+            ...(loaded ? [peakText(t.id) ?? 'Carries nobody'] : []),
           ],
         };
       }

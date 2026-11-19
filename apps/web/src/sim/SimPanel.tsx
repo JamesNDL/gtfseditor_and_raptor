@@ -86,7 +86,14 @@ export function SimPanel() {
             className="day-select"
             value={runId ?? ''}
             aria-label="Simulation run to show"
-            onChange={(e) => set({ simRunId: e.target.value === '' ? null : Number(e.target.value), simPerson: null })}
+            onChange={(e) =>
+              set({
+                simRunId: e.target.value === '' ? null : Number(e.target.value),
+                simPerson: null,
+                // Another run is compared with its own BAU run, and has its own lines.
+                simResults: { ...useStore.getState().simResults, vs: null, lineId: null },
+              })
+            }
           >
             <option value="">{finished.length ? 'No run shown' : 'No finished runs yet'}</option>
             {finished.map((r) => (
@@ -124,6 +131,13 @@ function RunTools({ run, onError }: { run: SimRun; onError: (message: string | n
   const done = (work: Promise<unknown>) => work.then(() => (onError(null), refreshRuns()), (e: Error) => onError(e.message));
   return (
     <div className="sim-run-actions">
+      <button
+        className="button small-button on"
+        title="Who gains and who loses, line by line, and on the map"
+        onClick={() => set({ simResults: { ...useStore.getState().simResults, open: true, small: false } })}
+      >
+        Results
+      </button>
       <Rename value={run.name} label="Rename" onDone={(name) => done(send('PATCH', `/api/sim-runs/${run.id}`, { name }))} />
       {!removing ? (
         <button className="button small-button" onClick={() => setRemoving(true)} title="Remove this run and its results">

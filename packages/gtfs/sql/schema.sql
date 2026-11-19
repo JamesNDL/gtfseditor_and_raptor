@@ -564,3 +564,18 @@ create table if not exists sim_stop_activity (
   left_behind int not null,
   max_waiting int not null
 ) partition by list (run_id);
+
+-- Passengers on each stretch between two consecutive calls of a trip, by half hour of the day.
+-- Worked out from sim_trip_loads the first time a run's flows are asked for
+-- (apps/api/src/sim-results.ts) and kept, because it takes several seconds for a big run.
+-- A platform counts as its station.
+create table if not exists sim_link_loads (
+  run_id int not null references sim_runs on delete cascade,
+  from_stop bigint not null,
+  to_stop bigint not null,
+  half_hour smallint not null,
+  mode_id text,
+  passengers int not null,
+  places int not null
+);
+create index if not exists sim_link_loads_run_idx on sim_link_loads (run_id);
