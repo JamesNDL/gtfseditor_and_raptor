@@ -274,7 +274,8 @@ Still open from the review:
 Done since:
 
 - A station or stop clicked on the map opens on the right like a line or a trip: calls a day, calls per hour, platforms, and the lines that call there, with the platform chart one click away.
-- "Draw a new line" and "Close a road or a line" are two large buttons on the map itself, beside the left panel, and are lit while their tool is in use (18 Nov; they were in the left panel before, where the owner found the closing tool hard to find).
+- "Draw a new line" and "Close a road or a line" are two large buttons on the map itself, beside the left panel, and are lit while their tool is in use (18 Nov; they were in the left panel before, where the owner found the closing tool hard to find). Since 20 Nov they are the first two buttons of the rail below.
+- A rail down the left edge in place of the column of panels (20 Nov, `apps/web/src/LeftRail.tsx`; the owner found the screen cluttered). "Draw a line" and "Close a road" are always on it. "Timetable" (scenarios, changes, clashes, export), "Simulate" and "Layers" (the modes shown) each fold their panel out beside the rail and away again; one is out at a time, none to begin with, and the choice is remembered between visits. Folded away, the Timetable button carries the number of clashes or of changes and the Simulate button a dot while a run is going. A failed edit folds the Timetable panel out, since that is where it says why. The timeline and the map's key take the room left.
 - A light version of the interface ("Light" in the top bar), remembered between visits. The base map, the network colours and the three timeline charts change with it.
 - New trips are moved to a free platform where the line has one, and clashes offer one as a fix (see phase 3).
 

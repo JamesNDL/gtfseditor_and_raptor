@@ -48,6 +48,9 @@ export interface Closing {
 
 export type TimelineTab = 'stringline' | 'platforms' | 'vehicles';
 
+/** The panels that fold out of the rail on the left: the timetable and its scenarios, the simulation, the modes shown. */
+export type LeftPane = 'scenario' | 'sim' | 'modes';
+
 export interface TimelineState {
   open: boolean;
   tab: TimelineTab;
@@ -98,6 +101,8 @@ interface AppState {
   theme: 'dark' | 'light';
   editBusy: boolean;
   editError: string | null;
+  /** The panel folded out of the rail on the left, or null when all are folded away. */
+  leftPane: LeftPane | null;
   /** The vehicle catalogue screen. */
   fleetOpen: boolean;
   /** The screen that lists every scenario, to open, rename or delete. */
@@ -226,6 +231,14 @@ export const useStore = create<AppState>((set) => ({
   })(),
   editBusy: false,
   editError: null,
+  leftPane: (() => {
+    try {
+      const kept = localStorage.getItem('leftPane');
+      return kept === 'scenario' || kept === 'sim' || kept === 'modes' ? kept : null;
+    } catch {
+      return null;
+    }
+  })(),
   fleetOpen: false,
   scenariosOpen: false,
   builder: null,

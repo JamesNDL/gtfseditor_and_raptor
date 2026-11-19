@@ -35,7 +35,7 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 
 The simulator sends a file of journeys through a timetable and records where the passengers ended up. It is planned in `docs/simulator-plan.md`. The simulator itself runs in the journey router service (`services/router`); the API keeps the journeys, the runs and their results.
 
-In the web app it is the **Simulation** panel, under the scenario panel on the left:
+In the web app it is the **Simulation** panel, which folds out from the **Simulate** button on the rail down the left edge:
 
 - **New simulation** opens a four-step wizard. With no scenario open it sets up a BAU run on the published timetable: pick, upload or make up the journeys, choose an area (the whole network, a saved area, what is on screen, or a box dragged on the map), and how people travel. With a scenario open it sets up a run of that scenario against a BAU run you pick.
 - The panel follows the run in progress, then shows the chosen run's summary, offers "Run again with capacity", and looks one person up by `user_id`, drawing their journeys on the map.

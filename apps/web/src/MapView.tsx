@@ -1214,7 +1214,8 @@ export function MapView({ onVehicleCount }: Props) {
     // Folded, the results window is a title bar in the corner and hides nothing worth fitting round.
     const folded = !!document.querySelector('.results.small-window');
     const right = results ? results + 30 : folded ? 60 : 480;
-    const left = results || folded || document.querySelector('.map-key') ? 340 : 60;
+    // Clear of the rail on the left, and of the panel folded out of it, when one is.
+    const left = Math.round(document.querySelector('.left-pane:not([hidden])')?.getBoundingClientRect().right ?? document.querySelector('.rail')?.getBoundingClientRect().right ?? 40) + 20;
     map.fitBounds(fitBounds, {
       padding: room - left - right > 200 ? { top: 110, bottom: 150, left, right } : { top: 110, bottom: 150, left: 60, right: 60 },
       maxZoom: 14, duration: 900,

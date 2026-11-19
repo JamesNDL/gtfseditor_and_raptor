@@ -5,17 +5,14 @@ import { ClosurePanel } from './ClosurePanel.tsx';
 import { FleetPanel } from './FleetPanel.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
 import { liveStats } from './liveStats.ts';
-import { MapTools } from './MapTools.tsx';
+import { LeftRail } from './LeftRail.tsx';
 import { MapView } from './MapView.tsx';
-import { ModePanel } from './ModePanel.tsx';
 import { NewLinePanel } from './NewLinePanel.tsx';
 import { ReshapePanel } from './ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
 import { ScenarioManager } from './ScenarioManager.tsx';
-import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { SimLibrary } from './sim/SimLibrary.tsx';
 import { SimMapKey } from './sim/SimMapKey.tsx';
-import { SimPanel } from './sim/SimPanel.tsx';
 import { SimResults } from './sim/SimResults.tsx';
 import { SimWizard } from './sim/SimWizard.tsx';
 import { useStore } from './store.ts';
@@ -163,19 +160,15 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const paneOpen = useStore((s) => s.leftPane !== null);
   const onVehicleCount = useCallback((count: number) => liveStats.setVehicles(count), []);
 
   return (
-    <div className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}`}>
+    <div className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}${paneOpen ? ' pane-open' : ''}`}>
       {/* The map and the charts draw their own colours, so they are rebuilt when the theme changes. */}
       <MapView key={`map-${theme}`} onVehicleCount={onVehicleCount} />
       <TopBar />
-      <MapTools />
-      <div className="left-column">
-        <ModePanel />
-        <ScenarioPanel />
-        <SimPanel />
-      </div>
+      <LeftRail />
       <TimelinePanel key={`timeline-${theme}`} />
       <Inspector />
       <NewLinePanel />

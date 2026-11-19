@@ -102,6 +102,12 @@ const shot = async (name) => {
   await writeFile(path.join(shots, `${String(++shotNo).padStart(2, '0')}-${name}.png`), Buffer.from(data, 'base64'));
 };
 const step = (name) => console.log(`ok  ${name}`);
+/** Folds a panel out of the rail on the left, unless it is out already: 'Timetable', 'Simulate' or 'Layers'. */
+const pane = async (label) => {
+  const out = await js(`[...document.querySelectorAll('.rail-button.on')].some((b) => b.textContent.includes(${JSON.stringify(label)}))`);
+  if (!out) await click('.rail-button', label);
+  await sleep(200);
+};
 /** Sweeps the pointer over the map until the tooltip matches, and returns where. */
 const findOnMap = async (pattern, box) => {
   for (let y = box.y0; y <= box.y1; y += 14) {
@@ -190,6 +196,7 @@ try {
   if (!simStatus.router || process.env.UI_SKIP === 'sim') {
     step(simStatus.router ? 'simulator: left out (UI_SKIP=sim)' : 'simulator: the journey router is not running (not checked)');
   } else {
+    await pane('Simulate');
     await click('.sim-head button', 'New simulation');
     await waitFor(`!!document.querySelector('.sim-wizard')`, 'the wizard');
     assert.match(await text('.sim-choice.on'), /published timetable/, 'with no scenario open, a BAU run is already chosen');
@@ -242,6 +249,7 @@ try {
       if (journey) rider = { user, ride: journey.legs.find((l) => l.kind === 'ride' && l.routeId) };
     }
     assert.ok(rider, 'someone rides something');
+    await pane('Simulate');
     await fill('.sim-person input', rider.user);
     await click('.sim-person button', 'Find');
     await waitFor(`document.querySelectorAll('.sim-journeys li').length > 0`, 'their journeys');
@@ -501,7 +509,7 @@ try {
 
   // 11d. The drawing panel offers a one-way loop, which needs a third stop.
   if (await find('.inspector .icon-button')) await click('.inspector .icon-button');
-  await click('.draw-button', 'Draw a new line');
+  await click('.draw-button', 'Draw a line');
   await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Draw a new line'`, 'the drawing panel again');
   await click('.inspector .timeline-check', 'One-way loop');
   await waitFor(`[...document.querySelectorAll('.inspector .button')].some((b) => b.textContent.includes('Pick at least three stops'))`, 'the loop to ask for three stops');
@@ -603,6 +611,7 @@ try {
   // 12. Clashes and "Fix all".
   const clashes = Number((await js(`[...document.querySelectorAll('.scenario-stat')].find((s) => s.textContent.includes('clashes'))?.querySelector('.stat-value')?.textContent ?? '0'`)).replace(/,/g, ''));
   if (clashes > 0) {
+    await pane('Timetable');
     await click('.scenario .button', 'Fix all');
     // The Fix all button is disabled while fixes are being applied, and disappears when none are left.
     const fixAllBusy = `(() => { const b = [...document.querySelectorAll('.scenario .button')].find((x) => x.textContent.trim() === 'Fix all'); return !!b && b.disabled; })()`;
@@ -752,6 +761,7 @@ try {
   assert.equal(await changeCount(), before + 1);
   assert.match(await text('.edits li'), /Deleted line F1/);
   await shot('line-deleted');
+  await pane('Timetable');
   await click('.scenario-actions button', 'Undo');
   await waitFor(`document.querySelector('.inspector .tile-value')?.textContent === ${JSON.stringify(ferryTrips)}`, 'undo to bring the line back', 30000);
   step(`line deleted from its panel (F1, ${ferryTrips} trips) and brought back with undo`);
@@ -759,6 +769,7 @@ try {
   // 18. A scenario run, set up in the wizard against the BAU run of step 1b. The scenario is the one
   // this test has been editing; the same people are sent through it.
   if (simBauMade) {
+    await pane('Simulate');
     await click('.sim-head button', 'New simulation');
     await waitFor(`!!document.querySelector('.sim-wizard')`, 'the wizard');
     assert.match(await text('.sim-choice.on'), /scenario on screen/, 'with a scenario open, a scenario run is already chosen');
@@ -778,6 +789,7 @@ try {
     step(`scenario run against the BAU run: ${(await text('.sim-summary .scenario-section')).replace('Against the published timetable', '').slice(0, 90)}`);
 
     // The library lists the run; it can be removed from there.
+    await pane('Simulate');
     await click('.sim-head button', 'Library');
     await waitFor(`[...document.querySelectorAll('.sim-run')].some((r) => r.textContent.includes('UI test BAU'))`, 'the run in the library');
     assert.match(await js(`[...document.querySelectorAll('.sim-run')].find((r) => r.textContent.includes('UI test BAU')).textContent`), /ui-test/, 'who made it is shown');
