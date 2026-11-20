@@ -4,7 +4,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { scenarioOf, visible, type Scenario } from './scenarios.ts';
-import { stopVisible } from './stops.ts';
+import { stopDeleted, stopVisible } from './stops.ts';
 import { stopDwell } from './timings.ts';
 
 const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
@@ -168,10 +168,16 @@ export function scheduleEdits(deps: ScheduleDeps) {
     const [{ shared }] = await tx`
       select count(distinct t.vehicle_day_id)::int as shared from trips t
       where t.vehicle_day_id = any(${days}) and t.route_id <> ${routeId} and ${vis}`;
+    const [{ n: networkBefore }] = await tx`select count(distinct t.vehicle_day_id)::int as n from trips t where t.baseline_id = ${sc.baselineId} and ${vis}`;
     const idMap = await cloneTrips(tx, sc, seq, rows.map((r) => r.id), 0, { replace: true, keepVehicle: false });
     const fleet = await assignVehicles(tx, sc, seq, Object.values(idMap), 'fresh');
+    // The line's own figure can fall while the network's rises: a vehicle that also runs other
+    // lines keeps those trips, and now counts on its own. So the network's change is said too.
+    const [{ n: networkAfter }] = await tx`
+      select count(distinct t.vehicle_day_id)::int as n from trips t where t.baseline_id = ${sc.baselineId} and ${visible(tx, 't', { ...sc, head: seq })}`;
+    const net = networkAfter - networkBefore;
     return {
-      summary: `${route.name}: vehicles worked out again for all ${rows.length} trips; ${fleet.added} vehicle${fleet.added === 1 ? '' : 's'} where there ${days.length === 1 ? 'was' : 'were'} ${days.length}${shared ? ` (${shared} of the old ones also run other lines and keep those trips)` : ''}`,
+      summary: `${route.name}: vehicles worked out again for all ${rows.length} trips; ${fleet.added} vehicle${fleet.added === 1 ? '' : 's'} where there ${days.length === 1 ? 'was' : 'were'} ${days.length}${shared ? ` (${shared} of the old ones also run other lines and keep those trips)` : ''}; across the whole network that is ${net === 0 ? 'no change' : `${Math.abs(net)} ${net > 0 ? 'more' : 'fewer'}`}`,
       idMap,
     };
   }
@@ -183,7 +189,8 @@ export function scheduleEdits(deps: ScheduleDeps) {
     const t = await describe(tx, tripId);
     const [day] = await tx`
       select vd.id, vd.label, vd.mode_id, r.mode_id as trip_mode from vehicle_days vd, trips t join routes r on r.id = t.route_id
-      where vd.id = ${dayId} and t.id = ${tripId} and vd.baseline_id = ${sc.baselineId}`;
+      where vd.id = ${dayId} and t.id = ${tripId} and vd.baseline_id = ${sc.baselineId}
+        and (vd.scenario_id is null or (vd.scenario_id = ${sc.id} and vd.created_edit <= ${sc.head}))`;
     if (!day) throw fail(404, 'Vehicle not found');
     if (day.mode_id !== day.trip_mode) throw fail(400, 'That vehicle is a different kind from the one this trip needs');
     if (t.vehicle_day_id === dayId) throw fail(400, 'The trip is already on that vehicle');
@@ -223,6 +230,12 @@ export function scheduleEdits(deps: ScheduleDeps) {
     const t = await describe(tx, template.id);
     const idMap = await cloneTrips(tx, sc, seq, [template.id], start - template.start_secs, { pinnedIds: [template.id], replace: false, keepVehicle: false });
     const newId = idMap[template.id];
+    // A line whose trips were all deleted is copied from the published ones, which may still call at
+    // a stop this scenario has deleted. Such a trip is not made: nothing may call at a deleted stop.
+    const [atDeleted] = await tx`
+      select s.name from stop_times st join stops s on s.id = st.stop_id
+      where st.trip_id = ${newId} and ${stopDeleted(tx, 's', sc)} limit 1`;
+    if (atDeleted) throw fail(400, `The trip this would be copied from calls at ${atDeleted.name}, which this scenario has deleted`);
     const fleet = await assignVehicles(tx, sc, seq, [newId]);
     const moved = await settlePlatforms(tx, sc, seq, [newId]);
     return {
@@ -246,8 +259,8 @@ export function scheduleEdits(deps: ScheduleDeps) {
       from stop_times st where st.trip_id = ${tripId} order by st.seq`;
     const [stop] = await tx`
       select s.id, s.name, r.mode_id from stops s, trips t join routes r on r.id = t.route_id
-      where s.id = ${stopId} and t.id = ${tripId} and s.baseline_id = ${sc.baselineId} and ${stopVisible(tx, 's', sc)}`;
-    if (!stop) throw fail(404, 'Stop not found');
+      where s.id = ${stopId} and t.id = ${tripId} and s.baseline_id = ${sc.baselineId} and s.location_type = 0 and ${stopVisible(tx, 's', sc)}`;
+    if (!stop) throw fail(404, 'Stop not found: choose a stop or a platform, not a whole station');
     const dwell = Math.max(await stopDwell(tx, sc.baselineId, stop.mode_id, stopId, deps.newLine[stop.mode_id]?.dwell ?? 20), 0);
     const penalty = deps.skipPenalty[t.rule_set] ?? 20;
     const cost = dwell + penalty;

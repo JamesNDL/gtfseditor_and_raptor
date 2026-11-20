@@ -56,6 +56,13 @@ function exportBox(text: string | undefined, marginText: string | undefined) {
 }
 
 export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
+  // An export that was cut off (the server stopped mid-way) leaves its scratch table behind. No
+  // export can be running as the server starts, so anything there now is left over.
+  void (async () => {
+    const left = await sql`select tablename from pg_tables where schemaname = 'staging' and left(tablename, 7) = 'export_'`;
+    for (const t of left) await sql.unsafe(`drop table if exists staging."${String(t.tablename).replaceAll('"', '')}"`);
+  })().catch(() => {});
+
   app.get('/api/baselines/:b/export', async (req, reply) => {
     const b = Number((req.params as { b: string }).b);
     if (!Number.isInteger(b)) throw fail(400, 'Bad day');
@@ -88,7 +95,47 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
     const text = (value: string) => `'${value.replaceAll("'", "''")}'`;
     const version = (scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published')
       + (box ? `, cut to ${box.south},${box.west},${box.north},${box.east}` : '');
-    const stopVisible = `(scenario_id is null${sc ? ` or (scenario_id = ${Number(sc.id)} and created_edit <= ${Number(sc.head)})` : ''})`;
+    // A stop the scenario has deleted (delete-stop.ts) is in no file: not in stops.txt, and nothing
+    // may name it. The edit that deleted it already took it out of every trip; the conditions on
+    // stop_times and pathways below make sure of it whatever was edited afterwards.
+    const deleted = (alias: string) =>
+      sc
+        ? `exists (select 1 from scenario_removed_stops gone where gone.scenario_id = ${Number(sc.id)} and gone.stop_id = ${alias}.id and gone.edit_seq <= ${Number(sc.head)})`
+        : 'false';
+    const stopVisible = `((scenario_id is null${sc ? ` or (scenario_id = ${Number(sc.id)} and created_edit <= ${Number(sc.head)})` : ''}) and not ${deleted('stops')})`;
+
+    // A block_id tells a journey planner that passengers stay aboard from one trip to the next.
+    // In a scenario that is only still true where the two trips still meet: the first ends where
+    // and before the second starts. A block the scenario has touched (one of its trips was retimed,
+    // cut, split by a closure or removed) is therefore written as the runs of trips that still
+    // join, each under its own id, and a trip left on its own has none. Blocks the scenario has not
+    // touched are written exactly as published.
+    const blockSql = sc
+      ? `left join (
+           select g.id, g.run, count(*) over (partition by g.feed_block_id, g.run) as size
+           from (
+             select q.id, q.feed_block_id,
+                    sum(case when q.joins then 0 else 1 end) over (partition by q.feed_block_id order by q.start_secs, q.id) as run
+             from (
+               select x.id, x.feed_block_id, x.start_secs,
+                      coalesce(lag(x.end_secs) over w <= x.start_secs
+                               and lag(coalesce(ls.parent_id, ls.id)) over w = coalesce(fs.parent_id, fs.id), false) as joins
+               from trips x join stops fs on fs.id = x.first_stop_id join stops ls on ls.id = x.last_stop_id
+               where x.id in (select id from ${scratch}) and x.feed_block_id is not null
+                 and not (x.scenario_id is not null and x.origin_trip_id is null)
+                 and x.feed_block_id in (
+                   select y.feed_block_id from trips y where y.scenario_id = ${Number(sc.id)} and y.feed_block_id is not null
+                   union
+                   select y.feed_block_id from scenario_removed gone join trips y on y.id = gone.trip_id
+                   where gone.scenario_id = ${Number(sc.id)} and gone.edit_seq <= ${Number(sc.head)} and y.feed_block_id is not null)
+               window w as (partition by x.feed_block_id order by x.start_secs, x.id)) q) g) blk on blk.id = t.id`
+      : '';
+    const blockId = sc
+      ? `case when t.scenario_id is not null and t.origin_trip_id is null then null
+              when blk.id is null then t.feed_block_id
+              when blk.size < 2 then null
+              else t.feed_block_id || '~' || blk.run end`
+      : `t.feed_block_id`;
 
     // Every trip in the export runs on the one service day, under a single service id.
     const files: Record<string, string> = {
@@ -124,10 +171,11 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select r.gtfs_id as route_id, 'DAY' as service_id, t.gtfs_id as trip_id, ${withShapes ? 'sh.gtfs_id' : 'null::text'} as shape_id,
                t.headsign as trip_headsign, t.direction_id,
                -- A block_id means "passengers stay aboard". Brand-new trips were copied from another
-               -- trip and must not inherit its link.
-               case when t.scenario_id is not null and t.origin_trip_id is null then null else t.feed_block_id end as block_id,
+               -- trip and must not inherit its link; see blockSql above for the rest.
+               ${blockId} as block_id,
                t.extra->>'wheelchair_accessible' as wheelchair_accessible, t.extra->>'bikes_allowed' as bikes_allowed
         from trips t join routes r on r.id = t.route_id left join shapes sh on sh.id = t.shape_id
+        ${blockSql}
         where ${live} order by 3`,
       'stop_times.txt': `
         select t.gtfs_id as trip_id, ${hms('st.arr')} as arrival_time, ${hms('st.dep')} as departure_time,
@@ -135,7 +183,7 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
                st.pickup_type, st.drop_off_type, -- Through float8 first: converting a 32-bit number straight to numeric keeps only six digits.
                round(st.dist::float8::numeric, 2) as shape_dist_traveled, st.timepoint
         from trips t join stop_times st on st.trip_id = t.id join stops s on s.id = st.stop_id
-        where ${live} and ${inBox('s')} order by 1, 5`,
+        where ${live} and ${inBox('s')} and not ${deleted('s')} order by 1, 5`,
       // Distances are the feed's own, stored per point at import, so they line up with the stop times.
       'shapes.txt': `
         select s.gtfs_id as shape_id, round(ST_Y((dp).geom)::numeric, 8) as shape_pt_lat,
@@ -149,7 +197,7 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select p.gtfs_id as pathway_id, f.gtfs_id as from_stop_id, o.gtfs_id as to_stop_id, p.pathway_mode,
                p.is_bidirectional::int as is_bidirectional, p.traversal_secs as traversal_time
         from pathways p join stops f on f.id = p.from_stop_id join stops o on o.id = p.to_stop_id
-        where p.baseline_id = ${b} and ${inBox('f')} and ${inBox('o')} order by 1`,
+        where p.baseline_id = ${b} and ${inBox('f')} and ${inBox('o')} and not ${deleted('f')} and not ${deleted('o')} order by 1`,
       'feed_info.txt': `
         select 'GTFS Editor' as feed_publisher_name, 'http://transportnsw.info' as feed_publisher_url, 'EN' as feed_lang,
                ${text(baseline.date)} as feed_start_date, ${text(baseline.date)} as feed_end_date,

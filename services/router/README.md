@@ -73,6 +73,10 @@ curl -X PUT "localhost:3002/v1/timetables/b1?version=v1" -H "Content-Type: appli
 - `version` is the caller's name for these contents and comes back with every answer; left out, it
   is the time of the request. `serviceDate` (for example `20261117`, in the JSON or the query
   string) is needed only for a feed that covers more than one day.
+- `"water": {"path": ..}` or `{"url": ..}` in the JSON names a water file, so that no walk is
+  offered across water: see "Walks" below. Left out, every straight walk is offered. The editor's
+  API sends it with every timetable it loads (`GET /api/sim/water?baseline=1`). A zip sent as the
+  body cannot have one.
 - A path is read where it lies, relative to the folder the service runs in. A fetched or uploaded
   zip is kept as `<ROUTER_DATA>/zips/<id>.zip`.
 - A reload builds the new timetable beside the old one and swaps it in when ready. Journeys are
@@ -97,9 +101,9 @@ curl -X POST localhost:3002/v1/journeys -H "Content-Type: application/json" -d "
 | `from`, `to` | `{"stop": id}`, `{"station": id}` or `{"lat": .., "lon": ..}`. Ids are GTFS ids. A `stop` that names a station is taken as the station. | Required. |
 | `depart` | `"HH:MM"`, `"HH:MM:SS"` or seconds from the start of the service day, up to `36:00:00`. After midnight keep counting: `"24:30"`. | Required. |
 | `maxRides` | Most vehicles to board. | 8 |
-| `maxWalkMetres` | Furthest to walk to the first stop or from the last, in a straight line; up to 5000. | 1200 |
+| `maxWalkMetres` | Furthest to walk to the first stop or from the last, as straight lines (one, or two by way of a bridge); up to 5000. | 1200 |
 | `avoid` | Kinds of vehicle to leave out: `train`, `metro`, `light_rail`, `ferry`, `bus`, `coach`, `school_bus`, `other`. `[]` leaves out nothing. | `["school_bus"]` |
-| `changeSecs` | Least time to change vehicles at one stop. | 120 |
+| `changeSecs` | Least time to change vehicles, at one stop or by a walk to another: see "Walks" below. | 120 |
 | `lessWalking` | `true` searches a second time with shorter walks; slower. | `false` |
 | `detail` | `legs`, or `summary` to leave out the stops each ride passes. | `legs` |
 | `capacity` | How full vehicles are treated; see "Capacity" below. | `{"mode": "off"}` |
@@ -112,11 +116,70 @@ which one is `recommended` (its place in the list, or -1), the timetable's id an
 `depart`, `arrive`, `durationSecs`, `rides`, `changes`, `walkSecs`, `waitSecs` and its `legs`:
 
 - `walk` (to the first stop or from the last) and `transfer` (between two stops): `from`, `to`,
-  `depart`, `arrive`, `metres`.
+  `depart`, `arrive`, `metres`. `metres` is the straight line (or two, by way of a bridge); the
+  time is for 1.3 times that, so show it as "about" 1.3 times the figure, or as a straight line.
+- `warning`, when `depart` is before 04:00: the time is the small hours at the start of the
+  service day, and a journey after midnight at the end of it is asked for as `"24:20"`.
 - `ride`: `trip`, `route`, `routeId`, `mode`, `headsign`, `board` and `alight` (stop id, name,
   latitude and longitude, time, and `position`: the stop's place in the trip, counting from 0),
   `stops` (every stop from boarding to alighting, with latitude, longitude and times), and
   `stayAboard`.
+
+### Walks
+
+The router has no map of streets. A walk is a straight line between two points, taken to be 1.3
+times as long on the ground and walked at 1.03 m/s. Three rules keep that honest.
+
+**A change of vehicle takes at least `changeSecs`, on foot as well.** After getting off, the
+passenger may board again no sooner than `changeSecs` later (2 minutes unless said), whether the
+next vehicle leaves from the same stop or from one a walk away; a walk that takes longer takes its
+own time. The walk leg shows the walking time, and the rest is waiting. Staying aboard a vehicle
+that runs on as another trip takes no time. TfNSW's planner never offered less than 2 minutes
+between two platforms in 1,045 such changes. What this does not give: after a walk longer than
+`changeSecs` the next vehicle may leave the second the walk ends. The walk's time has 30 s in it
+that is not walking, and the pace is a slow one, but there is no margin beyond that.
+
+**A platform takes time to reach.** A generated walk to or from a platform adds the feed's
+pathway time between that platform and the nearest entrance of its station (`stopExitSecs` and
+`stopEntrySecs` in the timetable), or 60 s for a railway platform the feed gives no pathways for
+(`platformSecs`, a setting, not a sourced figure). It applies to walking links between a platform
+and a stop outside its station, and to walks between a point on the map and a platform. Two stops
+of one station keep the pathway's own time, or the 60 s station minimum. A journey asked for from
+a stop starts on the platform, at no walk.
+
+**No walk across water, as far as the water file says.** The router is given a water file when
+the timetable is loaded: straight pieces of the paths ferries sail, and the places where a bridge
+crosses one. A walk whose straight line comes within 20 m of a piece is over water. It may go by
+a bridge instead (to the bridge in a straight line, and on from it in another) if that keeps it
+within the limit for the walk; otherwise it is not offered. This applies to the walking links
+between stops within the radius, to walks between a point and a stop, to walking the whole way,
+and so to the simulator's stops near a place.
+
+The file is a CSV, `kind,lat1,lon1,lat2,lon2`, with rows `water,<one end>,<other end>` and
+`bridge,<position>,,`. The editor's API writes it from the day's own paths:
+
+- **water**: the path of every ferry pattern, less 100 m round every wharf and 150 m round every
+  bridge, so that walking up to a wharf or onto a bridge is not refused;
+- **bridge**: each place where a bus or light rail path crosses a ferry path, taken to be a
+  bridge that can be walked, and a short list of foot bridges that no bus crosses (one so far:
+  John Whitton Bridge at Meadowbank). Coaches are left out because they use the harbour tunnel,
+  trains because a railway bridge or tunnel cannot be walked.
+
+On the published weekday that is 1,749 pieces and 10 bridges; 20 pairs of stops within 500 m lose
+their link and none gains one by a bridge. What it cannot do:
+
+- **Water no ferry sails is not known.** Rivers, bays and lakes without a ferry, the coast,
+  motorways, railway lines and fences are all walked across as before.
+- **A foot bridge that a ferry sails under and no bus crosses is not known** unless it is on the
+  list. The foot bridges over the Parramatta River between Parramatta wharf and Rydalmere are not
+  on it, so stops either side of them are not linked.
+- **A bus in a road tunnel under a ferry path would look like a bridge.** None does on the
+  published weekday.
+- **A walk is refused if its straight line clips a ferry path** even where the real walk goes
+  round on land, as at the head of a small bay. The stop is then not offered from there.
+- **A bridge is one point.** A walk by a bridge is two straight lines through it, and is not
+  checked for anything else.
+- A feed loaded with no water file has none of this. `--water <file>` gives one to the commands.
 
 ### Capacity
 
@@ -219,6 +282,7 @@ repository root and must not contain spaces:
 | `<zip>` | The GTFS zip. |
 | `--date 20261117` | The service day. Needed unless the feed covers a single day, as the editor's export does. |
 | `--snapshots <folder>` | Read a saved snapshot if one matches this zip and these settings; otherwise build and save one. |
+| `--water <file>` | A water file, so that no walk crosses water (see "Walks"). Left out, every straight walk is offered. `route` and the simulator's commands take it too. |
 | `--radius <metres>` | How close two stops must be to get a walking link. Default 500. |
 
 From Java:
@@ -251,17 +315,27 @@ how good and how quick the answers are. It takes a few minutes for 3,000. Option
 keeps the two ends within that many km, `--show 5` prints the first journeys in full, `--threads 6`
 sets the threads for the all-at-once run, `--area all` uses the whole state.
 
-`--change 120` sets the least time, in seconds, to change vehicles at one stop (2 minutes unless
-said). Staying aboard a vehicle that runs on as another trip takes no time.
+`--change 120` sets the least time, in seconds, to change vehicles (2 minutes unless said), at one
+stop or by a walk to another. Staying aboard a vehicle that runs on as another trip takes no time.
 
 To compare with the TfNSW trip planner, write test journeys to a file and hand it to the comparer.
 It needs `API_KEY` in `.env`, sends only stop positions, a date and a time, and keeps TfNSW's
-answers so that a second run asks nothing again:
+answers so that a second run asks nothing again; with `--offline` it asks nothing at all:
 
 ```
-npm run router:route -- "-ProuteArgs=--random 200 --within 25 --seed 7 --dump data/router/compare/within25.jsonl"
-npm run router:compare -- data/router/compare/within25.jsonl
+curl -o data/router/water-b1.csv "http://localhost:3001/api/sim/water?baseline=1"
+npm run router:route -- "-ProuteArgs=--random 200 --within 25 --seed 7 --water data/router/water-b1.csv --dump data/router/compare/within25.r2.jsonl"
+npm run router:compare -- data/router/compare/within25.r2.jsonl --water data/router/water-b1.csv
 ```
+
+The two planners start from different places (ours on the platform, TfNSW at a street address),
+so the comparer's headline is from the first boarding to the last alighting: when each gets off
+its last vehicle. For every journey of ours it prints the least time to change and the least
+spare once the walk is done, and with `--water` it marks a walk over water. Where ours gets off
+sooner it counts every reason that fits (ours boards a vehicle TfNSW's walk from the street could
+not reach, a tight change, more changes, a walk over water), and what is left is listed as "none
+of these": a different journey that nothing has checked beyond the timetable. See section 18 of
+the plan.
 
 Each journey leaves as late as it can for its arrival. The result lists the fastest journey first,
 then any with fewer changes that are not much slower, and names one as recommended: the lowest of
@@ -313,8 +387,18 @@ npm run router:demand -- "-PsimArgs=generate data/exports/check/export.zip --out
 ```
 
 `check` reads a file and reports the rows it refuses and why, the users, and the busiest hour; with
-`--zip` it also looks the stop ids up. `generate` makes a set up, for use until real journey data
-exists. A made-up set says nothing about real travel.
+`--zip` it also looks the stop ids up. It warns when rows start before 04:00 (times count from the
+start of the service day, so `00:20` is the small hours of the morning and a journey after
+midnight at the end of the day is `24:20`), and says when every user id has the generator's form
+(`u0000001`), which marks a made-up set whoever uploaded it. `POST /v1/demand/check` answers the
+same as `rowsBefore4am`, `warnings` and `madeUpIds`.
+
+`generate` makes a set up, for use until real journey data exists. A made-up set says nothing about
+real travel. Each person is drawn at a stop and then moved to the stops the router recommends for
+their journey, as a default BAU run would judge it, up to four times over: otherwise most people
+would start at a stop that one nearby already beats, and a scenario run that lets them change stop
+would report that as a gain. On the published weekday, 20,000 journeys for Newcastle left 1% of
+travellers with a better stop nearby (72% before this was done).
 
 | Option of `generate` | Meaning | If left out |
 |---|---|---|
@@ -358,6 +442,7 @@ npm run router:simulate -- "-PsimArgs=data/exports/check/export.zip --from-plans
 | `--school-buses` | BAU only. Let people ride school buses. | left out |
 | `--threshold` | Scenario only. Seconds another stop must be better by, beyond the person's margin. | 600 |
 | `--give-up` | Scenario only. Seconds later than the BAU run a person accepts arriving, or `none`. | 3600 |
+| `--longest-wait` | BAU only. Seconds a person will wait in all, before setting off and between vehicles, or `none`. A journey that needs more is no journey: without this, someone who turns up after the morning's last service "travels" by waiting for the evening's. | 14400 |
 | `--capacity` | A full vehicle leaves people behind, and they plan again from where they stand. | off |
 | `--full-at` | The share of its capacity at which a vehicle counts as full. | 1.0 |
 | `--left-behind` | A person left behind more often than this is stranded. | 5 |
@@ -376,7 +461,7 @@ capacity nothing would change, and the run says so and skips the replay.
 | File | Holds |
 |---|---|
 | `summary.json` | Totals, the settings, the trips planned over capacity, time taken. Printed at the end of the run. |
-| `journeys.csv.gz` | One line per journey: status (`ok`, `noJourney`, `gaveUp`, `stranded`), times, rides, walking, waiting, times left behind, the BAU arrival and the difference, the margin, the stop used at each end and whether it is the person's own. A row of several people that a full vehicle split has a line for each `part`. |
+| `journeys.csv.gz` | One line per journey: status (`ok`, `noJourney`, `gaveUp`, `stranded`), times, rides, walking, waiting, times left behind, the BAU arrival and the difference, the margin, the stop used at each end and whether it is the person's own. For someone who gave up, `later_secs` is how much later the journey they turned down would have arrived. Someone whose own stop the scenario removed counts as having changed stop. A row of several people that a full vehicle split has a line for each `part`. |
 | `legs.csv.gz` | One line per walk, change or ride, with the trip and stops. |
 | `trip_loads.csv.gz` | Each trip at each stop where anything happened: boardings, alightings, passengers aboard on leaving, passengers left behind, capacity. `position` counts the trip's stops from 0. |
 | `stop_activity.csv.gz` | Each stop by quarter hour: boardings, alightings, changes between vehicles, passengers left behind, the most waiting at once. |
@@ -422,6 +507,7 @@ curl -o journeys.csv.gz localhost:3002/v1/simulations/bau-newcastle/files/journe
 |---|---|---|
 | `area` | BAU. A name (`newcastle`), `"all"`, or `{"south": .., "west": .., "north": .., "east": ..}`. | all |
 | `walkMetres`, `changePenaltySecs`, `shareOneIn`, `schoolBuses` | BAU. | 500, 600, 1, false |
+| `maxWaitSecs` (`null` for no limit) | BAU. The longest wait in all. A run made from a BAU run that had no limit has none. | 14400 |
 | `switchThresholdSecs`, `giveUpSecs` (`null` for no limit) | Scenario. | 600, 3600 |
 | `capacity` | BAU and scenario. | false |
 | `fullAt`, `maxLeftBehind` | Any run. | 1.0, 5 |

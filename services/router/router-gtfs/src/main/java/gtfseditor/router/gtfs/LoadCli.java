@@ -14,7 +14,7 @@ import java.nio.file.Path;
  * much memory it used.
  *
  * <pre>
- * LoadCli &lt;feed.zip&gt; [--date 20261117] [--snapshots &lt;folder&gt;] [--radius &lt;metres&gt;]
+ * LoadCli &lt;feed.zip&gt; [--date 20261117] [--snapshots &lt;folder&gt;] [--radius &lt;metres&gt;] [--water &lt;file&gt;]
  * </pre>
  */
 public final class LoadCli {
@@ -29,6 +29,7 @@ public final class LoadCli {
             switch (args[i]) {
                 case "--date" -> options = options.withServiceDate(Integer.parseInt(value(args, ++i)));
                 case "--snapshots" -> snapshots = Path.of(value(args, ++i));
+                case "--water" -> options = options.withWater(WaterFile.read(Path.of(value(args, ++i))));
                 case "--radius" -> options = options.withTransfers(
                         options.transfers().withRadiusMetres(Double.parseDouble(value(args, ++i))));
                 default -> {
@@ -137,7 +138,8 @@ public final class LoadCli {
 
     private static void usage(String problem) {
         System.err.println(problem);
-        System.err.println("Usage: LoadCli <feed.zip> [--date 20261117] [--snapshots <folder>] [--radius <metres>]");
+        System.err.println("Usage: LoadCli <feed.zip> [--date 20261117] [--snapshots <folder>] [--radius <metres>]"
+                + " [--water <file>]");
         System.exit(2);
     }
 }

@@ -35,7 +35,7 @@ const RESULT_TABLES = ['sim_journeys', 'sim_legs', 'sim_trip_loads', 'sim_stop_a
 type ResultTable = (typeof RESULT_TABLES)[number];
 
 /** The settings each kind of run chooses for itself; the router checks their values. */
-const BAU_SETTINGS = ['walkMetres', 'changePenaltySecs', 'shareOneIn', 'schoolBuses', 'capacity', 'fullAt', 'maxLeftBehind'];
+const BAU_SETTINGS = ['walkMetres', 'changePenaltySecs', 'shareOneIn', 'schoolBuses', 'maxWaitSecs', 'capacity', 'fullAt', 'maxLeftBehind'];
 const SCENARIO_SETTINGS = ['switchThresholdSecs', 'giveUpSecs', 'capacity', 'fullAt', 'maxLeftBehind'];
 const CAPACITY_SETTINGS = ['fullAt', 'maxLeftBehind'];
 
@@ -164,7 +164,18 @@ interface TimetableKey {
   version: string;
   /** Where the router fetches it from. */
   exportUrl: string;
+  /** Where the router fetches the day's water lines from (see waterFile). */
+  waterUrl: string;
 }
+
+/**
+ * The rules the router plans by, as far as they decide a plan beyond the timetable itself. Raise
+ * this when they change, so that runs planned under the old rules show as out of date and are not
+ * compared with runs planned under the new ones.
+ *   2: a change on foot takes at least the time to change; no walks over water; platforms take
+ *      their pathway time to the street.
+ */
+const ROUTER_RULES = 2;
 
 const boxText = (box: Box) => [box.south, box.west, box.north, box.east].join(',');
 
@@ -176,7 +187,7 @@ async function timetableKey(sql: Sql, baselineId: number, sc: Scenario | null, b
   const [baseline] = await sql`
     select feed_id, extract(epoch from imported_at)::bigint as imported from baselines where id = ${baselineId} and ready`;
   if (!baseline) throw fail(404, 'Day not found');
-  let planVersion = `${baseline.feed_id}@${baseline.imported}`;
+  let planVersion = `${baseline.feed_id}@${baseline.imported}/r${ROUTER_RULES}`;
   if (sc) {
     const [edit] = await sql`
       select extract(epoch from created_at)::bigint as at from scenario_edits where scenario_id = ${sc.id} and seq = ${sc.head}`;
@@ -194,7 +205,98 @@ async function timetableKey(sql: Sql, baselineId: number, sc: Scenario | null, b
     planVersion,
     version: `${planVersion}|fleet-${String(fleet.hash).slice(0, 12)}`,
     exportUrl: `${SELF}/api/baselines/${baselineId}/export?${params}`,
+    waterUrl: `${SELF}/api/sim/water?baseline=${baselineId}`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Water
+// ---------------------------------------------------------------------------
+/**
+ * Foot bridges that a ferry sails under and no bus or light rail line crosses, so that the rule
+ * below cannot find them. Each is used only where a ferry path of the day passes within 100 m.
+ * The position of this one is the railway bridge beside it, taken from the feed's own train path.
+ */
+const FOOT_BRIDGES = [{ name: 'John Whitton Bridge, Meadowbank to Rhodes', lat: -33.8215, lon: 151.0889 }];
+
+/** Metres of ferry path left out round each wharf, and round each bridge. */
+const WHARF_GAP = 100;
+const BRIDGE_GAP = 150;
+
+const waterFiles = new Map<number, Promise<string>>();
+
+/**
+ * Where a straight walk would cross water on a published day, as the CSV the router reads
+ * (kind, lat1, lon1, lat2, lon2). The editor has no map of the water, so this is worked out from
+ * the day's own paths:
+ *
+ *   water   the paths its ferries sail, less 100 m round every wharf (a walk to a wharf must not be
+ *           refused for reaching the ferry's path) and 150 m round every bridge;
+ *   bridge  each place where the path of a bus or light rail line crosses a ferry path, taken to
+ *           be a bridge that can be walked, and the foot bridges listed above.
+ *
+ * Coaches and school buses are left out of the rule because coaches use the harbour tunnel, and
+ * trains because a railway bridge or tunnel cannot be walked. Water that no ferry sails is not
+ * known about. A scenario does not change the answer: taking a ferry away does not drain the bay.
+ */
+function waterFile(sql: Sql, baselineId: number): Promise<string> {
+  let known = waterFiles.get(baselineId);
+  if (!known) {
+    known = (async () => {
+      const [place] = await sql`
+        select ST_X(ST_Centroid(ST_Extent(s.geom))) as lon, ST_Y(ST_Centroid(ST_Extent(s.geom))) as lat
+        from shapes s join patterns p on p.shape_id = s.id join routes r on r.id = p.route_id
+        where r.mode_id = 'ferry' and s.baseline_id = ${baselineId} and s.scenario_id is null and p.scenario_id is null`;
+      const lines = ['kind,lat1,lon1,lat2,lon2'];
+      if (!place || place.lon === null) return lines.join('\n') + '\n';
+      // Metres, in the UTM zone the ferries are in.
+      const srid = (place.lat < 0 ? 32700 : 32600) + Math.floor((place.lon + 180) / 6) + 1;
+      const rows = await sql`
+        with ferry as (
+          select distinct on (s.id) s.geom, ST_Transform(s.geom, ${srid}::int) as g
+          from shapes s join patterns p on p.shape_id = s.id join routes r on r.id = p.route_id
+          where r.mode_id = 'ferry' and s.baseline_id = ${baselineId} and s.scenario_id is null and p.scenario_id is null),
+        wharf as (
+          select distinct st.id, ST_Transform(st.geom, ${srid}::int) as g
+          from patterns p join routes r on r.id = p.route_id, unnest(p.stop_ids) as sid join stops st on st.id = sid
+          where r.mode_id = 'ferry' and p.baseline_id = ${baselineId} and p.scenario_id is null),
+        road as (
+          select distinct on (s.id) ST_Transform(s.geom, ${srid}::int) as g
+          from shapes s join patterns p on p.shape_id = s.id join routes r on r.id = p.route_id
+          where r.mode_id in ('bus', 'light_rail') and s.baseline_id = ${baselineId} and s.scenario_id is null
+            and p.scenario_id is null and s.geom && (select ST_Extent(geom) from ferry)),
+        met as (
+          select (ST_Dump(ST_Intersection(f.g, b.g))).geom as pt from ferry f join road b on ST_Intersects(f.g, b.g)),
+        bridge as (
+          select ST_Centroid(ST_Collect(pt)) as g
+          from (select pt, ST_ClusterDBSCAN(pt, 60, 1) over () as c from met where GeometryType(pt) = 'POINT') x group by c
+          union all
+          select e.g from (
+            select ST_Transform(ST_SetSRID(ST_MakePoint(x.lon, x.lat), 4326), ${srid}::int) as g
+            from jsonb_to_recordset(${sql.json(FOOT_BRIDGES)}) as x(lat float8, lon float8)) e
+          where exists (select 1 from ferry f where ST_DWithin(f.g, e.g, 100))),
+        gaps as (
+          select ST_Union(g) as g from (
+            select ST_Buffer(g, ${WHARF_GAP}) as g from wharf union all select ST_Buffer(g, ${BRIDGE_GAP}) from bridge) x),
+        water as (
+          select (ST_Dump(ST_Simplify(ST_Difference((select ST_Union(g) from ferry), (select g from gaps)), 3))).geom as g),
+        piece as (
+          select (ST_DumpSegments(g)).geom as g from water)
+        select 'water' as kind, ST_Y(a) as lat1, ST_X(a) as lon1, ST_Y(b) as lat2, ST_X(b) as lon2
+        from (select ST_Transform(ST_StartPoint(g), 4326) as a, ST_Transform(ST_EndPoint(g), 4326) as b from piece) x
+        union all
+        select 'bridge', ST_Y(p), ST_X(p), null, null from (select ST_Transform(g, 4326) as p from bridge) x`;
+      for (const row of rows) {
+        lines.push(row.kind === 'water'
+          ? `water,${row.lat1.toFixed(6)},${row.lon1.toFixed(6)},${row.lat2.toFixed(6)},${row.lon2.toFixed(6)}`
+          : `bridge,${row.lat1.toFixed(6)},${row.lon1.toFixed(6)},,`);
+      }
+      return lines.join('\n') + '\n';
+    })();
+    waterFiles.set(baselineId, known);
+    known.catch(() => waterFiles.delete(baselineId));
+  }
+  return known;
 }
 
 /** Has the router load this version of the timetable unless it already holds it. Can take minutes. */
@@ -204,7 +306,9 @@ async function ensureTimetable(key: TimetableKey, onWait: (secs: number) => Prom
     return;
   }
   if (!(current.status === 200 && current.body.building?.version === key.version)) {
-    const asked = await router('PUT', `/v1/timetables/${key.id}`, { source: { url: key.exportUrl }, version: key.version });
+    const asked = await router('PUT', `/v1/timetables/${key.id}`, {
+      source: { url: key.exportUrl }, water: { url: key.waterUrl }, version: key.version,
+    });
     if (asked.status !== 202 && asked.status !== 409) {
       throw new Error(`The router would not load the timetable: ${asked.body?.error ?? asked.status}`);
     }
@@ -464,9 +568,23 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     }
   });
 
+  /**
+   * Where a straight walk would cross water on a published day: ?baseline=. The router fetches it
+   * with the timetable. Worked out once and kept until this API restarts.
+   */
+  app.get('/api/sim/water', async (req, reply) => {
+    const baseline = int((req.query as Record<string, string | undefined>).baseline, 'baseline');
+    if (!(await sql`select 1 from baselines where id = ${baseline}`).length) throw fail(404, 'Day not found');
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    return waterFile(sql, baseline);
+  });
+
   // ---- demand sets --------------------------------------------------------
+  // A set counts as made up if the editor made it, or if the router's check found that every user
+  // id has the form the generator writes (u0000001 ...): a made-up file that was uploaded.
+  const madeUp = sql`(d.made_up or coalesce((d.report->>'madeUpIds')::boolean, false))`;
   const demandColumns = sql`
-    d.id, d.name, d.state, d.error, d.made_up as "madeUp", d.row_count as "rows", d.people, d.users, d.earliest, d.latest,
+    d.id, d.name, d.state, d.error, ${madeUp} as "madeUp", d.row_count as "rows", d.people, d.users, d.earliest, d.latest,
     d.report, d.made_by as "madeBy", d.created_at as "createdAt",
     (select count(*)::int from sim_runs r where r.demand_set_id = d.id) as runs`;
 
@@ -573,7 +691,26 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     return made;
   });
 
-  app.get('/api/demand', async () => sql`select ${demandColumns} from demand_sets d order by d.created_at desc, d.id desc`);
+  /**
+   * Sets checked before the check looked at user ids or at small-hours times are checked again,
+   * once, when the list is first asked for. It needs the router; without it they wait for next time.
+   */
+  let recheck: Promise<void> | null = null;
+  const recheckOldSets = () => {
+    recheck ??= (async () => {
+      const old = await sql`select id, file from demand_sets where state = 'ready' and file <> '' and not (report ? 'madeUpIds') order by id`;
+      for (const set of old) await checkDemand(set.id, set.file);
+    })().catch((err) => {
+      recheck = null;
+      if ((err as { statusCode?: number }).statusCode !== 503) log(err, 'could not check the older demand sets again');
+    });
+    return recheck;
+  };
+
+  app.get('/api/demand', async () => {
+    await recheckOldSets();
+    return sql`select ${demandColumns} from demand_sets d order by d.created_at desc, d.id desc`;
+  });
 
   /**
    * One demand set. With ?baseline=, also the stop ids that day's published timetable does not
@@ -782,6 +919,7 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     const rows = await sql`
       select r.id, r.name, r.kind, r.baseline_id as "baselineId", r.scenario_id as "scenarioId", s.name as "scenarioName",
              r.demand_set_id as "demandSetId", d.name as "demandSetName", r.bau_run_id as "bauRunId", b.name as "bauRunName",
+             ${madeUp} as "madeUp",
              r.plans_run_id as "plansRunId", r.capacity, r.settings, r.state, r.progress, r.error,
              r.folder_id as "folderId", r.made_by as "madeBy", r.created_at as "createdAt", r.started_at as "startedAt",
              r.finished_at as "finishedAt", r.result_rows as "resultRows", r.archived,
@@ -827,6 +965,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
         sizeBytes: sizes.get(run.id) ?? 0,
         // Journeys planned a second, for guessing how long the next run will take.
         planRate: summary?.work?.journeysPlannedPerSecond ?? null,
+        // How many trips the run had, and how many of their capacities are placeholders or assumed:
+        // for the warning wherever crowding is shown.
+        capacities: summary?.capacities ?? null,
         outOfDate,
         capacityOutOfDate,
         // The list carries the headline figures; the whole summary is at the run's own address.
@@ -876,7 +1017,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
       const from = await oneRun(int(body.fromRunId, 'fromRunId'));
       if (from.state !== 'done') throw fail(409, 'Capacity can be added once that run has finished');
       if (from.plansRunId) throw fail(400, 'That run is itself a capacity run; add capacity to the run it was made from');
-      if (from.outOfDate) throw fail(409, 'That run is out of date: its timetable has changed since. Make a new run');
+      if (from.outOfDate) {
+        throw fail(409, 'That run is out of date: its timetable, or the router\'s rules for walks and changes, have changed since. Make a new run');
+      }
       const [source] = await sql`select * from sim_runs where id = ${from.id}`;
       row = {
         name: name(body.name, `${from.name}, with capacity`), kind: from.kind, baseline_id: source.baseline_id,
@@ -899,7 +1042,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
       if (bau.kind !== 'bau' || bau.plansRunId) throw fail(400, 'bauRunId must be a BAU run');
       if (bau.state !== 'done') throw fail(409, 'That BAU run has not finished');
       if (bau.baselineId !== sc.baselineId) throw fail(400, 'That BAU run is of a different published day from the scenario');
-      if (bau.outOfDate) throw fail(409, 'That BAU run is out of date: the published day has been imported again. Make a new one');
+      if (bau.outOfDate) {
+        throw fail(409, 'That BAU run is out of date: the published day has been imported again, or the router\'s rules for walks and changes have changed since. Make a new one');
+      }
       const [source] = await sql`select * from sim_runs where id = ${bau.id}`;
       const key = await timetableKey(sql, sc.baselineId, sc as Scenario, bau.area);
       row = {
@@ -1117,13 +1262,19 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     return { ...totals, hourly, fullest: fullest && fullest.load > 0 ? fullest : null };
   });
 
-  /** One stop, or with a station id every stop under it, by quarter hour. */
+  /**
+   * One stop, or with a station id every stop under it, by quarter hour. The most waiting at once
+   * is known for each platform apart: `maxWaiting` is the largest of them, and `maxWaitingAtMost`
+   * their sum, which the station as a whole cannot exceed and reaches only if every platform is
+   * at its fullest in the same moment. `platforms` says how many stops the row adds up.
+   */
   app.get('/api/sim-runs/:id/stops/:stop', async (req) => {
     const { id, stop } = req.params as { id: string; stop: string };
     await finished(int(id, 'id'));
     return sql`
       select a.quarter_start as "quarterStart", sum(a.boardings)::int as boardings, sum(a.alightings)::int as alightings,
-             sum(a.changes)::int as changes, sum(a.left_behind)::int as "leftBehind", sum(a.max_waiting)::int as "maxWaiting"
+             sum(a.changes)::int as changes, sum(a.left_behind)::int as "leftBehind", max(a.max_waiting)::int as "maxWaiting",
+             sum(a.max_waiting)::int as "maxWaitingAtMost", count(*) filter (where a.max_waiting > 0)::int as platforms
       from sim_stop_activity a
       where a.run_id = ${int(id, 'id')}
         and a.stop_id in (select s.id from stops s where s.id = ${int(stop, 'stop')} or s.parent_id = ${int(stop, 'stop')})

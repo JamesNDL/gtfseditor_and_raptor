@@ -21,10 +21,11 @@ import java.util.List;
  * <p>The walking links of a feed do not chain (A to B and B to C does not give A to C), so the two
  * cannot be merged into one number without losing journeys.
  *
- * <p>Changing vehicles at one stop takes the query's {@code changeSecs}; a walk to another stop
- * takes the link's own time. A vehicle that runs on as another trip takes no time at all, and is
- * handled apart from the stops: a trip ridden to its last stop in one round offers its next trip
- * from that trip's first stop in the next round.
+ * <p>Changing vehicles takes at least the query's {@code changeSecs}, whether the next vehicle
+ * leaves from the same stop or from one a walk away: the passenger may board no sooner than that
+ * after getting off, and no sooner than the walk takes if it takes longer. A vehicle that runs on
+ * as another trip takes no time at all, and is handled apart from the stops: a trip ridden to its
+ * last stop in one round offers its next trip from that trip's first stop in the next round.
  */
 final class Search {
 
@@ -34,8 +35,9 @@ final class Search {
     // a stop while scanning a pattern touches one piece of memory, not four.
     private static final int BEST_RIDE = 0; // earliest arrival on a vehicle, any round so far
     private static final int READY = 1;     // when the passenger can board here in this round, or NONE
-    private static final int BEST_ANY = 2;  // earliest the passenger can board here, any round so far:
-                                            // an arrival on foot, or one on a vehicle plus the time to change
+    private static final int BEST_ANY = 2;  // earliest the passenger can board here, any round so far: the
+                                            // first walk's arrival, or an arrival on a vehicle (here or one
+                                            // walk away) plus the time to change
     private static final int ROUNDS = 3;    // one bit per round that wrote an arrival for this stop
 
     private final Timetable t;
@@ -48,7 +50,9 @@ final class Search {
     private static final int RIDE_ARRIVE = 0;    // arrival on a vehicle in this round
     private static final int RIDE_TRIP = 1;      // the trip ridden
     private static final int RIDE_POSITIONS = 2; // boarding position * 65536 + alighting position
-    private static final int WALK_ARRIVE = 3;    // arrival on foot in this round
+    private static final int WALK_ARRIVE = 3;    // ready to board in this round after coming on foot: the first
+                                                 // walk's arrival, or for a walk between rides the later of
+                                                 // its arrival and the time to change
     private static final int WALK_FROM = 4;      // the stop walked from, or -1 - (index of the access walk)
 
     private final int[] labels;
@@ -322,7 +326,9 @@ final class Search {
                     if (secs > maxLink) {
                         continue;
                     }
-                    int time = arrived + secs;
+                    // A change on foot is still a change: it takes the walk, and never less than
+                    // the time to change.
+                    int time = arrived + Math.max(secs, changeSecs);
                     if (time < state[to * 4 + BEST_ANY] && time < target) {
                         touch(to, round);
                         labels[(to * slots + round) * 5 + WALK_ARRIVE] = time;
@@ -644,8 +650,14 @@ final class Search {
                     }
                     break;
                 }
+                // The walk itself takes the link's time; the rest of the time to change is waiting.
                 int left = labels[(from * slots + earlier) * 5 + RIDE_ARRIVE];
-                legs.add(Leg.walk(Leg.Kind.TRANSFER, from, boardStop, left, walked, transferMetres(from, boardStop)));
+                int link = transferLink(from, boardStop);
+                if (left + Math.max(t.transferSecs[link], changeSecs) != walked) {
+                    throw new IllegalStateException("the search lost track of the walk to " + t.stopIds[boardStop]);
+                }
+                legs.add(Leg.walk(Leg.Kind.TRANSFER, from, boardStop, left, left + t.transferSecs[link],
+                        t.transferMetres[link]));
                 stop = from;
             }
             round = earlier;
@@ -691,7 +703,7 @@ final class Search {
                         int pattern = t.tripPattern[leg.trip()];
                         int inPattern = leg.trip() - t.patternTripOffset[pattern];
                         int later = inPattern;
-                        // Changing at the one stop takes time; a walk has taken its own off already.
+                        // Changing at the one stop takes time; a walk has taken that off already.
                         int latest = legs.get(i + 1).kind() == Leg.Kind.RIDE ? deadline - changeSecs : deadline;
                         for (int x = inPattern + 1; x < t.patternTripCount(pattern)
                                 && t.arrive[t.timeIndex(pattern, x, leg.alightPosition())] <= latest; x++) {
@@ -710,7 +722,7 @@ final class Search {
                     }
                     deadline = leg.depart();
                 }
-                case TRANSFER -> deadline -= leg.arrive() - leg.depart();
+                case TRANSFER -> deadline -= Math.max(leg.arrive() - leg.depart(), changeSecs);
                 case WALK -> {
                     if (i == 0 && deadline != NONE) {
                         legs.set(0, Leg.walk(Leg.Kind.WALK, -1, leg.toStop(), deadline - (leg.arrive() - leg.depart()),
@@ -730,13 +742,14 @@ final class Search {
         }
     }
 
-    private int transferMetres(int from, int to) {
+    /** Where the link from one stop to another is in the timetable's link arrays. */
+    private int transferLink(int from, int to) {
         for (int j = t.transferOffset[from]; j < t.transferOffset[from + 1]; j++) {
             if (t.transferTargets[j] == to) {
-                return t.transferMetres[j];
+                return j;
             }
         }
-        return 0;
+        throw new IllegalStateException("the search walked a link the timetable does not have");
     }
 
     /** Notes that a round is writing an arrival for a stop, so that the next query can clear it. */

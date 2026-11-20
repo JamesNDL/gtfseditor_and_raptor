@@ -21,6 +21,11 @@ final class Feed {
         return this;
     }
 
+    /** A file's text as it stands, ending with a line break. */
+    String text(String name) {
+        return files.get(name);
+    }
+
     Feed without(String name) {
         files.remove(name);
         return this;

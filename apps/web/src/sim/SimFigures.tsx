@@ -20,7 +20,7 @@ function Caveats({ outOfDate, capacity }: { outOfDate: boolean; capacity: boolea
   return (
     <>
       {outOfDate && (
-        <Tag kind="warn" title="The timetable has been edited since this run. Trips that changed have no figures.">
+        <Tag kind="warn" title="The timetable has been edited, or the router's rules for walks and changes have changed, since this run. Trips that changed have no figures.">
           out of date
         </Tag>
       )}
@@ -177,7 +177,12 @@ interface StopQuarter {
   alightings: number;
   changes: number;
   leftBehind: number;
+  /** The most waiting at once at any one of the stops added up here. */
   maxWaiting: number;
+  /** The sum of each stop's own most: what all of them together cannot exceed. */
+  maxWaitingAtMost: number;
+  /** How many of the stops had anyone waiting. */
+  platforms: number;
 }
 
 /** A stop's or station's passengers by hour: on, off, changing, left behind, and the most waiting at once. */
@@ -214,7 +219,11 @@ export function StationPassengers({ stopId }: { stopId: number }) {
         <Tile value={fmt(total((q) => q.boardings))} label="boardings" />
         <Tile value={fmt(total((q) => q.alightings))} label="alightings" />
         <Tile value={fmt(total((q) => q.changes))} label="changes" note="Boardings by passengers who had just left another vehicle" />
-        <Tile value={fmt(waiting.maxWaiting)} label="most waiting" note={`At once, around ${formatSecs(waiting.quarterStart)}`} />
+        <Tile
+          value={fmt(waiting.maxWaiting)}
+          label={waiting.platforms > 1 ? 'most waiting at one platform' : 'most waiting'}
+          note={`At once, around ${formatSecs(waiting.quarterStart)}.${waiting.maxWaitingAtMost > waiting.maxWaiting ? ` Across all its platforms it is between ${fmt(waiting.maxWaiting)} and ${fmt(waiting.maxWaitingAtMost)}: each platform's fullest moment is known, but not whether they fall together.` : ''}`}
+        />
         {total((q) => q.leftBehind) > 0 && <Tile value={fmt(total((q) => q.leftBehind))} label="left behind" />}
       </div>
       <div className="chart-legend muted small">

@@ -19,6 +19,11 @@ import java.util.Random;
  * the time. {@code focus} raises each stop's weight to a power: at 2 the big stations take most of
  * the journeys, plans are shared and trains fill. {@code people} makes each row stand for several
  * people, so that a hundred thousand rows can load the network like a whole day.
+ *
+ * <p>A person drawn at a stop would often do better from another stop nearby, and a simulator that
+ * lets people change stop would then report a gain that the published timetable already offered.
+ * So, given a router, each person is moved to the stops the router recommends for their journey
+ * (see {@link #settle}): they start where a sensible traveller would, and their margin is nothing.
  */
 public final class DemandGenerator {
 
@@ -94,6 +99,85 @@ public final class DemandGenerator {
             if (random.nextInt(10) < 6 && back < 23 * 3600 + 1800 && builder.rows() < journeys) {
                 add(builder, t, user, to, from, back, people);
             }
+        }
+        return builder.build();
+    }
+
+    /** How many times a person is moved towards the stops the router recommends before being left be. */
+    static final int SETTLE_ROUNDS = 4;
+
+    /**
+     * Makes a set up and then starts each person at the stops the router recommends: see
+     * {@link #settle}. This is what the command and the service use.
+     *
+     * @param threads searches at once
+     */
+    public static Demand generate(gtfseditor.router.core.Router router, Area area, int journeys, long seed,
+            double withinKm, double focus, int people, int threads) {
+        Demand drawn = generate(router.timetable(), area, journeys, seed, withinKm, focus, people);
+        SimSettings settings = new SimSettings();
+        settings.threads = Math.max(1, threads);
+        return settle(router, drawn, area, settings);
+    }
+
+    /**
+     * Moves each person to the stops the router recommends for their journey, as a default BAU run
+     * would judge it: where a journey that may use any stop within the walking distance costs less
+     * than the one between the stops drawn, the person's ends become the stops at which that
+     * journey boards its first vehicle and leaves its last. That is done again from the new stops,
+     * up to {@link #SETTLE_ROUNDS} times, because the walking distance is measured from where the
+     * person now stands. Someone with no journey at all, or whose recommended stops lie outside the
+     * area, stays where they were drawn. Rows keep their order, users and start times.
+     */
+    static Demand settle(gtfseditor.router.core.Router router, Demand drawn, Area area, SimSettings settings) {
+        Timetable t = router.timetable();
+        int rows = drawn.size();
+        int[] from = new int[rows];
+        int[] to = new int[rows];
+        for (int row = 0; row < rows; row++) {
+            from[row] = t.stopIndex(drawn.placeStop[drawn.origin[row]]);
+            to[row] = t.stopIndex(drawn.placeStop[drawn.destination[row]]);
+        }
+        int[] pending = new int[rows];
+        for (int row = 0; row < rows; row++) {
+            pending[row] = row;
+        }
+        int count = rows;
+        for (int round = 0; round < SETTLE_ROUNDS && count > 0; round++) {
+            Demand.Builder builder = new Demand.Builder();
+            for (int i = 0; i < count; i++) {
+                int row = pending[i];
+                add(builder, t, drawn.userId(row), from[row], to[row], drawn.start[row], drawn.people[row]);
+            }
+            Demand asked = builder.build();
+            Plans plans;
+            try (Simulation simulation = new Simulation(router, asked, settings)) {
+                plans = simulation.plan(null, Progress.NONE);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("stopped while making the journeys up", e);
+            }
+            int moved = 0;
+            for (int i = 0; i < count; i++) {
+                int row = pending[i];
+                int nearFrom = plans.nearFrom[i];
+                int nearTo = plans.nearTo[i];
+                boolean better = plans.margin[i] > 0 || (plans.ownCost[i] < 0 && plans.nearCost[i] >= 0);
+                if (!better || nearFrom < 0 || nearTo < 0 || nearFrom == nearTo
+                        || (nearFrom == from[row] && nearTo == to[row])
+                        || (area != null && !(area.holds(t.stopLat[nearFrom], t.stopLon[nearFrom])
+                                && area.holds(t.stopLat[nearTo], t.stopLon[nearTo])))) {
+                    continue;
+                }
+                from[row] = nearFrom;
+                to[row] = nearTo;
+                pending[moved++] = row;
+            }
+            count = moved;
+        }
+        Demand.Builder builder = new Demand.Builder();
+        for (int row = 0; row < rows; row++) {
+            add(builder, t, drawn.userId(row), from[row], to[row], drawn.start[row], drawn.people[row]);
         }
         return builder.build();
     }

@@ -48,6 +48,7 @@ public final class GtfsLoader {
     private final List<String> stopRowIds = new ArrayList<>();
     private final List<String> stopRowNames = new ArrayList<>();
     private final List<String> stopRowParents = new ArrayList<>();
+    private final IntList stopRowTypes = new IntList(1 << 12); // location_type
     private double[] stopRowLat = new double[1 << 12];
     private double[] stopRowLon = new double[1 << 12];
 
@@ -240,6 +241,7 @@ public final class GtfsLoader {
             int cLat = r.column("stop_lat");
             int cLon = r.column("stop_lon");
             int cParent = r.column("parent_station");
+            int cType = r.column("location_type");
             while (r.next()) {
                 String id = r.text(cId);
                 int row = stopRowIds.size();
@@ -253,6 +255,7 @@ public final class GtfsLoader {
                 stopRowIds.add(id);
                 stopRowNames.add(r.text(cName));
                 stopRowParents.add(r.isEmpty(cParent) ? null : r.text(cParent));
+                stopRowTypes.add(r.number(cType, 0));
                 // Walkway points inside a station may have no position; only stops trips call at need one.
                 stopRowLat[row] = r.isEmpty(cLat) ? Double.NaN : r.decimal(cLat);
                 stopRowLon[row] = r.isEmpty(cLon) ? Double.NaN : r.decimal(cLon);
@@ -834,7 +837,20 @@ public final class GtfsLoader {
     }
 
     private void buildTransfers(Timetable.Builder b, int[] stopOfRow) throws IOException {
-        TransferBuilder transfers = new TransferBuilder(options.transfers(), b.stopLat, b.stopLon);
+        TransferBuilder transfers = new TransferBuilder(options.transfers(), b.stopLat, b.stopLon, options.water());
+        boolean[] entrance = new boolean[stopRowIds.size()];
+        for (int row = 0; row < entrance.length; row++) {
+            entrance[row] = stopRowTypes.get(row) == 2;
+        }
+        boolean[] railPlatform = new boolean[b.stopIds.length];
+        for (int p = 0; p + 1 < b.patternStopOffset.length; p++) {
+            Mode mode = Mode.ofRouteType(b.routeTypes[b.tripRoute[b.patternTripOffset[p]]]);
+            if (mode == Mode.TRAIN || mode == Mode.METRO) {
+                for (int i = b.patternStopOffset[p]; i < b.patternStopOffset[p + 1]; i++) {
+                    railPlatform[b.patternStops[i]] = true;
+                }
+            }
+        }
         try (CsvReader r = open("transfers.txt")) {
             if (r != null) {
                 transfers.addFeedTransfers(r, stopRowOf, stopOfRow);
@@ -842,9 +858,10 @@ public final class GtfsLoader {
         }
         try (CsvReader r = open("pathways.txt")) {
             if (r != null) {
-                transfers.addPathways(r, stopRowOf, stopOfRow);
+                transfers.addPathways(r, stopRowOf, stopOfRow, entrance);
             }
         }
+        transfers.addPlatformAllowance(railPlatform);
         transfers.addStations(b.stopStation, b.stationIds.length);
         transfers.addNearby();
         TransferBuilder.Result result = transfers.finish();
@@ -852,6 +869,10 @@ public final class GtfsLoader {
         b.transferTargets = result.targets();
         b.transferSecs = result.secs();
         b.transferMetres = result.metres();
+        b.stopExitSecs = result.exitSecs();
+        b.stopEntrySecs = result.entrySecs();
+        b.waterLines = options.water().lines;
+        b.waterBridges = options.water().bridges;
         notes.addAll(result.notes());
     }
 

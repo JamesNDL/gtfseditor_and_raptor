@@ -18,6 +18,7 @@ export function TimeBar() {
   const timeRef = useRef<HTMLSpanElement>(null);
   const dayRef = useRef<HTMLSpanElement>(null);
   const countRef = useRef<HTMLSpanElement>(null);
+  const waitingRef = useRef<HTMLSpanElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,10 +36,11 @@ export function TimeBar() {
   }, [baselineId]);
 
   useEffect(() => {
-    const update = (n: number) => {
+    const update = (n: number, waiting: number) => {
       if (countRef.current) countRef.current.textContent = n.toLocaleString('en-AU');
+      if (waitingRef.current) waitingRef.current.textContent = `${waiting.toLocaleString('en-AU')} waiting`;
     };
-    update(liveStats.vehicles);
+    update(liveStats.vehicles, liveStats.waiting);
     return liveStats.subscribe(update);
   }, []);
 
@@ -146,11 +148,18 @@ export function TimeBar() {
         ))}
       </div>
 
-      <div className="moving">
+      {/* The count is every vehicle drawn. Those standing between two trips are part of it, and are also given on their own. */}
+      <div
+        className="moving"
+        title="Vehicles on the map: those running a trip, and those waiting at the end of one for their next trip. A vehicle that waits more than an hour is not shown or counted until it leaves again."
+      >
         <span ref={countRef} className="moving-count">
           0
         </span>
-        <span className="moving-label">vehicles moving</span>
+        <span className="moving-label">vehicles out</span>
+        <span ref={waitingRef} className="moving-label moving-waiting">
+          0 waiting
+        </span>
       </div>
     </footer>
   );

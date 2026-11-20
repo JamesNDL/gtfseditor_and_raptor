@@ -19,9 +19,9 @@ import java.util.Set;
  * @param directWalkSecs  time to walk the whole way with no ride, or -1 if that is not on offer
  * @param directWalkMetres straight-line distance of that walk
  * @param avoid           kinds of vehicle the passenger will not board
- * @param changeSecs      least time between getting off one vehicle and the next leaving from the
- *                        same stop. A walk to another stop takes the link's own time instead, and
- *                        staying aboard a vehicle that runs on as another trip takes none.
+ * @param changeSecs      least time between getting off one vehicle and the next leaving, from
+ *                        the same stop or from one a walk away. A walk that takes longer takes its
+ *                        own time; staying aboard a vehicle that runs on as another trip takes none.
  * @param maxLinkSecs     the longest walk between two stops the passenger will make
  */
 public record Query(
@@ -37,7 +37,8 @@ public record Query(
 
     /**
      * Two minutes. In 769 changes at one stop offered by the TfNSW trip planner for the test
-     * journeys of section 18 of the plan, none was shorter.
+     * journeys of section 18 of the plan, none was shorter, and none of its 1,045 changes between
+     * the platforms of one station was either.
      */
     public static final int DEFAULT_CHANGE_SECS = 120;
 

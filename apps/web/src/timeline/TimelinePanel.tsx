@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApi, type RouteDetail } from '../api.ts';
 import { clock } from '../clock.ts';
 import { Badge, shortStop } from '../inspector/parts.tsx';
-import { FULL_STEPS } from '../sim/results.ts';
+import { FULL_STEPS, placeholderNote } from '../sim/results.ts';
 import { EMPTY_COLOR } from '../sim/loads.ts';
 import { useShownRun } from '../sim/SimFigures.tsx';
 import { useStore, type TimelineTab } from '../store.ts';
@@ -124,6 +124,11 @@ export function TimelinePanel() {
                 {[EMPTY_COLOR, ...FULL_STEPS.map((step) => step.color)].map((color) => (
                   <i key={color} style={{ background: color }} />
                 ))}
+              </span>
+            )}
+            {tripColours && simRun.capacities && placeholderNote({ trips: simRun.capacities.trips, placeholder: simRun.capacities.placeholderOrAssumed }) && (
+              <span className="tag tag-warn" title={placeholderNote({ trips: simRun.capacities.trips, placeholder: simRun.capacities.placeholderOrAssumed })!}>
+                placeholder capacities
               </span>
             )}
           </label>

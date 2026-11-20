@@ -63,6 +63,13 @@ export function ScenarioPanel() {
       >
         Export GTFS{scenarioId !== null ? ' with these changes' : ''}
       </a>
+      {scenarioId !== null && info && info.conflicts.length > 0 && (
+        <p className="scenario-note warn-text small export-warning">
+          {info.conflicts.length}
+          {info.conflictsCapped ? ' or more' : ''} clash{info.conflicts.length === 1 ? ' is' : 'es are'} not sorted out. The export will contain {info.conflicts.length === 1 ? 'it' : 'them'} as they
+          stand.
+        </p>
+      )}
 
       {scenarioId === null && (
         <div className="scenario-hint small">
@@ -101,11 +108,21 @@ export function ScenarioPanel() {
             />
             <Stat
               label="clashes"
-              value={fmt(info.conflicts.length)}
-              delta={info.conflicts.length ? 'caused by your changes' : 'none from your changes'}
+              value={`${fmt(info.conflicts.length)}${info.conflictsCapped ? '+' : ''}`}
+              delta={info.conflicts.length ? (info.conflictsCapped ? 'or more: the count stops here' : 'caused by your changes') : 'none from your changes'}
               warn={info.conflicts.length > 0}
             />
           </div>
+
+          {info.stats.peak !== undefined && info.stats.baselinePeak !== undefined && info.stats.vehicles !== info.stats.baselineVehicles && (
+            <p
+              className="scenario-note small muted peak-note"
+              title="Vehicles are counted as chains of trips that one vehicle could run, worked out from the timetable. The count rises when a vehicle's day is cut in two, even if no more are on the road. The most trips running at once is the firmer figure."
+            >
+              Most trips running at once: {fmt(info.stats.peak)} ({fmt(info.stats.baselinePeak)} as published). The vehicle count is an estimate; this is the firmer
+              figure.
+            </p>
+          )}
 
           {info.stats.unassigned > 0 && (
             <p className="scenario-note warn-text small">
@@ -125,7 +142,17 @@ export function ScenarioPanel() {
             </div>
           </div>
 
-          {error && <p className="scenario-note error-text small">Could not apply that: {error}</p>}
+          {error && <p className="scenario-note error-text small">{/^"Fix all"/.test(error) ? error : `Could not apply that: ${error}`}</p>}
+
+          {info.fleetLimitsSet === 0 && info.stats.vehicles > info.stats.baselineVehicles && (
+            <p className="scenario-note small muted">
+              This scenario uses {fmt(info.stats.vehicles - info.stats.baselineVehicles)} more vehicles than the published timetable. No fleet sizes are set, so nothing
+              checks whether that many exist.{' '}
+              <button className="link-button" onClick={() => set({ fleetOpen: true })}>
+                Set them in the vehicle catalogue
+              </button>
+            </p>
+          )}
 
           {info.fleet.length > 0 && (
             <div className="scenario-section">
@@ -280,7 +307,7 @@ function ConflictRow({ conflict, busy }: { conflict: Conflict; busy: boolean }) 
     clock.set(conflict.atSecs);
     setView(conflict.atSecs - 1800, conflict.atSecs + 1800);
     if (conflict.kind === 'platform' && conflict.stopId) openTimeline({ tab: 'platforms', stationId: conflict.stopId, focusStopId: conflict.stopId });
-    else openTimeline({ tab: 'vehicles' });
+    else if (conflict.kind === 'vehicle' || conflict.kind === 'place') openTimeline({ tab: 'vehicles' });
   };
   return (
     <li>

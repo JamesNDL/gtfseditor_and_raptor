@@ -58,6 +58,10 @@ class TimetableSnapshotTest {
         assertArrayEquals(saved.transferTargets, read.transferTargets);
         assertArrayEquals(saved.transferSecs, read.transferSecs);
         assertArrayEquals(saved.transferMetres, read.transferMetres);
+        assertArrayEquals(saved.stopExitSecs, read.stopExitSecs);
+        assertArrayEquals(saved.stopEntrySecs, read.stopEntrySecs);
+        assertArrayEquals(saved.water.lines, read.water.lines);
+        assertArrayEquals(saved.water.bridges, read.water.bridges);
         // Trips with the same headsign share one text.
         assertSame(read.tripHeadsigns[0], read.tripHeadsigns[1]);
     }

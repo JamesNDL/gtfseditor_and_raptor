@@ -16,6 +16,7 @@ import gtfseditor.router.core.Timetable;
 import gtfseditor.router.core.TimetableStats;
 import gtfseditor.router.core.TransferSettings;
 import gtfseditor.router.gtfs.LoadOptions;
+import gtfseditor.router.gtfs.WaterFile;
 import gtfseditor.router.sim.Demand;
 import gtfseditor.router.sim.DemandGenerator;
 import gtfseditor.router.sim.DemandReader;
@@ -201,7 +202,9 @@ public final class RouterServer implements AutoCloseable {
                         .put("fixedSecs", w.fixedSecs()).put("stationMinSecs", w.stationMinSecs())
                         .put("stationMaxMetres", w.stationMaxMetres()).put("maxPerStop", w.maxPerStop())
                         .put("defaultPathwaySecs", w.defaultPathwaySecs()).put("maxPathwaySecs", w.maxPathwaySecs())
+                        .put("platformSecs", w.platformSecs())
                         .put("mostAtOneStop", s.mostTransfersAtAStop());
+                node.putObject("water").put("lines", t.water.lineCount()).put("bridges", t.water.bridgeCount());
                 ObjectNode defaults = node.putObject("journeyDefaults");
                 defaults.put("maxRides", loaded.router().maxRides())
                         .put("maxWalkMetres", Router.DEFAULT_MAX_WALK_METRES)
@@ -240,8 +243,9 @@ public final class RouterServer implements AutoCloseable {
     /**
      * {@code PUT /v1/timetables/{id}}. Either JSON naming where the zip is,
      * {@code {"source": {"path": ..}}} or {@code {"source": {"url": ..}}}, with an optional
-     * {@code version} and {@code serviceDate}; or the zip itself as the body, with those two in the
-     * query string. Answers at once; the build goes on behind.
+     * {@code version}, {@code serviceDate} and {@code water} (a water file, named the same way);
+     * or the zip itself as the body, with the first two in the query string. Answers at once; the
+     * build goes on behind.
      */
     private void load(Context ctx) throws IOException {
         String id = ctx.pathParam("id");
@@ -258,10 +262,11 @@ public final class RouterServer implements AutoCloseable {
             if (!date.isMissingNode() && !date.isNull() && !date.isIntegralNumber()) {
                 throw ApiException.bad("serviceDate must be a number such as 20261117");
             }
+            Timetables.OptionsStep options = waterStep(body.path("water"), options(date.asInt(0)));
             if (source.hasNonNull("path")) {
-                view = loadFile(id, version, path(source.get("path").asText()), date.asInt(0));
+                view = loadFile(id, version, path(source.get("path").asText()), options);
             } else if (source.hasNonNull("url")) {
-                view = loadUrl(id, version, source.get("url").asText(), date.asInt(0));
+                view = loadUrl(id, version, source.get("url").asText(), options);
             } else {
                 throw ApiException.bad("name the zip as {\"source\": {\"path\": ..}} or {\"source\": {\"url\": ..}},"
                         + " or send the zip itself with Content-Type: application/zip");
@@ -306,20 +311,47 @@ public final class RouterServer implements AutoCloseable {
         return LoadOptions.defaults().withServiceDate(serviceDate);
     }
 
-    /** Loads a zip that is already on this machine, where it lies. */
-    Timetables.View loadFile(String id, String version, Path zip, int serviceDate) {
-        LoadOptions options = options(serviceDate);
-        Path file = zip.toAbsolutePath().normalize();
-        if (!Files.isRegularFile(file)) {
-            throw ApiException.bad("there is no file " + file);
+    /**
+     * Where to read the water file from when the build starts: {@code {"path": ..}} or
+     * {@code {"url": ..}}. Left out, no water is known and every straight walk is offered.
+     */
+    private Timetables.OptionsStep waterStep(JsonNode water, LoadOptions options) {
+        if (water.isMissingNode() || water.isNull()) {
+            return () -> options;
         }
-        Timetables.View view = timetables.begin(id, version, new Timetables.Source("path", file.toString()));
-        timetables.build(id, options, () -> file);
-        return view;
+        if (water.hasNonNull("path")) {
+            Path file = path(water.get("path").asText()).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(file)) {
+                throw ApiException.bad("there is no file " + file);
+            }
+            return () -> options.withWater(WaterFile.read(file));
+        }
+        if (!water.hasNonNull("url")) {
+            throw ApiException.bad("name the water file as {\"water\": {\"path\": ..}} or {\"water\": {\"url\": ..}}");
+        }
+        URI address = address(water.get("url").asText());
+        return () -> {
+            try (HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
+                    .connectTimeout(Duration.ofSeconds(20)).build()) {
+                HttpResponse<InputStream> response;
+                try {
+                    response = client.send(HttpRequest.newBuilder(address).timeout(FETCH_TIMEOUT).build(),
+                            HttpResponse.BodyHandlers.ofInputStream());
+                } catch (IOException e) {
+                    throw new IOException("could not fetch " + address + ": "
+                            + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), e);
+                }
+                try (InputStream in = response.body()) {
+                    if (response.statusCode() != 200) {
+                        throw new IOException("fetching " + address + " answered " + response.statusCode());
+                    }
+                    return options.withWater(WaterFile.read(in, "the water file"));
+                }
+            }
+        };
     }
 
-    private Timetables.View loadUrl(String id, String version, String url, int serviceDate) {
-        LoadOptions options = options(serviceDate);
+    private static URI address(String url) {
         URI address;
         try {
             address = URI.create(url);
@@ -329,6 +361,27 @@ public final class RouterServer implements AutoCloseable {
         if (address.getHost() == null || !("http".equals(address.getScheme()) || "https".equals(address.getScheme()))) {
             throw ApiException.bad("'" + url + "' is not an http or https URL");
         }
+        return address;
+    }
+
+    /** Loads a zip that is already on this machine, where it lies. */
+    Timetables.View loadFile(String id, String version, Path zip, int serviceDate) {
+        LoadOptions options = options(serviceDate);
+        return loadFile(id, version, zip, () -> options);
+    }
+
+    Timetables.View loadFile(String id, String version, Path zip, Timetables.OptionsStep options) {
+        Path file = zip.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(file)) {
+            throw ApiException.bad("there is no file " + file);
+        }
+        Timetables.View view = timetables.begin(id, version, new Timetables.Source("path", file.toString()));
+        timetables.build(id, options, () -> file);
+        return view;
+    }
+
+    private Timetables.View loadUrl(String id, String version, String url, Timetables.OptionsStep options) {
+        URI address = address(url);
         Timetables.View view = timetables.begin(id, version, new Timetables.Source("url", url));
         timetables.build(id, options, () -> fetch(address, id));
         return view;
@@ -480,7 +533,10 @@ public final class RouterServer implements AutoCloseable {
         read.report().examples().forEach(examples::add);
         answer.put("rows", figures.rows()).put("people", figures.people()).put("users", figures.users())
                 .put("earliest", figures.earliest()).put("latest", figures.latest())
-                .put("busiestHour", figures.busiestHour()).put("busiestHourPeople", figures.busiestHourPeople());
+                .put("busiestHour", figures.busiestHour()).put("busiestHourPeople", figures.busiestHourPeople())
+                .put("rowsBefore4am", figures.rowsBefore4am()).put("madeUpIds", figures.madeUpIds());
+        ArrayNode warnings = answer.putArray("warnings");
+        figures.warnings().forEach(warnings::add);
         int[] rowsAt = new int[demand.placeCount()];
         int positions = 0;
         for (int row = 0; row < demand.size(); row++) {
@@ -519,9 +575,9 @@ public final class RouterServer implements AutoCloseable {
                 : gtfseditor.router.sim.Area.OPAL;
         Demand demand;
         try (Timetables.Lease lease = timetables.lease(body.hasNonNull("timetable") ? body.get("timetable").asText() : null)) {
-            demand = DemandGenerator.generate(lease.loaded().router().timetable(), area, journeys,
+            demand = DemandGenerator.generate(lease.loaded().router(), area, journeys,
                     body.path("seed").asLong(1), body.path("withinKm").asDouble(DemandGenerator.DEFAULT_WITHIN_KM),
-                    body.path("focus").asDouble(1.0), body.path("people").asInt(1));
+                    body.path("focus").asDouble(1.0), body.path("people").asInt(1), settings.threads());
         }
         ctx.status(200).contentType("application/gzip");
         try (java.io.Writer out = new java.io.OutputStreamWriter(new java.util.zip.GZIPOutputStream(

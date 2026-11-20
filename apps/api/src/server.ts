@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import compress from '@fastify/compress';
 import Fastify from 'fastify';
+import { vehicleWaits, type WaitTrip } from '@gtfs-editor/core';
 import { connect, migrate } from '@gtfs-editor/gtfs/db';
 import { packsDir } from '@gtfs-editor/gtfs/packs';
 import { registerExportRoutes } from './export.ts';
@@ -10,6 +11,7 @@ import { registerFleetRoutes } from './fleet.ts';
 import { registerScenarioRoutes, scenarioOf, visible } from './scenarios.ts';
 import { registerSimRoutes } from './sim.ts';
 import { registerSimResultRoutes } from './sim-results.ts';
+import { stopDeleted } from './stops.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Packs live under <repo>/data/packs regardless of where the server is started from.
@@ -81,6 +83,43 @@ app.get('/api/baselines/:b/packs/:mode', async (req, reply) => {
   reply.header('content-type', 'application/octet-stream');
   reply.header('cache-control', 'public, max-age=86400');
   return reply.send(createReadStream(file));
+});
+
+/**
+ * Waits between trips, so the map keeps a vehicle drawn while it stands at its terminus: pairs of
+ * [trip id, the second its vehicle's next trip starts] as 32-bit integers. With ?s= the vehicle days
+ * are the scenario's, and its own trips are included.
+ */
+app.get('/api/baselines/:b/waits', async (req, reply) => {
+  const b = int((req.params as any).b);
+  const sc = await scenarioOf(req, sql);
+  // The published trips and the scenario's own are read separately and put together here: asking the
+  // database which of 59,000 trips a scenario can see, one by one, takes several seconds.
+  const read = (mine: ReturnType<typeof sql>) => sql<WaitTrip[]>`
+    select t.id, t.vehicle_day_id as "vehicleDayId", t.start_secs as "startSecs", t.end_secs as "endSecs",
+           t.first_stop_id as "firstStopId", t.last_stop_id as "lastStopId"
+    from trips t
+    where t.baseline_id = ${b} and ${mine}
+      and t.vehicle_day_id is not null and t.start_secs is not null and t.end_secs is not null`;
+  let trips: WaitTrip[] = await read(sql`t.scenario_id is null`);
+  if (sc) {
+    const [removed, own] = await Promise.all([
+      sql`select trip_id from scenario_removed where scenario_id = ${sc.id} and edit_seq <= ${sc.head}`,
+      read(sql`t.scenario_id = ${sc.id} and t.created_edit <= ${sc.head} and (t.removed_edit is null or t.removed_edit > ${sc.head})`),
+    ]);
+    const gone = new Set(removed.map((r) => r.trip_id as number));
+    trips = [...trips.filter((t) => !gone.has(t.id)), ...own];
+  }
+  const ends = [...new Set(trips.flatMap((t) => [t.firstStopId, t.lastStopId]).filter((id) => id !== null))];
+  const stopRows = ends.length
+    ? await sql`select id, parent_id, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${ends})`
+    : [];
+  const stops = new Map(stopRows.map((s) => [s.id as number, { parentId: s.parent_id as number | null, lon: s.lon as number, lat: s.lat as number }]));
+  const pairs = vehicleWaits(trips, stops);
+  reply.header('content-type', 'application/octet-stream');
+  // The published timetable never changes; a scenario does with every edit.
+  reply.header('cache-control', sc ? 'no-store' : 'public, max-age=3600');
+  return reply.send(Buffer.from(pairs.buffer, pairs.byteOffset, pairs.byteLength));
 });
 
 // ---------------------------------------------------------------------------
@@ -282,11 +321,14 @@ app.get('/api/trips/:id', async (req) => {
     from stop_times st join stops s on s.id = st.stop_id
     where st.trip_id = ${id} order by st.seq`;
   // Links are recorded against baseline trips; an edited trip inherits them through its origin.
+  // A link ends when the two trips are no longer in the same stay-aboard group, which is what
+  // deleting the stop where they met does (delete-stop.ts).
+  const sameGroup = sql`t.feed_block_id is not distinct from ${trip.feedBlockId}`;
   const [stayFrom] = await tripSummary(
-    sql`coalesce(t.origin_trip_id, t.id) = (select from_trip_id from stay_aboard_links where to_trip_id = ${trip.linkId} limit 1) and ${vis}`,
+    sql`coalesce(t.origin_trip_id, t.id) = (select from_trip_id from stay_aboard_links where to_trip_id = ${trip.linkId} limit 1) and ${vis} and ${sameGroup}`,
   );
   const [stayTo] = await tripSummary(
-    sql`coalesce(t.origin_trip_id, t.id) = (select to_trip_id from stay_aboard_links where from_trip_id = ${trip.linkId} limit 1) and ${vis}`,
+    sql`coalesce(t.origin_trip_id, t.id) = (select to_trip_id from stay_aboard_links where from_trip_id = ${trip.linkId} limit 1) and ${vis} and ${sameGroup}`,
   );
   return { ...trip, stopTimes, stayAboardFrom: stayFrom ?? null, stayAboardTo: stayTo ?? null };
 });
@@ -311,7 +353,8 @@ app.get('/api/vehicle-days/:id', async (req) => {
     select a.id as "fromTripId", b.id as "toTripId" from stay_aboard_links l
     join trips a on coalesce(a.origin_trip_id, a.id) = l.from_trip_id
     join trips b on coalesce(b.origin_trip_id, b.id) = l.to_trip_id
-    where a.vehicle_day_id = ${id} and ${visible(sql, 'a', sc)} and ${visible(sql, 'b', sc)}`;
+    where a.vehicle_day_id = ${id} and ${visible(sql, 'a', sc)} and ${visible(sql, 'b', sc)}
+      and a.feed_block_id is not distinct from b.feed_block_id`;
   const startSecs = trips.length ? Math.min(...trips.map((t) => t.startSecs)) : day.startSecs;
   const endSecs = trips.length ? Math.max(...trips.map((t) => t.endSecs)) : day.endSecs;
   return { ...day, tripCount: trips.length, startSecs, endSecs, trips, stayAboard };
@@ -408,8 +451,10 @@ app.get('/api/stations/:id/platforms', async (req) => {
     from stops s join stops p on p.id = coalesce(s.parent_id, s.id) where s.id = ${id}`;
   if (!station) throw notFound('Station');
   const platforms = await sql`
-    select id, name, platform_code as "platformCode" from stops
-    where (parent_id = ${station.id} or id = ${station.id}) and location_type = 0 and cardinality(mode_ids) > 0`;
+    select c.id, c.name, c.platform_code as "platformCode" from stops c
+    where (c.parent_id = ${station.id} or c.id = ${station.id}) and c.location_type = 0 and cardinality(c.mode_ids) > 0
+      -- A platform the scenario has deleted has no row in the chart.
+      and not ${stopDeleted(sql, 'c', sc)}`;
   const stopIds = platforms.map((p) => p.id);
   if (!stopIds.length) return { station, platforms: [], routes: [], calls: [], layovers: [], conflicts: [] };
 
@@ -459,17 +504,33 @@ app.get('/api/stations/:id/summary', async (req) => {
   const vis = visible(sql, 't', sc);
   const [station] = await sql`
     select p.id, p.name, (p.location_type = 1) as "isStation", ST_X(p.geom) as lon, ST_Y(p.geom) as lat,
-           (p.scenario_id is not null) as "isNew"
+           (p.scenario_id is not null) as "isNew",
+           (p.mode_ids && array['train', 'metro', 'light_rail', 'ferry']) as rail
     from stops s join stops p on p.id = coalesce(s.parent_id, s.id) where s.id = ${id}`;
   if (!station) throw notFound('Station');
-  const platforms = await sql`
+  // Stops the scenario has deleted stay listed, marked, so that what was deleted can be seen and undone.
+  const gone = sc
+    ? await sql`
+        select g.stop_id, g.edit_seq, e.summary from scenario_removed_stops g
+        join stops s on s.id = g.stop_id
+        left join scenario_edits e on e.scenario_id = g.scenario_id and e.seq = g.edit_seq
+        where g.scenario_id = ${sc.id} and g.edit_seq <= ${sc.head} and (s.id = ${station.id} or s.parent_id = ${station.id})`
+    : [];
+  const goneBy = new Map(gone.map((g) => [g.stop_id as number, g]));
+  const deletion = (stopId: number) => {
+    const g = goneBy.get(stopId);
+    // Only the scenario's latest change can be taken back on its own.
+    return g ? { seq: g.edit_seq as number, summary: String(g.summary ?? ''), latest: g.edit_seq === sc!.head } : null;
+  };
+  const platformRows = await sql`
     select c.id, c.name, c.platform_code as "platformCode",
            (select count(*)::int from stop_times st join trips t on t.id = st.trip_id
             where st.stop_id = c.id and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}) as calls
     from stops c
     where (c.parent_id = ${station.id} or c.id = ${station.id}) and c.location_type = 0
     order by length(c.platform_code), c.platform_code, c.id`;
-  const used = platforms.filter((p) => p.calls > 0 || platforms.length <= 12);
+  const platforms = platformRows.map((p) => ({ ...p, calls: p.calls as number, deleted: deletion(p.id) }));
+  const used = platforms.filter((p) => p.calls > 0 || p.deleted || platforms.length <= 12);
   const stopIds = platforms.map((p) => p.id);
   const lines = stopIds.length
     ? await sql`
@@ -491,7 +552,7 @@ app.get('/api/stations/:id/summary', async (req) => {
         where st.stop_id = any(${stopIds}) and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}
         group by 1 order by 1`
     : [];
-  return { ...station, platforms: used, lines, hourly, calls: platforms.reduce((sum, p) => sum + p.calls, 0) };
+  return { ...station, deleted: deletion(station.id), platforms: used, lines, hourly, calls: platforms.reduce((sum, p) => sum + p.calls, 0) };
 });
 
 // Every vehicle that runs at least one trip on a line, with its whole day.
@@ -523,7 +584,8 @@ app.get('/api/routes/:id/vehicles', async (req) => {
     select a.id as "from", b.id as "to" from stay_aboard_links l
     join trips a on coalesce(a.origin_trip_id, a.id) = l.from_trip_id
     join trips b on coalesce(b.origin_trip_id, b.id) = l.to_trip_id
-    where a.vehicle_day_id = any(${dayIds}) and ${visible(sql, 'a', sc)} and ${visible(sql, 'b', sc)}`;
+    where a.vehicle_day_id = any(${dayIds}) and ${visible(sql, 'a', sc)} and ${visible(sql, 'b', sc)}
+      and a.feed_block_id is not distinct from b.feed_block_id`;
   const byDay = new Map<number, typeof trips>();
   for (const t of trips) {
     let list = byDay.get(t.vehicleDayId);

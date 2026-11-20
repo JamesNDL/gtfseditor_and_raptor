@@ -42,6 +42,11 @@ export interface DemandSet {
     examples?: string[];
     busiestHour?: number;
     busiestHourPeople?: number;
+    /** Rows that start before 04:00, and what the check says about them and anything else. */
+    rowsBefore4am?: number;
+    warnings?: string[];
+    /** Every user id has the form the generator writes. */
+    madeUpIds?: boolean;
   };
   madeBy: string | null;
   createdAt: string;
@@ -106,6 +111,10 @@ export interface SimRun {
   planRate: number | null;
   archived: boolean;
   area: SimBox | null;
+  /** Whether its journeys were made up. Null when the demand set has been removed. */
+  madeUp: boolean | null;
+  /** Its trips, and how many have a placeholder or assumed capacity. Null until it has finished. */
+  capacities: { trips: number; placeholderOrAssumed: number } | null;
   outOfDate: boolean;
   capacityOutOfDate: boolean;
   scenarioRuns: number;
@@ -154,6 +163,26 @@ export interface SimJourney {
   noJourneyReason: string | null;
   strandedTime: number | null;
   legs: SimLeg[];
+}
+
+/** What is said wherever a run shows as out of date. */
+export const OUT_OF_DATE = 'Out of date: the timetable has been edited, or the router\'s rules for walks and changes have changed, since this run was made.';
+
+/** The limits of a run's area, in words; empty for a run of the whole network. */
+export function areaText(area: SimBox | null): string {
+  if (!area) return '';
+  const lat = (n: number) => `${Math.abs(n).toFixed(3)}°${n < 0 ? 'S' : 'N'}`;
+  const lon = (n: number) => `${Math.abs(n).toFixed(3)}°${n < 0 ? 'W' : 'E'}`;
+  return `Only journeys that start and end inside ${area.name ? `"${area.name}": ` : 'the box '}${lat(area.north)} to ${lat(area.south)}, ${lon(area.west)} to ${lon(area.east)}`;
+}
+
+/**
+ * A walk's length for showing. The simulator keeps the straight line and times the walk at 1.3
+ * times it, so the distance shown is that estimate, to the nearest 10 m, with the straight line.
+ */
+export function walkText(metres: number): string {
+  const walked = Math.round((metres * 1.3) / 10) * 10;
+  return metres < 20 ? `${metres.toLocaleString('en-AU')} m` : `about ${walked.toLocaleString('en-AU')} m (${metres.toLocaleString('en-AU')} m in a straight line)`;
 }
 
 export const ACTIVE: RunState[] = ['queued', 'preparing', 'running', 'importing'];

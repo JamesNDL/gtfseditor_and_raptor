@@ -86,6 +86,27 @@ export function registerFleetRoutes(app: FastifyInstance, sql: Sql) {
     return { ok: true };
   });
 
+  /**
+   * Sets the fleet size of every vehicle type that has none to the number of vehicles of that type
+   * the published timetable of a day uses. With no fleet sizes, nothing can warn that a scenario
+   * needs more vehicles than exist. The figures are the editor's own count of vehicle chains, so
+   * they are a starting point to correct, not sourced fleet numbers.
+   */
+  app.post('/api/vehicle-types/limits-from-day', async (req) => {
+    const baseline = Number((req.query as Record<string, string>).baseline);
+    if (!Number.isInteger(baseline)) throw fail(400, 'baseline is required');
+    const rows = await sql`
+      update vehicle_types v set fleet_size = u.vehicles
+      from (
+        select tv.vehicle_type_id, count(distinct t.vehicle_day_id)::int as vehicles
+        from trips t join trip_vehicle tv on tv.trip_id = t.id
+        where t.baseline_id = ${baseline} and t.scenario_id is null
+        group by 1) u
+      where u.vehicle_type_id = v.id and v.fleet_size is null and u.vehicles > 0
+      returning v.id`;
+    return { set: rows.length };
+  });
+
   app.delete('/api/vehicle-types/:id', async (req) => {
     const id = Number((req.params as { id: string }).id);
     const [used] = await sql`

@@ -1,8 +1,10 @@
 import { formatSecs } from '@gtfs-editor/core';
+import { useEffect, useState } from 'react';
 import { useApi } from '../api.ts';
 import { clock } from '../clock.ts';
 import { StationPassengers } from '../sim/SimFigures.tsx';
 import { useStore } from '../store.ts';
+import { DeletedNote, DeletePreviewCard, type Deletion } from './DeleteStop.tsx';
 import { Badge, fmt, Loading, Tag, Tile } from './parts.tsx';
 
 interface StationSummary {
@@ -10,8 +12,12 @@ interface StationSummary {
   name: string;
   isStation: boolean;
   isNew: boolean;
+  /** Trains, trams or ferries call here: its stops are platforms, not the two sides of a road. */
+  rail: boolean;
+  /** Set when the open scenario has deleted it. */
+  deleted: Deletion | null;
   calls: number;
-  platforms: { id: number; name: string; platformCode: string | null; calls: number }[];
+  platforms: { id: number; name: string; platformCode: string | null; calls: number; deleted: Deletion | null }[];
   lines: { routeId: number; shortName: string | null; longName: string | null; color: string; modeName: string; calls: number; first: number; last: number }[];
   hourly: { hour: number; calls: number }[];
 }
@@ -22,8 +28,17 @@ export function StationPanel({ stopId }: { stopId: number }) {
   const open = useStore((s) => s.open);
   const openTimeline = useStore((s) => s.openTimeline);
   const setView = useStore((s) => s.setView);
+  const editing = useStore((s) => s.baselineId !== null);
+  // What is about to be deleted, while its preview is open: the station itself, or one platform.
+  const [deleting, setDeleting] = useState<number[] | null>(null);
+  useEffect(() => setDeleting(null), [stopId]);
   const s = station.data;
   if (!s) return <Loading error={station.error} />;
+
+  const live = s.platforms.filter((p) => !p.deleted);
+  const platformName = (p: StationSummary['platforms'][number]) => (p.platformCode ? `Platform ${p.platformCode}` : p.name.replace(/^.*, /, ''));
+  // A bus stop's 'station' is only the feed's grouping, so it is called a stop.
+  const whole = s.rail || live.length > 1 ? 'station' : 'stop';
 
   const peak = Math.max(1, ...s.hourly.map((h) => h.calls));
   const busiest = s.hourly.reduce((best, h) => (h.calls > best.calls ? h : best), { hour: 0, calls: 0 });
@@ -39,9 +54,10 @@ export function StationPanel({ stopId }: { stopId: number }) {
           <h2>
             {s.name}
             {s.isNew && <Tag kind="info">added in this scenario</Tag>}
+            {s.deleted && <Tag kind="warn">deleted in this scenario</Tag>}
           </h2>
           <div className="muted">
-            {s.isStation ? `${s.platforms.length} platform${s.platforms.length === 1 ? '' : 's'}` : 'Stop'} · {s.lines.length} line{s.lines.length === 1 ? '' : 's'}
+            {s.isStation ? `${live.length} platform${live.length === 1 ? '' : 's'}` : 'Stop'} · {s.lines.length} line{s.lines.length === 1 ? '' : 's'}
           </div>
         </div>
       </div>
@@ -55,7 +71,19 @@ export function StationPanel({ stopId }: { stopId: number }) {
         <button className="button" onClick={() => chart(s.isStation ? null : s.id)} title="Every call at each platform through the day, with clashes marked">
           Platform chart
         </button>
+        {editing && !s.deleted && !deleting && (
+          <button
+            className="button"
+            title={`Take this ${whole} out of the scenario. You see what it does to the trips before anything changes.`}
+            onClick={() => setDeleting([s.id])}
+          >
+            Delete this {whole}
+          </button>
+        )}
       </div>
+
+      {s.deleted && <DeletedNote what={s.name} deletion={s.deleted} />}
+      {deleting && <DeletePreviewCard stopIds={deleting} onClose={() => setDeleting(null)} />}
 
       <StationPassengers stopId={s.id} />
 
@@ -78,11 +106,25 @@ export function StationPanel({ stopId }: { stopId: number }) {
           <h3>Platforms</h3>
           <ul className="rows clickable">
             {s.platforms.map((p) => (
-              <li key={p.id}>
-                <button className="row" onClick={() => chart(p.id)} title="Show this platform in the platform chart">
-                  <div className="grow">{p.platformCode ? `Platform ${p.platformCode}` : p.name.replace(/^.*, /, '')}</div>
-                  <div className="row-end">{p.calls ? `${fmt(p.calls)} calls` : 'not used'}</div>
+              <li key={p.id} className="platform-row">
+                <button className="row" onClick={() => chart(p.id)} disabled={!!p.deleted} title={p.deleted ? p.deleted.summary : 'Show this platform in the platform chart'}>
+                  <div className={`grow${p.deleted ? ' struck' : ''}`}>{platformName(p)}</div>
+                  <div className="row-end">{p.deleted ? 'deleted' : p.calls ? `${fmt(p.calls)} calls` : 'not used'}</div>
                 </button>
+                {editing && !p.deleted && !s.deleted && live.length > 1 && (
+                  <button
+                    className="button small-button"
+                    title={
+                      s.rail
+                        ? 'Take this platform away. Its calls move to another platform of this station; you see how many, and any clashes, before anything changes.'
+                        : 'Take this stop away. You see what it does to the trips before anything changes.'
+                    }
+                    aria-label={`Delete ${platformName(p)}`}
+                    onClick={() => setDeleting([p.id])}
+                  >
+                    Delete
+                  </button>
+                )}
               </li>
             ))}
           </ul>

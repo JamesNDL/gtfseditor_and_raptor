@@ -280,6 +280,7 @@ public final class SimRun {
         settings.put("changePenaltySecs", s.changePenaltySecs);
         settings.put("switchThresholdSecs", s.switchThresholdSecs);
         settings.put("giveUpSecs", s.giveUpSecs);
+        settings.put("maxWaitSecs", s.maxWaitSecs);
         settings.put("schoolBuses", s.schoolBuses);
         settings.put("shareOneIn", s.shareOneIn);
         settings.put("area", s.area == null ? "all" : s.area.text());
@@ -310,7 +311,7 @@ public final class SimRun {
         summary.put("people", people);
         summary.put("journeyRows", rows);
         Map<String, Object> why = new LinkedHashMap<>();
-        for (byte reason = 1; reason < 4; reason++) {
+        for (byte reason = 1; reason < Plans.WHY_COUNT; reason++) {
             why.put(Plans.whyName(reason), totals.why[reason]);
         }
         summary.put("noJourneyBecause", why);
@@ -344,6 +345,8 @@ public final class SimRun {
             against.put("meanMinutesSooner", totals.soonerSecs / 60.0 / Math.max(1, totals.sooner));
             against.put("meanMinutesLater", totals.laterSecs / 60.0 / Math.max(1, totals.later));
             against.put("gaveUp", totals.people[Plans.GAVE_UP]);
+            against.put("meanMinutesLaterForThoseWhoGaveUp",
+                    totals.gaveUpSecs / 60.0 / Math.max(1, totals.people[Plans.GAVE_UP]));
             against.put("newlyAbleToTravel", totals.newlyServed);
             against.put("noLongerAbleToTravel", totals.lostService);
             summary.put("againstBau", against);

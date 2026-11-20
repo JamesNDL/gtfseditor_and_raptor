@@ -62,6 +62,7 @@ public final class JourneyChecker {
         int time = q.depart();
         int at = -1;                  // the stop the passenger is at, or -1 at the very start
         Leg.Kind before = null;
+        int offAt = -1;               // when the passenger last got off a vehicle
         int rides = 0;
         for (int i = 0; i < legs.size(); i++) {
             Leg leg = legs.get(i);
@@ -104,6 +105,9 @@ public final class JourneyChecker {
                     if (at < 0 ? !offered(q.access(), leg.fromStop(), 0) : leg.fromStop() != at) {
                         return "leg " + i + " boards at a stop the passenger is not at";
                     }
+                    if (before == Leg.Kind.TRANSFER && leg.depart() < offAt + q.changeSecs()) {
+                        return "leg " + i + " leaves too soon after the ride before the walk for a change";
+                    }
                     if (before == Leg.Kind.RIDE && leg.depart() < time + q.changeSecs()) {
                         Leg off = legs.get(i - 1);
                         boolean runsOn = t.tripStayAboard[off.trip()] == leg.trip() && leg.boardPosition() == 0
@@ -116,6 +120,7 @@ public final class JourneyChecker {
                         return "leg " + i + " rides a kind of vehicle the query avoids";
                     }
                     rides++;
+                    offAt = leg.arrive();
                 }
             }
             at = leg.toStop();

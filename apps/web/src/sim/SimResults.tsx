@@ -7,10 +7,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, fmt } from '../inspector/parts.tsx';
 import { useStore } from '../store.ts';
 import {
-  GROUP_COLORS, GROUP_LABELS, SAME_GROUP, divergingColor, lineName, mins, resultsUrl, signed, useResults, whoLabel, whoPhrase,
-  type JourneyTimes, type LineDetail, type LineRow, type Overview, type ResultsTab, type Shift, type Who,
+  GROUP_COLORS, GROUP_LABELS, SAME_GROUP, divergingColor, lineName, mins, placeholderNote, resultsUrl, signed, useResults, whoLabel, whoPhrase,
+  type Capacities, type JourneyTimes, type LineDetail, type LineRow, type Overview, type ResultsTab, type Shift, type Who,
 } from './results.ts';
-import type { SimRun } from './simApi.ts';
+import { OUT_OF_DATE, areaText, type SimRun } from './simApi.ts';
 import { PatternsTab, PeopleTab, followPeople } from './SimResultsPeople.tsx';
 
 const TABS: { id: ResultsTab; label: string }[] = [
@@ -34,7 +34,7 @@ export function SimResults() {
   const shown = state.open && run !== null && run.state === 'done';
 
   const overview = useResults<Overview>(shown ? resultsUrl(run.id, 'overview', state) : null);
-  const lines = useResults<{ lines: LineRow[] }>(shown ? resultsUrl(run.id, 'lines', state) : null);
+  const lines = useResults<{ lines: LineRow[]; capacity?: Capacities }>(shown ? resultsUrl(run.id, 'lines', state) : null);
 
   useEffect(() => {
     if (!shown) return;
@@ -58,6 +58,12 @@ export function SimResults() {
           <div className="muted small ellipsis">
             {against ? `against "${against.name}"` : o ? 'on its own: nothing to compare it with' : ' '}
             {state.band !== null ? ` · ${DAY_BANDS[state.band].label} only` : ''}
+            {run.area ? <span title={`${areaText(run.area)}.`}> · bounded to {run.area.name ?? 'a box'}</span> : ''}
+            {(o?.madeUp ?? run.madeUp) && (
+              <span className="tag tag-warn" title="These people and their journeys were generated, not observed. The figures show how the simulator behaves, not how real travel would change.">
+                made-up journeys
+              </span>
+            )}
           </div>
         </div>
         {state.small ? (
@@ -112,9 +118,10 @@ export function SimResults() {
           </div>
 
           <div className="results-body">
-            {run.outOfDate && <p className="warn-text small">Out of date: the timetable has been edited since this run was made.</p>}
+            {run.outOfDate && <p className="warn-text small">{OUT_OF_DATE}</p>}
+            {run.area && <p className="muted small">{areaText(run.area)}. Journeys with an end outside it are not in these figures.</p>}
             {state.tab === 'lines' ? (
-              <Lines run={run} rows={lines.data?.lines ?? null} error={lines.error} compared={!!against} />
+              <Lines run={run} rows={lines.data?.lines ?? null} error={lines.error} compared={!!against} capacity={lines.data?.capacity ?? null} />
             ) : state.tab === 'patterns' && (o || overview.error) ? (
               <PatternsTab run={run} compared={!!against} />
             ) : state.tab === 'people' && o ? (
@@ -153,30 +160,84 @@ function Figure({ value, label, note, tone }: { value: string; label: string; no
 function Headline({ o }: { o: Overview }) {
   if (!o.vs || !o.later || !o.sooner || !o.lost) {
     return (
-      <div className="tiles">
-        <Figure value={fmt(o.times.a.people)} label="people travel" />
-        <Figure value={mins(o.times.a.meanMinutes)} label="average journey" />
-      </div>
+      <>
+        <div className="tiles">
+          <Figure value={fmt(o.times.a.people)} label="people travel" />
+          <Figure value={mins(o.times.a.meanMinutes)} label="average journey" />
+        </div>
+        <Honesty o={o} />
+      </>
     );
   }
-  const net = o.later.hours - o.sooner.hours;
+  const truly = o.sooner.truly;
+  const nearby = o.sooner.nearby;
+  const gaveUp = o.gaveUp ?? { people: 0, hours: 0, meanMinutes: 0, groups: [], atLeast: 0, limitMinutes: 0 };
+  const net = o.net ?? { hoursLost: o.later.hours, hoursGained: truly.hours, hours: o.later.hours - truly.hours, atLeast: false };
+  const hours = (n: number) => `${n.toLocaleString('en-AU', { maximumFractionDigits: Math.abs(n) < 10 ? 1 : 0 })} h`;
+  const noJourney = o.lost.people - o.lost.gaveUp;
   return (
-    <div className="tiles">
-      <Figure value={fmt(o.times.a.people)} label="people travel" note={`${fmt(o.times.b?.people ?? 0)} in "${o.vs.name}"`} />
-      <Figure tone="later" value={fmt(o.later.people)} label={o.later.people ? `arrive later, by ${mins(o.later.meanMinutes)} on average` : 'arrive later'} note="Later by a minute or more" />
-      <Figure tone="sooner" value={fmt(o.sooner.people)} label={o.sooner.people ? `arrive sooner, by ${mins(o.sooner.meanMinutes)} on average` : 'arrive sooner'} note="Sooner by a minute or more" />
-      <Figure
-        value={fmt(o.lost.people)}
-        label="can no longer travel"
-        note={`${fmt(o.lost.gaveUp)} gave up because the journey is now too much later, ${fmt(o.lost.stranded)} were stranded by full vehicles, ${fmt(o.lost.people - o.lost.gaveUp - o.lost.stranded)} have no journey`}
-      />
-      {(o.gained ?? 0) > 0 && <Figure value={fmt(o.gained!)} label="can now travel" note="They had no journey in the run compared with" />}
-      <Figure
-        value={`${net > 0 ? '+' : net < 0 ? '−' : ''}${Math.abs(net).toLocaleString('en-AU', { maximumFractionDigits: Math.abs(net) < 10 ? 1 : 0 })} h`}
-        label={net > 0 ? 'more time spent travelling, all told' : 'time spent travelling, all told'}
-        note={`${Math.round(o.later.hours).toLocaleString('en-AU')} hours lost by those who arrive later, ${Math.round(o.sooner.hours).toLocaleString('en-AU')} gained by those who arrive sooner. People who can no longer travel are not counted.`}
-      />
-    </div>
+    <>
+      <div className="tiles">
+        <Figure value={fmt(o.times.a.people)} label="people travel" note={`${fmt(o.times.b?.people ?? 0)} in "${o.vs.name}"`} />
+        <Figure tone="later" value={fmt(o.later.people)} label={o.later.people ? `arrive later, by ${mins(o.later.meanMinutes)} on average` : 'arrive later'} note="Later by a minute or more" />
+        {gaveUp.people > 0 && (
+          <Figure
+            tone="later"
+            value={fmt(gaveUp.people)}
+            label={gaveUp.atLeast > 0 ? `gave up: ${mins(gaveUp.limitMinutes)} or more later` : `gave up: it would be ${mins(gaveUp.meanMinutes)} later on average`}
+            note={`Their journey is now more than ${mins(gaveUp.limitMinutes)} later than on the published timetable, so they do not travel.${gaveUp.atLeast > 0 ? ' This run did not record how much later, so each is counted at that limit: the least it can be.' : ''}`}
+          />
+        )}
+        <Figure
+          tone="sooner"
+          value={fmt(truly.people)}
+          label={truly.people ? `arrive sooner, by ${mins(truly.meanMinutes)} on average` : 'arrive sooner'}
+          note="Sooner by a minute or more, and not just by moving to a nearby stop that was already quicker on the published timetable"
+        />
+        {nearby.people > 0 && (
+          <Figure
+            value={fmt(nearby.people)}
+            label="now use a nearby stop that was already quicker on the published timetable"
+            note={`They arrive ${mins(nearby.meanMinutes)} sooner on average, but the published timetable already offered that from a stop near their own, and they did not take it. The change did not give it to them, so it is not counted as time gained.`}
+          />
+        )}
+        {noJourney > 0 && (
+          <Figure
+            value={fmt(noJourney)}
+            label="can no longer travel"
+            note={`${fmt(o.lost.stranded)} were stranded by full vehicles, ${fmt(noJourney - o.lost.stranded)} have no journey. People who gave up are counted apart.`}
+          />
+        )}
+        {(o.gained ?? 0) > 0 && <Figure value={fmt(o.gained!)} label="can now travel" note="They had no journey in the run compared with" />}
+        <Figure
+          value={`${net.atLeast && net.hours > 0 ? 'at least ' : ''}${hours(Math.abs(net.hours))}`}
+          label={net.hours > 0 ? 'lost, all told' : net.hours < 0 ? 'gained, all told' : 'lost or gained, all told'}
+          note={`${hours(o.later.hours)} lost by those who arrive later${gaveUp.people > 0 ? ` and ${gaveUp.atLeast > 0 ? 'at least ' : ''}${hours(gaveUp.hours)} by those who gave up` : ''}; ${hours(truly.hours)} gained by those who arrive sooner. Not counted: ${nearby.people > 0 ? `the ${hours(nearby.hours)} by which people who moved to a nearby stop arrive sooner, which the published timetable already offered; and ` : ''}people with no journey at all, whose loss has no length.`}
+        />
+      </div>
+      <Honesty o={o} />
+    </>
+  );
+}
+
+/** What has to be said beside the headline for it to be read rightly. */
+function Honesty({ o }: { o: Overview }) {
+  const share = o.margin && o.margin.people > 0 ? o.margin.beaten / o.margin.people : 0;
+  return (
+    <>
+      {o.madeUp && (
+        <p className="warn-text small">
+          Made-up journeys: these people were generated, not observed. The figures show how the simulator behaves, not how real travel would change.
+        </p>
+      )}
+      {o.margin && share >= 0.05 && (
+        <p className="muted small">
+          On the published timetable, {fmt(o.margin.beaten)} of the {fmt(o.margin.people)} travellers ({Math.round(share * 100)}%) use a stop that one nearby already beats, by{' '}
+          {mins(o.margin.meanMinutes)} on average as the simulator scores a journey. {o.madeUp ? 'With made-up journeys that is an accident of how they were drawn. ' : ''}When a change
+          sends such a person to the nearby stop they arrive sooner, which is why those people are counted apart above.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -251,27 +312,58 @@ function DeltaBar({ value, max }: { value: number; max: number }) {
 /** People by how much sooner or later they arrive: one bar a group, soonest at the top. */
 function ChangeChart({ o }: { o: Overview }) {
   const groups = o.groups!;
-  const lost = o.lost!.people;
+  // Two kinds of people are drawn apart within a bar. Among the sooner: those who only moved to a
+  // nearby stop that was already quicker. Among the later: those who gave up, placed by how much
+  // later the journey they turned down would have been.
+  const nearby = o.nearbyGroups ?? groups.map(() => 0);
+  const gaveUp = o.gaveUp?.groups ?? groups.map(() => 0);
+  const gaveUpPeople = o.gaveUp?.people ?? 0;
+  const nearbyPeople = o.sooner?.nearby.people ?? 0;
+  const lost = o.lost!.people - o.lost!.gaveUp;
   const gained = o.gained ?? 0;
-  const max = Math.max(1, ...groups.filter((_, i) => i !== SAME_GROUP), lost, gained);
-  const total = o.compared! + lost + gained;
+  const max = Math.max(1, ...groups.map((n, i) => (i === SAME_GROUP ? 0 : n + gaveUp[i])), lost, gained);
+  const total = o.compared! + o.lost!.people + gained;
   const share = (n: number) => (total ? `${((100 * n) / total).toLocaleString('en-AU', { maximumFractionDigits: n / total < 0.1 ? 1 : 0 })}%` : '');
+  const striped = (color: string) => `repeating-linear-gradient(135deg, ${color} 0 3px, transparent 3px 6px)`;
   // A bar with people behind it can be clicked: they are followed on the map, and can be listed.
-  const row = (label: string, n: number, color: string, key: string | number, who: Who, note?: string) => (
-    <li
-      key={key}
-      className={n > 0 ? 'results-clickable' : ''}
-      title={`${note ?? `${fmt(n)} people: ${label.toLowerCase()}`}${n > 0 ? ' · click to follow them on the map' : ''}`}
-      onClick={n > 0 ? () => followPeople(who) : undefined}
-    >
-      <span className="results-bar-label">{label}</span>
-      <span className="results-bar-track">
-        <i style={{ width: `${Math.min(100, (n / max) * 100)}%`, background: color }} />
-      </span>
-      <span className="results-bar-n">{fmt(n)}</span>
-      <span className="results-bar-share muted">{share(n)}</span>
-    </li>
-  );
+  const row = (label: string, parts: { n: number; background: string }[], key: string | number, who: Who, note?: string) => {
+    const n = parts.reduce((sum, part) => sum + part.n, 0);
+    return (
+      <li
+        key={key}
+        className={n > 0 ? 'results-clickable' : ''}
+        title={`${note ?? `${fmt(n)} people: ${label.toLowerCase()}`}${n > 0 ? ' · click to follow them on the map' : ''}`}
+        onClick={n > 0 ? () => followPeople(who) : undefined}
+      >
+        <span className="results-bar-label">{label}</span>
+        <span className="results-bar-track" style={{ display: 'flex' }}>
+          {parts.map((part, at) => (part.n > 0 || at === 0 ? <i key={at} style={{ width: `${Math.min(100, (part.n / max) * 100)}%`, minWidth: part.n > 0 ? 1 : 0, background: part.background }} /> : null))}
+        </span>
+        <span className="results-bar-n">{fmt(n)}</span>
+        <span className="results-bar-share muted">{share(n)}</span>
+      </li>
+    );
+  };
+  const groupRow = (n: number, i: number) => {
+    if (i < SAME_GROUP) {
+      const moved = Math.min(n, nearby[i]);
+      return row(
+        GROUP_LABELS[i],
+        [{ n: n - moved, background: GROUP_COLORS[i] }, { n: moved, background: striped(GROUP_COLORS[i]) }],
+        i,
+        { kind: 'group', group: i },
+        `${fmt(n)} people arrive ${GROUP_LABELS[i].toLowerCase()}${moved > 0 ? `; ${fmt(moved)} of them only by using a nearby stop that was already quicker on the published timetable` : ''}`,
+      );
+    }
+    const gone = gaveUp[i];
+    return row(
+      GROUP_LABELS[i],
+      [{ n, background: GROUP_COLORS[i] }, { n: gone, background: 'var(--text)' }],
+      i,
+      n > 0 ? { kind: 'group', group: i } : { kind: 'gaveUp' },
+      `${fmt(n)} people arrive ${GROUP_LABELS[i].toLowerCase()}${gone > 0 ? `; ${fmt(gone)} more gave up, because their journey would be this much later${o.gaveUp!.atLeast > 0 ? ' or more (the run recorded only that it was past the limit)' : ''}` : ''}`,
+    );
+  };
   return (
     <>
       <ul className="results-bars">
@@ -284,14 +376,39 @@ function ChangeChart({ o }: { o: Overview }) {
               <span className="results-bar-share muted">{share(n)}</span>
             </li>
           ) : (
-            row(GROUP_LABELS[i], n, GROUP_COLORS[i], i, { kind: 'group', group: i })
+            groupRow(n, i)
           ),
         )}
       </ul>
       <ul className="results-bars results-bars-extra">
-        {row('Can no longer travel', lost, 'var(--text)', 'lost', { kind: 'lost' }, `${fmt(lost)} people travelled before and do not now: ${fmt(o.lost!.gaveUp)} gave up, ${fmt(o.lost!.stranded)} stranded, ${fmt(lost - o.lost!.gaveUp - o.lost!.stranded)} with no journey`)}
-        {gained > 0 && row('Can now travel', gained, 'var(--muted)', 'gained', { kind: 'gained' }, `${fmt(gained)} people had no journey before and travel now`)}
+        {row('Can no longer travel', [{ n: lost, background: 'var(--text)' }], 'lost', { kind: 'noJourney' }, `${fmt(lost)} people travelled before and now have no journey${o.lost!.stranded > 0 ? ` (${fmt(o.lost!.stranded)} of them stranded by full vehicles)` : ''}. People who gave up are in the bars above.`)}
+        {gained > 0 && row('Can now travel', [{ n: gained, background: 'var(--muted)' }], 'gained', { kind: 'gained' }, `${fmt(gained)} people had no journey before and travel now`)}
       </ul>
+      {(nearbyPeople > 0 || gaveUpPeople > 0) && (
+        <p className="muted small">
+          {nearbyPeople > 0 && (
+            <>
+              <i className="results-dot" style={{ background: striped(GROUP_COLORS[1]), borderRadius: 2 }} />
+              Striped: sooner only by using a nearby stop that was already quicker on the published timetable ({fmt(nearbyPeople)} people).{' '}
+              <button className="link small" onClick={() => followPeople({ kind: 'soonerNearby' })}>
+                Follow them
+              </button>{' '}
+              <button className="link small" onClick={() => followPeople({ kind: 'soonerTruly' })}>
+                Follow the rest
+              </button>{' '}
+            </>
+          )}
+          {gaveUpPeople > 0 && (
+            <>
+              <i className="results-dot" style={{ background: 'var(--text)', borderRadius: 2 }} />
+              Dark: gave up, placed by how much later their journey would be{o.gaveUp!.atLeast > 0 ? ', or by the limit where the run did not record it' : ''} ({fmt(gaveUpPeople)} people).{' '}
+              <button className="link small" onClick={() => followPeople({ kind: 'gaveUp' })}>
+                Follow them
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <WhoNote />
     </>
   );
@@ -490,11 +607,15 @@ function HourChart({ rows }: { rows: NonNullable<Overview['byHour']> }) {
         {shown ? (
           <span className="results-hover-text">
             {String(shown.hour % 24).padStart(2, '0')}:00 to {String((shown.hour + 1) % 24).padStart(2, '0')}:00 · {fmt(shown.up - shown.lost)} later · {fmt(shown.down)} sooner
-            {shown.lost ? ` · ${fmt(shown.lost)} can no longer travel` : ''} · {fmt(shown.groups[SAME_GROUP])} the same
+            {shown.nearby ? ` (${fmt(shown.nearby)} only by a nearby stop that was already quicker)` : ''}
+            {shown.lost ? ` · ${fmt(shown.lost)} can no longer travel${shown.gaveUp ? ` (${fmt(shown.gaveUp)} gave up)` : ''}` : ''} · {fmt(shown.groups[SAME_GROUP])} the same
           </span>
         ) : (
           <>
-            <span>Above the line: people who arrive later (darker is later), and in the text colour those who can no longer travel. Below: sooner.</span>
+            <span>
+              Above the line: people who arrive later (darker is later), and in the text colour those who can no longer travel or gave up. Below: sooner, including those who only moved to a
+              nearby stop that was already quicker.
+            </span>
           </>
         )}
       </div>
@@ -540,7 +661,7 @@ function TimesChart({ a, b, aName, bName }: { a: JourneyTimes; b: JourneyTimes |
 // ---------------------------------------------------------------------------
 type Sort = 'change' | 'now' | 'name' | 'full';
 
-function Lines({ run, rows, error, compared }: { run: SimRun; rows: LineRow[] | null; error: string | null; compared: boolean }) {
+function Lines({ run, rows, error, compared, capacity }: { run: SimRun; rows: LineRow[] | null; error: string | null; compared: boolean; capacity: Capacities }) {
   const state = useStore((s) => s.simResults);
   const modes = useStore((s) => s.modes);
   const set = useStore((s) => s.set);
@@ -571,6 +692,7 @@ function Lines({ run, rows, error, compared }: { run: SimRun; rows: LineRow[] | 
   const changedCount = rows.filter((l) => l.a !== l.b).length;
   const percent = (share: number | null) => (share === null ? '' : `${Math.round(share * 100)}%`);
   const chosen = state.lineId !== null ? (rows.find((l) => l.id === state.lineId) ?? null) : null;
+  const placeholders = placeholderNote(capacity ?? (run.capacities ? { trips: run.capacities.trips, placeholder: run.capacities.placeholderOrAssumed } : null));
 
   return (
     <div className={`results-lines${chosen ? ' with-detail' : ''}`}>
@@ -593,6 +715,7 @@ function Lines({ run, rows, error, compared }: { run: SimRun; rows: LineRow[] | 
           <p className="note">{rows.length === 0 ? 'Nobody rides anything in this part of the day.' : compared && onlyChanged && !find ? 'No line carries more or fewer passengers than before.' : 'No line matches.'}</p>
         ) : (
           <div className="results-scroll">
+            {placeholders && <p className="warn-text small">"Fullest" rests on vehicle capacities. {placeholders}</p>}
             <table className="results-table results-line-table">
               <thead>
                 <tr>
@@ -600,8 +723,13 @@ function Lines({ run, rows, error, compared }: { run: SimRun; rows: LineRow[] | 
                   {compared && <th className="n">Before</th>}
                   <th className="n">{compared ? 'Now' : 'Passengers'}</th>
                   <th>{compared ? 'Change in passengers' : ''}</th>
-                  <th className="n" title="The fullest any of its vehicles gets: passengers aboard as a share of its places">
+                  <th className="n" title={`The fullest any of its vehicles gets: passengers aboard as a share of its places.${placeholders ? ` ${placeholders}` : ''}`}>
                     Fullest{compared ? ', before and now' : ''}
+                    {placeholders && (
+                      <span className="tag tag-warn" title={placeholders}>
+                        placeholder capacities
+                      </span>
+                    )}
                   </th>
                 </tr>
               </thead>
@@ -678,7 +806,10 @@ function LineCard({ run, line, compared, onClose }: { run: SimRun; line: LineRow
         <p className="muted small">Working it out ...</p>
       ) : (
         <>
-          <h3>Passengers boarding, by hour</h3>
+          <p className="muted small">
+            Everything in this card is for the whole day{state.band !== null ? `, not only the ${DAY_BANDS[state.band].label} chosen above` : ''}.
+          </p>
+          <h3>Passengers boarding, by hour, whole day</h3>
           <BoardingsByHour rows={d.hourly} compared={compared} />
           {compared && (d.went || d.cameFrom) && (
             <>
@@ -702,7 +833,7 @@ function LineCard({ run, line, compared, onClose }: { run: SimRun; line: LineRow
             </>
           )}
           {compared && !d.went && <p className="muted small">Where its passengers went needs the journeys of both runs; one of them is archived.</p>}
-          <h3>Stations on the line, {compared ? 'biggest change first' : 'busiest first'}</h3>
+          <h3>Stations on the line, whole day, {compared ? 'biggest change first' : 'busiest first'}</h3>
           <Along stops={d.stops} compared={compared} />
         </>
       )}

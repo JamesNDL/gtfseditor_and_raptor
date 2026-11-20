@@ -101,6 +101,8 @@ interface AppState {
   theme: 'dark' | 'light';
   editBusy: boolean;
   editError: string | null;
+  /** A change the server has worked out but not applied, because it adds many vehicles: waiting for a yes or no. */
+  editConfirm: { edit: { kind: string; [key: string]: unknown }; added: number; message: string; summary: string } | null;
   /** The panel folded out of the rail on the left, or null when all are folded away. */
   leftPane: LeftPane | null;
   /** The vehicle catalogue screen. */
@@ -231,6 +233,7 @@ export const useStore = create<AppState>((set) => ({
   })(),
   editBusy: false,
   editError: null,
+  editConfirm: null,
   leftPane: (() => {
     try {
       const kept = localStorage.getItem('leftPane');

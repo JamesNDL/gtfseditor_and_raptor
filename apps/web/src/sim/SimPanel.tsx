@@ -7,7 +7,7 @@ import { fmt } from '../inspector/parts.tsx';
 import { selectScenario } from '../scenario.ts';
 import { useStore } from '../store.ts';
 import { Rename } from './SimLibrary.tsx';
-import { isActive, madeBy, progressText, refreshRuns, send, type SimJourney, type SimRun } from './simApi.ts';
+import { OUT_OF_DATE, areaText, isActive, madeBy, progressText, refreshRuns, send, walkText, type SimJourney, type SimRun } from './simApi.ts';
 
 const minutes = (n: number) => `${n.toLocaleString('en-AU', { maximumFractionDigits: n < 10 ? 1 : 0 })} min`;
 
@@ -191,10 +191,13 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
         {' · '}
         {run.area ? (run.area.name ?? 'a box') : 'whole network'}
         {run.capacity ? ' · capacity on' : ''}
+        {run.madeUp ? ' · made-up journeys' : ''}
       </div>
-      {run.outOfDate && (
-        <p className="warn-text small">Out of date: the timetable has been edited since this run. Figures are not shown on trips that changed.</p>
+      {run.area && <div className="muted small">{areaText(run.area)}.</div>}
+      {run.madeUp && (
+        <p className="warn-text small">Made-up journeys: these people were generated, not observed. The figures show how the simulator behaves, not how real travel would change.</p>
       )}
+      {run.outOfDate && <p className="warn-text small">{OUT_OF_DATE} Figures are not shown on trips that changed.</p>}
       {onScenario !== scenarioId && (
         <p className="small">
           <span className="muted">Its figures show on lines, trips and stations when {run.kind === 'bau' ? 'the published timetable' : 'that scenario'} is open. </span>
@@ -229,7 +232,11 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
           {s.againstBau && (
             <div className="scenario-section">
               <h3>Against the published timetable</h3>
-              <Line label="Arrive sooner" value={`${fmt(s.againstBau.sooner)}${s.againstBau.sooner ? `, by ${minutes(s.againstBau.meanMinutesSooner)}` : ''}`} />
+              <Line
+                label="Arrive sooner"
+                value={`${fmt(s.againstBau.sooner)}${s.againstBau.sooner ? `, by ${minutes(s.againstBau.meanMinutesSooner)}` : ''}`}
+                title="This counts everyone who arrives sooner, including people who only moved to a nearby stop that was already quicker on the published timetable. The results window counts those apart."
+              />
               <Line label="Arrive later" value={`${fmt(s.againstBau.later)}${s.againstBau.later ? `, by ${minutes(s.againstBau.meanMinutesLater)}` : ''}`} />
               <Line label="Within a minute" value={fmt(s.againstBau.within1Minute)} />
               {s.againstBau.noLongerAbleToTravel + s.againstBau.newlyAbleToTravel > 0 && (
@@ -384,7 +391,7 @@ function Person({ run }: { run: SimRun }) {
               {j.legs.map((l) => (
                 <div key={l.leg} className="muted small ellipsis">
                   {formatSecs(l.depart).slice(0, 5)}{' '}
-                  {l.kind === 'ride' ? `${l.stayAboard ? 'stays aboard ' : ''}${l.routeName ?? 'a vehicle'} from ${l.fromStop ?? '?'} to ${l.toStop ?? '?'}` : `walks ${fmt(l.metres)} m${l.toStop ? ` to ${l.toStop}` : ''}`}
+                  {l.kind === 'ride' ? `${l.stayAboard ? 'stays aboard ' : ''}${l.routeName ?? 'a vehicle'} from ${l.fromStop ?? '?'} to ${l.toStop ?? '?'}` : `walks ${walkText(l.metres)}${l.toStop ? ` to ${l.toStop}` : ''}`}
                 </div>
               ))}
               {j.leftBehind > 0 && <div className="warn-text small">Left behind {j.leftBehind} time{j.leftBehind === 1 ? '' : 's'} by a full vehicle</div>}

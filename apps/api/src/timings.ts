@@ -6,7 +6,7 @@
 //   2. published trips of the same mode between other stops close by: their median speed;
 //   3. the typical end-to-end speed of the mode on that day.
 // Each is worked out for five parts of the day where there are enough trips, otherwise for the whole day.
-import { DAY_BANDS } from '@gtfs-editor/core';
+import { DAY_BANDS, minRunSecs } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 
 export interface Place {
@@ -141,9 +141,15 @@ export async function sectionTime(
   from: Place,
   to: Place,
   lengthM: number,
-  /** Fallback speed in metres per second, and the stop time at the far end that the typical speed already includes. */
+  /**
+   * Fallback speed in metres per second, and the stop time the caller adds at the far end. The
+   * typical speed counts time spent at stops, so that much is taken back out; a caller that adds no
+   * stop time (bus timetables have none) gives nought, and nothing is taken out.
+   */
   model: { speed: number; dwellAtTo: number },
 ): Promise<SectionTime> {
+  // Whatever the evidence says, the stretch is never timed faster than the vehicle can go.
+  const least = minRunSecs(modeId, lengthM);
   const rows = await tx.unsafe(
     `select ${BAND_CASE('a.dep')} as band, count(*)::int as n, percentile_cont(0.5) within group (order by b.arr - a.dep) as value
      from stop_times a
@@ -159,10 +165,10 @@ export async function sectionTime(
   }
   const key = (p: Place) => `${p.lon.toFixed(3)},${p.lat.toFixed(3)}`;
   const near = await cached(`near|${baselineId}|${modeId}|${key(from)}|${key(to)}`, () => nearbySpeeds(tx, baselineId, modeId, from, to));
-  if (near) return { byBand: near.map((v) => Math.max(20, round10(lengthM / v))), source: 'nearby' };
+  if (near) return { byBand: near.map((v) => Math.max(20, least, round10(lengthM / v))), source: 'nearby' };
   const speeds = await modeSpeeds(tx, baselineId, modeId, model.speed);
   // The typical speed already includes time spent at stops, so take the stop time back out.
-  return { byBand: speeds.map((v) => Math.max(30, round10(lengthM / v - model.dwellAtTo))), source: 'typical' };
+  return { byBand: speeds.map((v) => Math.max(30, least, round10(lengthM / v - Math.max(0, model.dwellAtTo)))), source: 'typical' };
 }
 
 /** "3 sections from published trips, 2 from services nearby, 1 at the typical speed for this mode; ..." */
@@ -182,6 +188,6 @@ export function describeTimes(sections: SectionTime[], what: string, first = sec
   const spread =
     slow - fast >= 60
       ? `; ${what} ${Math.round(slow / 60)} min in the ${slowest}, ${Math.round(fast / 60)} min at the quietest time`
-      : `; ${what} ${Math.round(slow / 60)} min all day`;
+      : `; ${what} ${slow < 90 ? `${Math.round(slow)} s` : `${Math.round(slow / 60)} min`} all day`;
   return `${parts.join(', ')}${sections.length ? spread : ''}`;
 }

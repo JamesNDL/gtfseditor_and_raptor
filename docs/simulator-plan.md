@@ -159,7 +159,7 @@ Each journey has a cost, worked out the way the router already does to recommend
 
 **People do not change vehicles to save a few minutes** (decided 18 Nov). The 10 minutes per vehicle is the owner's figure: a journey with one more change is taken only if it arrives more than 10 minutes sooner. It applies wherever journeys are scored: in choosing each person's recommended journey, on BAU and scenario runs alike, and in comparing their own stops with stops near. The journey planner's own default stays at 5 minutes; the simulator passes its figure with each search.
 
-1. **On the published timetable** the person takes the own-stops journey, because that is what they did. If there is none (nothing runs between their two stops after their start), they have no journey on the published timetable, whatever is nearby: nobody changes stop there. The difference in cost between the two journeys is their **margin**: how much better a nearby stop already was on the day, and they did not use it. It is 0 for most people and it is kept with the reference (below).
+1. **On the published timetable** the person takes the own-stops journey, because that is what they did. If there is none (nothing runs between their two stops after their start), they have no journey on the published timetable, whatever is nearby: nobody changes stop there. The difference in cost between the two journeys is their **margin**: how much better a nearby stop already was on the day, and they did not use it. It is kept with the reference (below). With real journey data it should be 0 for most people. With made-up journeys it was not: 72% of travellers in a Newcastle BAU run had a margin, by 28 minutes on average, because each was drawn at a stop without regard to what was near it. Since 20 Nov the generator starts each person at the stops the router recommends (section 19), and that figure is 1%.
 2. **On a changed timetable** both are planned again. The person changes stop only if the any-stop-near journey now beats the own-stops journey by more than their margin plus a threshold (10 minutes by default). Otherwise they stay.
 3. **If the own-stops journey does not exist** on the changed timetable (the stop is gone, nothing calls there, or nothing from it reaches the destination), they take the any-stop-near journey if there is one.
 
@@ -187,6 +187,7 @@ What this gives:
 | How much time one more change of vehicle must save | 10 minutes | 0 to 30 minutes. Set on the BAU run and kept by the scenario runs made against it (section 6.4). |
 | How much better another stop must be before they change | 10 minutes | 0 to 30 minutes |
 | How much later they will accept arriving before they give up | 60 minutes | 10 minutes upward, or no limit |
+| The longest they will wait in all, before setting off and between vehicles (added 20 Nov; not yet in the wizard, `maxWaitSecs` in the API) | 4 hours | 10 minutes upward, or no limit. Set on the BAU run and kept by the scenario runs made against it. A journey that needs more is no journey. |
 
 What follows, to be clear about:
 
@@ -716,7 +717,7 @@ On the map, one layer at a time, chosen in a small key beside the left column:
 | Map: through here | With nothing picked, every stretch is drawn by its passengers and a click on a stretch or a stop picks the people who ride it, or who get on, off or change there. With people picked, the stretches they ride are drawn as wide as there are of them, red where they no longer ride and blue where they now do, with a dot where each starts (teal) and is going (orange). |
 | Map: how full | Vehicles take the colour of how full they are at the clock's time: grey empty, then under half, 50 to 80%, 80 to 100%, over 100%. The pointer says how full a vehicle is now and the most it carries all day. Shown when the timetable open is the one the run was made on. |
 | Timelines | "How full" in the timeline's header (and in the map's key) colours trips the same way: each stretch of a trip in the trip diagram, each part of a bar in the vehicle chart, each call in the platform chart. |
-| API | `GET /api/sim-runs/:id/results/overview`, `/lines`, `/lines/:line`, `/flows`, `/places`, `/patterns`, `/people`, `/people/:journey`, `/trace` and `/vehicle-loads`, each taking `vs`, `from` and `to` (`apps/api/src/sim-results.ts`). `/people` and `/trace` take `who=`: `all`, `changed`, `later`, `sooner`, `lost`, `gained`, `group:<0 to 8>`, `user:<user_id>`, `line:<id>:<a or b>`, `stop:<id>:<a or b>`, `link:<from>-<to>:<a or b>`, where `a` is this run and `b` the one compared with. |
+| API | `GET /api/sim-runs/:id/results/overview`, `/lines`, `/lines/:line`, `/flows`, `/places`, `/patterns`, `/people`, `/people/:journey`, `/trace` and `/vehicle-loads`, each taking `vs`, `from` and `to` (`apps/api/src/sim-results.ts`). `/people` and `/trace` take `who=`: `all`, `changed`, `later`, `sooner`, `soonerTruly`, `soonerNearby`, `lost`, `gaveUp`, `noJourney`, `gained`, `group:<0 to 8>`, `user:<user_id>`, `line:<id>:<a or b>`, `stop:<id>:<a or b>`, `link:<from>-<to>:<a or b>`, where `a` is this run and `b` the one compared with. |
 | Database | `sim_link_loads`: passengers on each stretch by half hour, worked out when a run's results are copied in. |
 
 ### Checked on the published weekday
@@ -763,6 +764,8 @@ Checked on 20 Nov on a 20,000-journey Newcastle BAU run and a scenario with bus 
 - **How full is in five steps, not a figure,** on the map and in the timelines; the pointer gives the trip's fullest moment as a figure. Capacities are placeholders.
 - **Vehicles and timelines show one run, not a comparison,** and only on the timetable the run was made on.
 
+- **The headline was changed on 20 Nov** (section 19): what the Overview row above calls "the hours of travel gained and lost in total" now leaves out the gain of people who only moved to a nearby stop that was already quicker, and counts people who gave up.
+
 ### Still to build, in order
 
 | Step | What |
@@ -770,3 +773,75 @@ Checked on 20 Nov on a 20,000-journey Newcastle BAU run and a scenario with bus 
 | R3 | Built 20 Nov: the Travel patterns tab, "Through here" on the map, and clicking a bar of the change in arrival time or a line to see those people on the map. |
 | R4 | Built 20 Nov: the People tab, with each person's journey before and after; vehicles coloured by how full at the clock's time; trips coloured in the timelines. |
 | Later | Flows that follow the road and the track. A separate browser window for a second screen. Clicking a bar of "by the hour people set off" or of the journey-time chart. |
+
+## 19. After the review of 20 Nov 2026: honest results
+
+A review of the editor on 20 Nov found the simulator's bookkeeping exact and its headline not believable. Scenario 2 removes 410 trips around Newcastle and adds none, and the results window reported 758 people arriving sooner and a net 280 hours saved. This section says what was wrong, what changed, and what the same runs say now.
+
+### What was wrong
+
+| Fault | Cause |
+|---|---|
+| A cut was scored as a gain | 706 of the 758 "sooner" people only moved to a nearby stop whose journey the published timetable already offered. Their own stop lost its service, so the rule of section 4.6 sent them to the other one, where they arrive sooner than they did. The scenario gave them nothing. |
+| Why so many | The journeys were made up. Each person was drawn at a stop in proportion to its service, with no regard to what was near: 72% of travellers in the BAU run started at a stop that one nearby already beat, by 28 minutes on average. Real tap data would have few. |
+| People who gave up were in no figure of time | They were counted as "can no longer travel" and left out of "later" and of the hours. "Later" was therefore capped at the give-up limit, and the "30 minutes or more later" bar could never fill. The run did not record how much later their journey would have been. |
+| "Made up" was said only in the wizard | And a made-up file that had been uploaded (demand set 10) was not flagged at all. |
+| "Changed stop" missed people whose own stop was removed | 580 and 432 in the run's summary against 901 and 762 by the stops used. The flag asked whether the stop used was the person's own, and answered no when the timetable no longer had their own stop to compare with. |
+| A wait of most of a day was an ordinary journey | In the whole-network BAU run, 167 journeys left more than 4 hours after the person turned up, one after 16 hours. A scenario run had the give-up rule; a BAU run had nothing. |
+| A start at "00:20" was taken as the small hours of the morning, with no warning | Times count from the start of the service day. |
+| Crowding was shown without its caveat | Every vehicle capacity is a placeholder, and the Lines tab and the flow key did not say so. |
+
+### What changed
+
+| Where | What |
+|---|---|
+| Results, Overview and Travel time | "Arrive sooner" is split. **Truly sooner**: sooner by a minute or more. **Now use a nearby stop that was already quicker on the published timetable**: sooner, using a stop near their own in this run and not in the other, and with a margin above nothing in the BAU run. The second is shown as its own tile, striped in the bars, and is not counted as time gained. |
+| The hours, all told | Hours lost by those who arrive later and by those who gave up, less hours gained by those truly sooner. It reads "lost" or "gained", never a bare signed figure. |
+| People who gave up | Counted by how much later than on the published timetable the journey they turned down would have been (`later_secs`, now written for them). They have their own tile and are drawn, dark, in the "later" bars, so "30 minutes or more" fills. A run made before 20 Nov did not record it; its gave-ups are counted at the limit itself and the figures say "at least". "Can no longer travel" is now those with no journey or stranded. |
+| Made-up journeys | A tag in the results window's title and a line under the headline of every run whose demand set was generated, with the BAU margin: how many travellers a nearby stop already beat. A set is made up if the editor made it, or if every user id has the generator's form (`u0000001`) and every end a position: the check works that out, so an uploaded made-up file is flagged. Sets checked before this are checked again the first time the list is asked for. |
+| The generator | Each person is drawn as before and then moved to the stops the router recommends for their journey, as a default BAU run judges it, up to four times over (the walking distance is measured from where they now stand). They stay inside the area asked for. |
+| Changed stop | Someone whose own stop the scenario's timetable no longer has, and who travels, has changed stop. The Travel patterns tab already counted by the stops used and was right. |
+| The longest wait | A journey that would have the person wait more than 4 hours in all (`maxWaitSecs`, a setting of the BAU run that its scenario runs keep) is no journey, with the reason "only after a longer wait than the limit". A BAU run made before 20 Nov has no limit, and nor do the runs made from it. |
+| The demand check | Warns when rows start before 04:00, and says how to write a time after midnight. The router's journey answer carries the same warning. |
+| Crowding | The Lines tab ("Fullest"), the flow key when coloured by how full, and the vehicles layer say that capacities are placeholders, from the run's own count of them. |
+| Smaller things | A capacity run of a scenario run opens against that scenario run, as section 18 always said. A bounded run's limits are shown in the panel and the results window. A station's "most waiting" is the largest of its platforms' figures, with the sum given as the most it can be. A line's card says it is for the whole day. A walk is shown as about 1.3 times the straight line, with the straight line. |
+
+The router's rules for walks and changes changed on the same day (section 18 of the router plan): a change on foot takes at least two minutes, a platform takes its pathway time to reach, and no walk crosses water that a ferry sails. A run planned under the old rules cannot be compared with one planned under the new, so **every run made before 20 Nov now shows as out of date**, and a scenario run against such a BAU run is refused. They still open and compare with each other.
+
+### The same runs, before and after
+
+Run 84 (Scenario 2, 410 trips removed) against run 75, both made on 20 Nov before the change, read by the old results window and the new:
+
+| | Before | Now |
+|---|---|---|
+| Arrive sooner | 758, by 25 min; 320 hours | 52 truly sooner, by 7 min; 6 hours |
+| Now use a nearby stop that was already quicker | not shown | 706, by 27 min; 314 hours, not counted |
+| Arrive later | 274, by 9 min; 40 hours | the same |
+| Gave up | 204, in "can no longer travel" | 204, at least 20 min later each; at least 68 hours |
+| Can no longer travel | 256 | 52 |
+| The hours, all told | 280 hours saved | at least 102 hours lost |
+| Made-up journeys | not said | said |
+| BAU travellers a nearby stop already beat | not shown | 12,577 of 17,478 (72%), by 28 min |
+
+The true loss of those who gave up is larger than 68 hours: the review measured about 39 minutes each, 134 hours, from the run's own files. The old runs do not hold it in the database.
+
+A new set of 20,000 made-up journeys for Newcastle, a BAU run and a run of Scenario 2 against it, all under the new rules (made for the check and removed afterwards):
+
+| | |
+|---|---|
+| BAU travellers a nearby stop already beat | 181 of 18,302 (1%) |
+| No journey in the BAU run | 1,698, 9 of them for the longest wait |
+| Arrive sooner | 49: 43 truly, by 6 min (4 hours); 6 by a nearby stop |
+| Arrive later | 344, by 10 min (60 hours) |
+| Gave up | 297, 45 min later on average (223 hours); 207 of them 30 minutes or more |
+| Can no longer travel | 50 |
+| The hours, all told | 278 hours lost |
+| Changed stop, in the run's summary | 300 at the start, 285 at the end |
+
+### Limits
+
+- **"Already quicker" is judged by the margin,** which is a difference in cost (arrival, plus 10 minutes a vehicle, plus the walk again), not in arrival alone. The arrival a nearby stop offered on the published timetable is in the run's files and not in the database, so the split is by person: someone with any margin who moves to a nearby stop and arrives sooner is in the second group whole, even if part of their gain is new.
+- **Someone can arrive sooner and be worse off,** with a cut and nothing added: the journey they preferred is gone and the one left has more changes. They are among the "truly sooner". There were 21 in run 84.
+- **Settling made-up people is done for a default BAU run** (500 m, 10 minutes a vehicle) on the whole network. A run with other settings, or cut to an area, leaves a few with a margin.
+- **People with no journey at all are in no figure of time.** Their loss has no length.
+- **Still made up.** None of this makes made-up journeys say anything about real travel.

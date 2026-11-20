@@ -289,6 +289,14 @@ function Wizard() {
                     {Object.entries(chosenDemand.report.refused ?? {}).map(([why, n]) => `${fmt(n)} with ${why}`).join('; ')}
                   </div>
                 )}
+                {(chosenDemand.report.warnings ?? []).map((warning) => (
+                  <div key={warning} className="warn-text">
+                    {warning}
+                  </div>
+                ))}
+                {chosenDemand.madeUp && (
+                  <div className="muted">Made-up journeys show how the simulator behaves, not how real travel would change. Every result of a run on them says so.</div>
+                )}
               </div>
             )}
 

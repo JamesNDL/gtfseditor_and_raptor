@@ -9,7 +9,7 @@ import {
   GROUP_COLORS, fetchResults, mins, resultsUrl, signed, useResults, whoHasSide, whoLabel, whoPhrase, whoParam,
   type Patterns, type PeopleList, type PersonRow, type Who,
 } from './results.ts';
-import type { SimJourney, SimRun } from './simApi.ts';
+import { walkText, type SimJourney, type SimRun } from './simApi.ts';
 
 /** Picks people out: they are followed on the map, and listed in the People tab when asked. */
 export function followPeople(who: Who, options: { list?: boolean; map?: boolean } = {}) {
@@ -211,7 +211,7 @@ export function PeopleTab({ run, compared }: { run: SimRun; compared: boolean })
   const kept = state.who && (compared || ['all', 'line', 'link', 'stop', 'user'].includes(state.who.kind)) ? state.who : null;
   const who: Who = kept ?? { kind: compared ? 'changed' : 'all' };
   const useSide = compared ? side : 'a';
-  const best = who.kind === 'sooner' || who.kind === 'gained' || (who.kind === 'group' && who.group < 4);
+  const best = who.kind === 'sooner' || who.kind === 'soonerTruly' || who.kind === 'soonerNearby' || who.kind === 'gained' || (who.kind === 'group' && who.group < 4);
   const key = whoParam(who, useSide);
   useEffect(() => {
     setLimit(100);
@@ -434,7 +434,7 @@ function Journeys({ parts }: { parts: SimJourney[] }) {
               {formatSecs(l.depart).slice(0, 5)}{' '}
               {l.kind === 'ride'
                 ? `${l.stayAboard ? 'stays aboard ' : ''}${l.routeName ?? 'a vehicle'} from ${l.fromStop ?? '?'} to ${l.toStop ?? '?'}, arriving ${formatSecs(l.arrive).slice(0, 5)}`
-                : `walks ${fmt(l.metres)} m${l.toStop ? ` to ${l.toStop}` : ''}`}
+                : `walks ${walkText(l.metres)}${l.toStop ? ` to ${l.toStop}` : ''}`}
             </div>
           ))}
           {j.leftBehind > 0 && <div className="warn-text small">Left behind {j.leftBehind} time{j.leftBehind === 1 ? '' : 's'} by a full vehicle</div>}

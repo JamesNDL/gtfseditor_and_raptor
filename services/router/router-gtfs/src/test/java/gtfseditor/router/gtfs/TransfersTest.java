@@ -1,6 +1,7 @@
 package gtfseditor.router.gtfs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import gtfseditor.router.core.Geo;
@@ -161,6 +162,70 @@ class TransfersTest {
         assertEquals(1, links(t, "N"));
         assertTrue(t.notes.stream().anyMatch(note -> note.contains("transfers.txt: 4 rows used, 1 left out")),
                 t.notes.toString());
+    }
+
+    @Test
+    void aPlatformTakesItsPathwayTimeToTheNearestEntrance() throws Exception {
+        // An entrance 30 s from the concourse, and a stop in the street 100 m north of platform 1.
+        Feed feed = feed();
+        feed.file("stops.txt", (feed.text("stops.txt") + "ENT,Entrance,-33.0000,151.0,2,ST\n"
+                + "STREET,Street,-32.9991,151.0,0,").split("\n"));
+        feed.file("pathways.txt", (feed.text("pathways.txt") + "door,WALK,ENT,1,1,30").split("\n"));
+        feed.file("stop_times.txt", (feed.text("stop_times.txt") + "T,08:09:00,08:09:00,STREET,10").split("\n"));
+        Timetable t = load(feed, TransferSettings.defaults());
+        int p1 = t.stopIndex("P1");
+        int p2 = t.stopIndex("P2");
+        assertEquals(70, t.stopExitSecs[p1]);
+        assertEquals(70, t.stopEntrySecs[p1]);
+        assertEquals(80, t.stopExitSecs[p2], "to the concourse and out; the gate to platform 1 is the long way");
+        assertEquals(80, t.stopEntrySecs[p2]);
+        assertEquals(0, t.stopExitSecs[t.stopIndex("STREET")]);
+        // 100 m x 1.3 / 1.03 m/s = 127 s, plus 30 s, plus the platform's 70 s.
+        assertEquals(227, walk(t, "P1", "STREET"), 1);
+        assertEquals(227, walk(t, "STREET", "P1"), 1);
+        // The walk between the two platforms is still the pathways' own.
+        assertEquals(90, walk(t, "P1", "P2"));
+    }
+
+    @Test
+    void aRailwayPlatformWithoutPathwaysGetsTheAllowance() throws Exception {
+        Feed feed = feed().file("routes.txt", "route_id,route_short_name,route_type", "R,1,2");
+        Timetable t = load(feed, TransferSettings.defaults());
+        assertEquals(60, t.stopExitSecs[t.stopIndex("N")]);
+        // 283 s as for a bus stop, and 60 s at each end.
+        assertEquals(403, walk(t, "N", "F"));
+        // Two platforms of one station are not sent out to the street and back.
+        assertEquals(60, walk(t, "Q1", "Q2"));
+        assertEquals(90, walk(t, "P1", "P2"));
+        assertTrue(t.notes.stream().anyMatch(note -> note.contains("railway platforms have no pathway")),
+                t.notes.toString());
+    }
+
+    @Test
+    void stopsAcrossWaterAreNotLinkedUnlessABridgeIsNear() throws Exception {
+        // A channel between N and F, with a gap in its line at a bridge 93 m to the east.
+        String[] channel = {"kind,lat1,lon1,lat2,lon2",
+                "water,-33.2009,150.99,-33.2009,151.0005", "water,-33.2009,151.0015,-33.2009,151.01"};
+        Path file = folder.resolve("water.csv");
+        java.nio.file.Files.write(file, java.util.List.of(channel));
+        Timetable t = GtfsLoader.load(feed().zip(folder), LoadOptions.defaults().withWater(WaterFile.read(file)));
+        assertEquals(-1, walk(t, "N", "F"));
+        assertEquals(-1, walk(t, "F", "N"));
+        assertEquals(409, walk(t, "N", "G"), 1);
+        assertTrue(t.notes.stream().anyMatch(note -> note.contains("1 pairs of stops within 500 m were not linked")),
+                t.notes.toString());
+
+        java.nio.file.Files.write(file, java.util.List.of(channel[0], channel[1], channel[2],
+                "bridge,-33.2009,151.001,,"));
+        Timetable bridged = GtfsLoader.load(feed().zip(folder), LoadOptions.defaults().withWater(WaterFile.read(file)));
+        // About 137 m to the bridge and 137 m on from it: 346 s of walking, plus 30 s.
+        int n = bridged.stopIndex("N");
+        assertEquals(376, walk(bridged, "N", "F"), 3);
+        assertEquals(273, bridged.transferMetres[bridged.transferOffset[n]], 3);
+        assertEquals(1, bridged.water.bridgeCount());
+
+        java.nio.file.Files.write(file, java.util.List.of(channel[0], "lake,-33.2,151,-33.2,151.1"));
+        assertThrows(GtfsException.class, () -> WaterFile.read(file));
     }
 
     @Test

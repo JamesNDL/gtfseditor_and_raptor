@@ -32,6 +32,10 @@ public final class Plans {
     public static final byte SAME_PLACE = 1;
     public static final byte NO_STOP = 2;
     public static final byte NOTHING_RUNS = 3;
+    /** There is a journey, but only after waiting longer than anyone is taken to wait. */
+    public static final byte LONG_WAIT = 4;
+    /** One more than the highest reason, for arrays indexed by reason. */
+    static final int WHY_COUNT = 5;
 
     public final byte[] status;
     /** Whether the journey chosen is the one that may use any stop near, not the own-stops one. */
@@ -49,6 +53,13 @@ public final class Plans {
     public final int[] ownCost;
     public final int[] nearArrive;
     public final int[] nearCost;
+    /**
+     * The stops at which the best journey that may use any stop near boards its first vehicle and
+     * leaves its last, or -1 if there is none. Not kept in a plans file; the demand generator reads
+     * them to start made-up people where the router would send them.
+     */
+    public final int[] nearFrom;
+    public final int[] nearTo;
 
     /** Searches run, and searches saved by reusing a plan. Zero for plans read from a file. */
     public long searches;
@@ -67,6 +78,10 @@ public final class Plans {
         ownCost = new int[rows];
         nearArrive = new int[rows];
         nearCost = new int[rows];
+        nearFrom = new int[rows];
+        nearTo = new int[rows];
+        java.util.Arrays.fill(nearFrom, -1);
+        java.util.Arrays.fill(nearTo, -1);
     }
 
     public int size() {
@@ -99,6 +114,7 @@ public final class Plans {
             case SAME_PLACE -> "starts and ends at the same place";
             case NO_STOP -> "no stop to use at one end";
             case NOTHING_RUNS -> "nothing gets there after this time";
+            case LONG_WAIT -> "only after a longer wait than the limit";
             default -> throw new IllegalArgumentException("no reason " + why);
         };
     }

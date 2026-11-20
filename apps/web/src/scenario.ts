@@ -1,7 +1,7 @@
 // Client side of scenarios: choosing one, sending edits, and keeping every view in step afterwards.
 import { getJson, type RouteListItem } from './api.ts';
 import { useStore } from './store.ts';
-import { applyRemovedTrips, loadScenarioVehicles, vehicleData } from './vehicles.ts';
+import { applyRemovedTrips, applyWaits, loadScenarioVehicles, loadWaits, vehicleData } from './vehicles.ts';
 
 export interface ScenarioSummary {
   id: number;
@@ -20,7 +20,13 @@ export interface ScenarioEdit {
 }
 
 export interface Conflict {
-  kind: 'platform' | 'vehicle';
+  /**
+   * platform and vehicle: two trips in one place, or one vehicle on two trips at once.
+   * speed: a stretch run faster than the mode can go, or backwards in time.
+   * place: a vehicle whose next trip starts somewhere it cannot have reached.
+   * closure: a path made after a closure that runs through it.
+   */
+  kind: 'platform' | 'vehicle' | 'speed' | 'place' | 'closure';
   tripId: number;
   otherTripId: number;
   stopId?: number;
@@ -43,8 +49,15 @@ export interface ScenarioInfo {
     vehicles: number;
     baselineVehicles: number;
     unassigned: number;
+    /** The most trips running at any one moment, in the scenario and as published. */
+    peak?: number;
+    baselinePeak?: number;
   };
   conflicts: Conflict[];
+  /** True when a list of clashes reached its limit, so there are more than are counted. */
+  conflictsCapped?: boolean;
+  /** How many vehicle types have a fleet size. With none, nothing warns that there are too few vehicles. */
+  fleetLimitsSet?: number;
   /** Each line the scenario has touched, before and after. */
   impact: {
     routeId: number;
@@ -86,6 +99,9 @@ export async function refreshScenario() {
   const list = await getJson<RouteListItem[]>(`/api/baselines/${baselineId}/routes${scenarioId === null ? '' : `?s=${scenarioId}`}`);
   const routes = new Map(list.map((r) => [r.id, r]));
   set({ routes });
+  // Which vehicle waits where between trips changes with the scenario. Not waited for: the map
+  // redraws when the answer arrives.
+  void loadWaits(baselineId, scenarioId);
   if (scenarioId === null) {
     applyRemovedTrips([]);
     vehicleData.delete('scenario');
@@ -100,6 +116,7 @@ export async function refreshScenario() {
   if (useStore.getState().scenarioId !== scenarioId) return; // switched away while loading
   applyRemovedTrips(removed);
   vehicleData.set('scenario', extra);
+  applyWaits();
   set({ scenarioInfo: info, dataVersion: useStore.getState().dataVersion + 1 });
 }
 
@@ -149,6 +166,8 @@ export interface EditResponse {
 export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null> {
   const state = useStore.getState();
   if (state.baselineId === null) return null;
+  // One edit at a time: a second drag before the first has landed would name a trip that no longer exists.
+  if (state.editBusy) return null;
   state.set({ editBusy: true, editError: null });
   try {
     // The first change to the published timetable starts a scenario for it automatically.
@@ -158,7 +177,20 @@ export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null
       useStore.getState().set({ scenarioId: created.id });
     }
     const scenarioId = useStore.getState().scenarioId!;
-    const result = await send<EditResponse>('POST', `/api/scenarios/${scenarioId}/edits`, edit);
+    // Sent unconfirmed first. A change that would add many vehicles comes back described, not
+    // applied; the user is asked (EditConfirm), and only a yes sends it again to be applied.
+    type Answer = EditResponse | { needsConfirm: { added: number; message: string; summary: string } };
+    const url = `/api/scenarios/${scenarioId}/edits`;
+    let answer = await send<Answer>('POST', url, { ...edit, confirm: edit.confirm === true });
+    if ('needsConfirm' in answer) {
+      useStore.getState().set({ editConfirm: { edit, ...answer.needsConfirm } });
+      const yes = await new Promise<boolean>((resolve) => (answerConfirm = resolve));
+      answerConfirm = null;
+      if (!yes) return null;
+      answer = await send<Answer>('POST', url, { ...edit, confirm: true });
+      if ('needsConfirm' in answer) throw new Error('The change could not be confirmed');
+    }
+    const result = answer;
     // Edited trips get new ids; keep the same trip open and highlighted.
     const now = useStore.getState();
     const remap = (id: number) => result.idMap[String(id)] ?? id;
@@ -173,10 +205,13 @@ export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null
     await refreshScenario();
     return result;
   } catch (err) {
-    useStore.getState().set({ editError: err instanceof Error ? err.message : String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    useStore.getState().set({ editError: message });
+    // The server refused a trip that has changed since this screen was drawn: draw it again.
+    if (/has since been changed/.test(message)) await refreshScenario().catch(() => undefined);
     return null;
   } finally {
-    useStore.getState().set({ editBusy: false });
+    useStore.getState().set({ editBusy: false, editConfirm: null });
   }
 }
 
@@ -201,12 +236,25 @@ async function step(direction: 'undo' | 'redo') {
   }
 }
 
+// The question EditConfirm is showing, waiting for its answer.
+let answerConfirm: ((yes: boolean) => void) | null = null;
+/** The user's answer to "this adds N vehicles": go ahead, or leave everything as it is. */
+export const confirmEdit = () => answerConfirm?.(true);
+export const cancelConfirm = () => answerConfirm?.(false);
+
+const FIX_ALL_LIMIT = 40;
+
 /** Applies the suggested fix for each conflict in turn, re-checking after every one. */
 export async function fixAll(): Promise<void> {
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < FIX_ALL_LIMIT; i++) {
     const next = useStore.getState().scenarioInfo?.conflicts.find((c) => c.fixes.length > 0);
     if (!next) return;
     if (!(await applyEdit(next.fixes[0].edit))) return;
+  }
+  // It stops after a set number so that it cannot run away. Say so, rather than look finished.
+  const left = useStore.getState().scenarioInfo?.conflicts.filter((c) => c.fixes.length > 0).length ?? 0;
+  if (left > 0) {
+    useStore.getState().set({ editError: `"Fix all" stops after ${FIX_ALL_LIMIT} fixes, and ${left} clash${left === 1 ? ' is' : 'es are'} left that it can fix. Press it again to carry on.` });
   }
 }
 

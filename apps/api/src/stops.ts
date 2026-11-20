@@ -10,11 +10,24 @@ const fail = (statusCode: number, message: string) => Object.assign(new Error(me
 
 const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
 
-/** SQL condition: the stop aliased `alias` is published, or was added by this scenario and not undone. */
+/** SQL condition: this scenario has deleted the stop aliased `alias` (apps/api/src/delete-stop.ts). */
+export function stopDeleted(sql: Sql, alias: string, sc: Scenario | null) {
+  const s = sql(alias);
+  if (!sc) return sql`false`;
+  return sql`exists (
+    select 1 from scenario_removed_stops gone
+    where gone.scenario_id = ${sc.id} and gone.stop_id = ${s}.id and gone.edit_seq <= ${sc.head})`;
+}
+
+/**
+ * SQL condition: the stop aliased `alias` is published, or was added by this scenario and not undone,
+ * and the scenario has not deleted it.
+ */
 export function stopVisible(sql: Sql, alias: string, sc: Scenario | null) {
   const s = sql(alias);
   if (!sc) return sql`${s}.scenario_id is null`;
-  return sql`(${s}.scenario_id is null or (${s}.scenario_id = ${sc.id} and ${s}.created_edit <= ${sc.head}))`;
+  return sql`((${s}.scenario_id is null or (${s}.scenario_id = ${sc.id} and ${s}.created_edit <= ${sc.head}))
+    and not ${stopDeleted(sql, alias, sc)})`;
 }
 
 // What a station and its platforms are called in each mode, following the feed's own naming.
@@ -147,7 +160,7 @@ export async function editAddStop(tx: Sql, sc: Scenario, seq: number, body: AddS
 export async function scenarioStopsGeoJson(sql: Sql, sc: Scenario) {
   const rows = await sql`
     select s.id, s.name, s.mode_ids[1] as mode, s.location_type, s.parent_id, s.platform_code, ST_X(s.geom) as lon, ST_Y(s.geom) as lat
-    from stops s where s.scenario_id = ${sc.id} and s.created_edit <= ${sc.head}`;
+    from stops s where s.scenario_id = ${sc.id} and s.created_edit <= ${sc.head} and not ${stopDeleted(sql, 's', sc)}`;
   return {
     type: 'FeatureCollection',
     features: rows.map((r) => ({

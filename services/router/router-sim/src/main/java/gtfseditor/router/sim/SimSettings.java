@@ -19,6 +19,13 @@ public final class SimSettings {
     public int switchThresholdSecs = 600;
     /** How much later than on the published timetable a person accepts arriving; -1 for no limit. */
     public int giveUpSecs = 3600;
+    /**
+     * The longest a person will wait in all, before setting off and between vehicles; -1 for no
+     * limit. A journey that needs more is not one they make: they count as having no journey. Four
+     * hours unless said: without it, someone who turns up after the last service of the morning
+     * "travels" by waiting for the evening one.
+     */
+    public int maxWaitSecs = 4 * 3600;
     /** Whether school buses may be ridden. */
     public boolean schoolBuses = false;
     /** Simulate one row in this many, each standing for this many times its people. */
@@ -46,6 +53,7 @@ public final class SimSettings {
         s.changePenaltySecs = changePenaltySecs;
         s.switchThresholdSecs = switchThresholdSecs;
         s.giveUpSecs = giveUpSecs;
+        s.maxWaitSecs = maxWaitSecs;
         s.schoolBuses = schoolBuses;
         s.shareOneIn = shareOneIn;
         s.area = area;
@@ -70,6 +78,9 @@ public final class SimSettings {
         if (giveUpSecs != -1 && giveUpSecs < 600) {
             throw new IllegalArgumentException("the give-up limit is 10 minutes or more, or none");
         }
+        if (maxWaitSecs != -1 && maxWaitSecs < 600) {
+            throw new IllegalArgumentException("the longest wait is 10 minutes or more, or none");
+        }
         if (shareOneIn < 1 || maxLeftBehind < 0 || threads < 1 || maxRides < 1 || changeSecs < 0) {
             throw new IllegalArgumentException("a setting is below its lowest value");
         }
@@ -90,6 +101,7 @@ public final class SimSettings {
         into.setProperty("area", area == null ? "all" : area.text());
         into.setProperty("maxRides", Integer.toString(maxRides));
         into.setProperty("changeSecs", Integer.toString(changeSecs));
+        into.setProperty("maxWaitSecs", Integer.toString(maxWaitSecs));
     }
 
     void readShared(Properties from) {
@@ -100,6 +112,8 @@ public final class SimSettings {
         area = Area.parse(from.getProperty("area"));
         maxRides = Integer.parseInt(from.getProperty("maxRides"));
         changeSecs = Integer.parseInt(from.getProperty("changeSecs"));
+        // A run made before there was a limit had none, and the runs made from it must match it.
+        maxWaitSecs = Integer.parseInt(from.getProperty("maxWaitSecs", "-1"));
     }
 
     /** The settings a scenario run chooses for itself. */

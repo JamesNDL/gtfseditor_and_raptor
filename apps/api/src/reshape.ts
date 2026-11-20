@@ -19,6 +19,7 @@ import {
   type Coord,
   type OldCall,
   type ReshapeSection,
+  maxSpeedMs,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { describeMethod, entersAvoid, linePath,METHOD_STRENGTH, ROAD_MODES, type Avoid, type PathMethod } from './roads.ts';
@@ -154,12 +155,14 @@ export async function publishedRunSecs(tx: Sql, fromStopId: number, toStopId: nu
  * The platform a line should use at a station: the one its trips in this direction already use
  * most, otherwise the first or second in platform order depending on direction.
  */
-async function pickPlatform(tx: Sql, stationId: number, routeId: number, direction: number | null, index: number, avoid = -1): Promise<number | null> {
+async function pickPlatform(tx: Sql, sc: Scenario | null, stationId: number, routeId: number, direction: number | null, index: number, avoid = -1): Promise<number | null> {
   const rows = await tx`
     select c.id,
            (select count(*)::int from patterns p
             where p.route_id = ${routeId} and p.direction_id is not distinct from ${direction}::int and p.stop_ids @> array[c.id]) as uses
     from stops c where c.parent_id = ${stationId} and c.location_type = 0
+      -- Not a platform of another scenario, or one this scenario has deleted.
+      and ${stopVisible(tx, 'c', sc)}
     order by (cardinality(c.mode_ids) = 0), length(c.platform_code), c.platform_code, c.id`;
   if (!rows.length) return null;
   const used = [...rows].sort((a, b) => b.uses - a.uses)[0];
@@ -209,7 +212,7 @@ export async function planReshape(
       newIds.push(id);
       continue;
     }
-    const platform = await pickPlatform(tx, id, pattern.route_id, pattern.direction_id, options.platformIndex);
+    const platform = await pickPlatform(tx, sc, id, pattern.route_id, pattern.direction_id, options.platformIndex);
     if (platform === null) throw fail(400, `${stop.name} has no platforms to stop at`);
     newIds.push(platform);
   }
@@ -311,8 +314,11 @@ export async function planReshape(
       rerouted++;
       const was = oldStopDist[keptAt[i]] - oldStopDist[keptAt[i - 1]];
       const now = pathDistances(piece);
-      const factor = was > 0 ? now[now.length - 1] / was : 1;
-      sections.push({ kind: 'detour', factor: Math.max(0.5, Math.min(6, factor)) });
+      const length = now[now.length - 1];
+      const factor = was > 0 ? length / was : 1;
+      // No upper limit on the factor (it was 6 until 20 Nov): a way round ten times as long takes
+      // that much longer. The lengths and speeds let each trip be timed no faster than it can go.
+      sections.push({ kind: 'detour', factor: Math.max(0.5, factor), lengthM: length, extraM: length - was, speed: model.speed, maxSpeed: maxSpeedMs(pattern.mode_id) });
     } else {
       for (let k = 1; k < run.length; k++) sections.push({ kind: 'new', secs: 0 });
     }
@@ -330,7 +336,7 @@ export async function planReshape(
     if (section.kind !== 'new') continue;
     const run = await sectionTime(tx, baselineId, pattern.mode_id, stops[i], stops[i + 1], stopDist[i + 1] - stopDist[i], {
       speed: model.speed,
-      dwellAtTo: dwellSecs || model.dwell,
+      dwellAtTo: dwellSecs,
     });
     section.byBand = run.byBand;
     section.secs = run.byBand[2];
@@ -546,7 +552,7 @@ export async function planOtherWay(
     const s = plan.stops[i];
     if (plan.keptAt[i] >= 0) counterpart.push(s.id);
     else if (ROAD_MODES.has(plan.modeId)) counterpart.push(((await acrossTheRoad(tx, s.id))?.id as number | undefined) ?? s.id);
-    else if (s.parentId !== null) counterpart.push((await pickPlatform(tx, s.parentId, plan.routeId, best!.q.direction_id, 1, s.id)) ?? s.id);
+    else if (s.parentId !== null) counterpart.push((await pickPlatform(tx, sc, s.parentId, plan.routeId, best!.q.direction_id, 1, s.id)) ?? s.id);
     else counterpart.push(s.id);
   }
   const mirrored = mirrorStops({ keptAt: plan.keptAt, matchOld: best!.match, counterpart, opposite });

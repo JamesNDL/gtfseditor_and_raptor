@@ -43,6 +43,10 @@ final class TestTimetables {
         b.transferTargets = new int[] {1};
         b.transferSecs = new int[] {120};
         b.transferMetres = new int[] {100};
+        b.stopExitSecs = new int[] {75, 0, 0};
+        b.stopEntrySecs = new int[] {90, 0, 0};
+        b.waterLines = new double[] {-33.005, 151.0, -33.005, 151.02};
+        b.waterBridges = new double[] {-33.005, 151.03};
         return b;
     }
 }

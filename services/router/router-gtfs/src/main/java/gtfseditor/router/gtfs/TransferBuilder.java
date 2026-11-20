@@ -2,6 +2,7 @@ package gtfseditor.router.gtfs;
 
 import gtfseditor.router.core.Geo;
 import gtfseditor.router.core.TransferSettings;
+import gtfseditor.router.core.Water;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,6 +17,11 @@ import java.util.PriorityQueue;
  * <p>Links come from four sources. When two sources link the same pair of stops, the first in this
  * list wins: the feed's own {@code transfers.txt}; the station pathways; two stops of one station;
  * two stops close together.
+ *
+ * <p>A generated link to or from a platform also takes the platform's time to the street: the
+ * feed's pathway time to the station's nearest entrance, or an allowance for a railway platform
+ * with no pathways. And two stops close together are not linked when the straight walk between
+ * them is over water, unless a bridge keeps the walk within the radius.
  */
 final class TransferBuilder {
 
@@ -30,25 +36,42 @@ final class TransferBuilder {
 
 
     /** The finished links, ready for the timetable, and how many came from where. */
-    record Result(int[] offset, int[] targets, int[] secs, int[] metres, List<String> notes) {}
+    record Result(int[] offset, int[] targets, int[] secs, int[] metres, int[] exitSecs, int[] entrySecs,
+            List<String> notes) {}
 
     private final TransferSettings settings;
     private final double[] lat;
     private final double[] lon;
     private final int stops;
+    private final Water water;
     private final List<String> notes = new ArrayList<>();
+
+    /** Seconds from each stop out to the street and in from it, beyond the walk on the surface. */
+    private final int[] exitSecs;
+    private final int[] entrySecs;
+    /** Per stop: whether the pathways gave those times. */
+    private boolean[] fromPathways;
 
     // Every proposed link, before duplicates are settled.
     private final IntList from = new IntList(1 << 12);
     private final IntList to = new IntList(1 << 12);
     private final IntList secs = new IntList(1 << 12);
     private final IntList kind = new IntList(1 << 12);
+    private final IntList length = new IntList(1 << 12); // metres, or -1 for the straight line
 
     TransferBuilder(TransferSettings settings, double[] lat, double[] lon) {
+        this(settings, lat, lon, Water.NONE);
+    }
+
+    TransferBuilder(TransferSettings settings, double[] lat, double[] lon, Water water) {
         this.settings = settings;
         this.lat = lat;
         this.lon = lon;
         this.stops = lat.length;
+        this.water = water;
+        this.exitSecs = new int[stops];
+        this.entrySecs = new int[stops];
+        this.fromPathways = new boolean[stops];
     }
 
     private double metres(int a, int b) {
@@ -56,13 +79,22 @@ final class TransferBuilder {
     }
 
     private void propose(int a, int b, int seconds, int source) {
+        propose(a, b, seconds, source, -1);
+    }
+
+    private void propose(int a, int b, int seconds, int source, int metres) {
         from.add(a);
         to.add(b);
         secs.add(seconds);
         kind.add(source);
+        length.add(metres);
     }
 
-    /** Links every pair of stops within the radius, found with a grid so no pair is tested twice over. */
+    /**
+     * Links every pair of stops within the radius, found with a grid so no pair is tested twice
+     * over. Call after {@link #addPathways} and {@link #addPlatformAllowance}, which say how long
+     * each platform takes to leave and to reach.
+     */
     void addNearby() {
         double radius = settings.radiusMetres();
         if (radius <= 0 || stops == 0) {
@@ -83,6 +115,8 @@ final class TransferBuilder {
         int[] cellY = new int[stops];
         int[] cellX = new int[stops];
         Map<Long, IntList> cells = new HashMap<>();
+        int overWater = 0;
+        int byBridge = 0;
         for (int s = 0; s < stops; s++) {
             cellY[s] = (int) ((lat[s] - minLat) / cellLat);
             cellX[s] = (int) ((lon[s] - minLon) / cellLon);
@@ -101,12 +135,50 @@ final class TransferBuilder {
                             continue;
                         }
                         double distance = metres(a, b);
-                        if (distance <= radius) {
-                            propose(a, b, settings.walkSecs(distance), NEARBY);
+                        if (distance > radius) {
+                            continue;
                         }
+                        if (!water.isEmpty()) {
+                            double walked = water.walkMetres(lat[a], lon[a], lat[b], lon[b]);
+                            if (walked < 0 || walked > radius) {
+                                overWater++;
+                                continue;
+                            }
+                            byBridge += walked > distance + 0.5 ? 1 : 0;
+                            distance = walked;
+                        }
+                        propose(a, b, exitSecs[a] + settings.walkSecs(distance) + entrySecs[b], NEARBY,
+                                (int) Math.round(distance));
                     }
                 }
             }
+        }
+        if (!water.isEmpty()) {
+            notes.add("water: " + count(water.lineCount()) + " pieces of ferry path and " + count(water.bridgeCount())
+                    + " bridges were given; " + count(overWater / 2) + " pairs of stops within "
+                    + Math.round(radius) + " m were not linked because the straight walk between them is over water, and "
+                    + count(byBridge / 2) + " are linked by way of a bridge");
+        }
+    }
+
+    /**
+     * Gives every railway platform that the pathways said nothing about the allowance in the
+     * settings for getting between it and the street.
+     *
+     * @param railPlatform per stop: whether a train or metro calls there
+     */
+    void addPlatformAllowance(boolean[] railPlatform) {
+        int given = 0;
+        for (int s = 0; s < stops; s++) {
+            if (railPlatform[s] && !fromPathways[s]) {
+                exitSecs[s] = settings.platformSecs();
+                entrySecs[s] = settings.platformSecs();
+                given++;
+            }
+        }
+        if (given > 0 && settings.platformSecs() > 0) {
+            notes.add(count(given) + " railway platforms have no pathway to an entrance; "
+                    + settings.platformSecs() + " s was assumed between each and the street");
         }
     }
 
@@ -167,8 +239,10 @@ final class TransferBuilder {
      * @param pathways  pathways.txt
      * @param rowOf     every row of stops.txt by id
      * @param stopOfRow the timetable's stop for a row of stops.txt, or -1
+     * @param entrance  per row of stops.txt: whether it is a station entrance (location type 2)
      */
-    void addPathways(CsvReader pathways, Map<String, Integer> rowOf, int[] stopOfRow) throws IOException {
+    void addPathways(CsvReader pathways, Map<String, Integer> rowOf, int[] stopOfRow, boolean[] entrance)
+            throws IOException {
         int cFrom = pathways.require("from_stop_id");
         int cTo = pathways.require("to_stop_id");
         int cBoth = pathways.column("is_bidirectional");
@@ -177,6 +251,7 @@ final class TransferBuilder {
         Map<Integer, Integer> nodeOfRow = new HashMap<>();
         IntList rowOfNode = new IntList(1 << 10);
         List<IntList> edges = new ArrayList<>(); // per node: target, seconds, target, seconds, ...
+        List<IntList> back = new ArrayList<>();  // the same pathways, walked the other way
         int unknown = 0;
         int untimed = 0;
         while (pathways.next()) {
@@ -191,13 +266,17 @@ final class TransferBuilder {
                 seconds = settings.defaultPathwaySecs();
                 untimed++;
             }
-            int na = node(a, nodeOfRow, rowOfNode, edges);
-            int nb = node(b, nodeOfRow, rowOfNode, edges);
+            int na = node(a, nodeOfRow, rowOfNode, edges, back);
+            int nb = node(b, nodeOfRow, rowOfNode, edges, back);
             edges.get(na).add(nb);
             edges.get(na).add(seconds);
+            back.get(nb).add(na);
+            back.get(nb).add(seconds);
             if (pathways.number(cBoth, 0) == 1) {
                 edges.get(nb).add(na);
                 edges.get(nb).add(seconds);
+                back.get(na).add(nb);
+                back.get(na).add(seconds);
             }
         }
         if (unknown > 0) {
@@ -241,15 +320,69 @@ final class TransferBuilder {
                 }
             }
         }
+
+        // How long each platform takes to reach from the nearest entrance, and to leave by one.
+        int[] in = fromEntrances(edges, rowOfNode, entrance);
+        int[] out = fromEntrances(back, rowOfNode, entrance);
+        int timed = 0;
+        for (int node = 0; node < nodes; node++) {
+            int stop = stopOfRow[rowOfNode.get(node)];
+            if (stop < 0 || (in[node] == Integer.MAX_VALUE && out[node] == Integer.MAX_VALUE)) {
+                continue;
+            }
+            // A platform the pathways lead out of but not into, or the other way, takes the one time both ways.
+            entrySecs[stop] = in[node] == Integer.MAX_VALUE ? out[node] : in[node];
+            exitSecs[stop] = out[node] == Integer.MAX_VALUE ? in[node] : out[node];
+            fromPathways[stop] = true;
+            timed++;
+        }
+        if (timed > 0) {
+            notes.add(count(timed) + " stops take their time to and from the street from the pathways to the"
+                    + " nearest entrance of their station");
+        }
     }
 
-    private static int node(int row, Map<Integer, Integer> nodeOfRow, IntList rowOfNode, List<IntList> edges) {
+    /** The quickest time through the pathways from any entrance to every node; MAX_VALUE where there is no way. */
+    private static int[] fromEntrances(List<IntList> edges, IntList rowOfNode, boolean[] entrance) {
+        int nodes = rowOfNode.size;
+        int[] best = new int[nodes];
+        Arrays.fill(best, Integer.MAX_VALUE);
+        PriorityQueue<Long> queue = new PriorityQueue<>();
+        for (int node = 0; node < nodes; node++) {
+            if (entrance[rowOfNode.get(node)]) {
+                best[node] = 0;
+                queue.add((long) node);
+            }
+        }
+        while (!queue.isEmpty()) {
+            long head = queue.poll();
+            int node = (int) head;
+            int time = (int) (head >>> 32);
+            if (time > best[node]) {
+                continue;
+            }
+            IntList out = edges.get(node);
+            for (int i = 0; i < out.size; i += 2) {
+                int next = out.get(i);
+                int reached = time + out.get(i + 1);
+                if (reached < best[next]) {
+                    best[next] = reached;
+                    queue.add(((long) reached << 32) | next);
+                }
+            }
+        }
+        return best;
+    }
+
+    private static int node(int row, Map<Integer, Integer> nodeOfRow, IntList rowOfNode, List<IntList> edges,
+            List<IntList> back) {
         Integer node = nodeOfRow.get(row);
         if (node == null) {
             node = rowOfNode.size;
             nodeOfRow.put(row, node);
             rowOfNode.add(row);
             edges.add(new IntList(4));
+            back.add(new IntList(4));
         }
         return node;
     }
@@ -366,7 +499,7 @@ final class TransferBuilder {
                 int link = (int) keys[i];
                 targets.add(to.get(link));
                 seconds.add(secs.get(link));
-                distances.add((int) Math.round(metres(a, to.get(link))));
+                distances.add(length.get(link) >= 0 ? length.get(link) : (int) Math.round(metres(a, to.get(link))));
                 kept[kind.get(link)]++;
             }
             offset[a + 1] = targets.size;
@@ -379,7 +512,8 @@ final class TransferBuilder {
             notes.add(count(capped) + " walking links were left out by the limit of "
                     + settings.maxPerStop() + " per stop");
         }
-        return new Result(offset, targets.toArray(), seconds.toArray(), distances.toArray(), notes);
+        return new Result(offset, targets.toArray(), seconds.toArray(), distances.toArray(), exitSecs, entrySecs,
+                notes);
     }
 
     private static String count(int number) {

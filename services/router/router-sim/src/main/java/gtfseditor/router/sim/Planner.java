@@ -29,6 +29,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *       One who would arrive later than the reference by more than the limit gives up.
  * </ul>
  *
+ * <p>A journey that would have the person wait longer than the settings' longest wait, counting
+ * the time before they set off, is left out before any of that is decided.
+ *
  * <p><b>Reuse.</b> Rows are grouped by their two places and taken in order of start time. The
  * router's journeys leave as late as they can, so one search answers every later start up to the
  * earliest departure among the journeys it found: from any such start each of those journeys can
@@ -211,6 +214,12 @@ final class Planner {
         return until;
     }
 
+    /** Whether a journey has the person wait, before setting off and on the way, longer than they will. */
+    private boolean waitsTooLong(Journey journey, int start) {
+        return settings.maxWaitSecs >= 0 && journey.rides() > 0
+                && (journey.depart() - start) + journey.waitSecs() > settings.maxWaitSecs;
+    }
+
     private void none(int row, byte why) {
         plans.status[row] = Plans.NO_JOURNEY;
         plans.why[row] = why;
@@ -229,6 +238,15 @@ final class Planner {
      * @param near the best the any-stop-near search found, or null
      */
     private void decide(int row, boolean hasOwn, Journey own, Journey near) {
+        boolean waited = false;
+        if (own != null && waitsTooLong(own, demand.start[row])) {
+            own = null;
+            waited = true;
+        }
+        if (near != null && waitsTooLong(near, demand.start[row])) {
+            near = null;
+            waited = true;
+        }
         // The own stops are among the stops near, so the own-stops journey is always on offer to
         // someone who may use any stop; the search prefers an earlier arrival and may not show it.
         Journey any = near;
@@ -239,6 +257,16 @@ final class Planner {
         plans.ownCost[row] = own == null ? -1 : (int) preferences.cost(own);
         plans.nearArrive[row] = any == null ? -1 : any.arrive();
         plans.nearCost[row] = any == null ? -1 : (int) preferences.cost(any);
+        plans.nearFrom[row] = -1;
+        plans.nearTo[row] = -1;
+        if (any != null) {
+            for (gtfseditor.router.core.Leg leg : any.legs()) {
+                if (leg.kind() == gtfseditor.router.core.Leg.Kind.RIDE) {
+                    plans.nearFrom[row] = plans.nearFrom[row] < 0 ? leg.fromStop() : plans.nearFrom[row];
+                    plans.nearTo[row] = leg.toStop();
+                }
+            }
+        }
 
         Journey chosen;
         byte reason = Plans.KEPT;
@@ -276,7 +304,7 @@ final class Planner {
             plans.arrive[row] = -1;
             boolean stops = places.query(demand.origin[row], demand.destination[row], demand.start[row],
                     reference != null || !hasOwn) != null;
-            plans.why[row] = stops ? Plans.NOTHING_RUNS : Plans.NO_STOP;
+            plans.why[row] = waited ? Plans.LONG_WAIT : stops ? Plans.NOTHING_RUNS : Plans.NO_STOP;
             return;
         }
         plans.arrive[row] = chosen.arrive();

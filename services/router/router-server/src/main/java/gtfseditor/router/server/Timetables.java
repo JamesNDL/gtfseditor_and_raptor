@@ -97,6 +97,11 @@ final class Timetables implements AutoCloseable {
         Path zip() throws Exception;
     }
 
+    /** Gets what else the build needs, such as a water file to fetch; run on the build thread. */
+    interface OptionsStep {
+        LoadOptions options() throws Exception;
+    }
+
     private static final class Entry {
         final String id;
         Loaded loaded;
@@ -160,6 +165,11 @@ final class Timetables implements AutoCloseable {
 
     /** Queues the build begun by {@link #begin}. */
     void build(String id, LoadOptions options, ZipStep step) {
+        build(id, () -> options, step);
+    }
+
+    /** Queues the build begun by {@link #begin}, working its options out on the build thread. */
+    void build(String id, OptionsStep optionsStep, ZipStep step) {
         Entry entry;
         Build build;
         synchronized (this) {
@@ -174,6 +184,7 @@ final class Timetables implements AutoCloseable {
             try {
                 long started = System.nanoTime();
                 Path zip = step.zip();
+                LoadOptions options = optionsStep.options();
                 Files.createDirectories(settings.snapshots());
                 TimetableCache.Loaded read = TimetableCache.load(zip, options, settings.snapshots());
                 if (!build.source().kind().equals("path")) {

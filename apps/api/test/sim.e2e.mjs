@@ -54,6 +54,15 @@ const B = baseline.id;
 const made = { runs: [], demand: [], folders: [], areas: [], scenarios: [] };
 
 try {
+  // ---- water: what the router is given so that it does not walk across a harbour ----
+  const waterFile = await call('GET', `/api/sim/water?baseline=${B}`);
+  assert.equal(waterFile.status, 200);
+  const waterLines = String(waterFile.body).trimEnd().split('\n');
+  assert.equal(waterLines[0], 'kind,lat1,lon1,lat2,lon2');
+  assert.ok(waterLines.filter((l) => l.startsWith('water,')).length > 100, 'the day has ferries, so it has water lines');
+  assert.ok(waterLines.some((l) => l.startsWith('bridge,')), 'and bridges that buses cross them by');
+  step(`water: ${waterLines.filter((l) => l.startsWith('water,')).length} pieces of ferry path, ${waterLines.filter((l) => l.startsWith('bridge,')).length} bridges`);
+
   // ---- areas and folders ----------------------------------------------------
   const areas = await get('/api/sim-areas');
   const newcastle = areas.find((a) => a.name.startsWith('Newcastle'));
@@ -84,6 +93,8 @@ try {
   assert.equal(demand.madeUp, true);
   assert.equal(demand.unknownStops.stops, 0, 'made-up journeys use stops the published timetable has');
   assert.ok(demand.report.busiestHourPeople > 0 && demand.users > 1000);
+  assert.equal(demand.report.madeUpIds, true, 'the check knows the generator\'s user ids');
+  assert.deepEqual(demand.report.warnings, [], 'and has nothing to warn about');
   // Made-up journeys carry positions of their own, and those are what an area is checked against.
   const box = (a) => `south=${a.south}&west=${a.west}&north=${a.north}&east=${a.east}`;
   const inside = await get(`/api/demand/${madeUp.id}/coverage?baseline=${B}&${box(newcastle)}`);
@@ -93,8 +104,8 @@ try {
   assert.equal(elsewhere.endsInside, 0, 'and outside an area somewhere else');
   step(`made-up demand: ${demand.rows} journeys by ${demand.users} users (the router loaded the published timetable)`);
 
-  // Upload: the made-up set again with a row that cannot be read, a stop that does not exist, and
-  // one row standing for 40 people.
+  // Upload: the made-up set again with a row that cannot be read, a stop that does not exist, one
+  // row standing for 40 people, and one that starts at twenty past midnight.
   const original = await (await fetch(`${API}/api/demand/${madeUp.id}/download/x.csv.gz`)).arrayBuffer();
   const { gunzipSync } = await import('node:zlib');
   const lines = gunzipSync(Buffer.from(original)).toString('utf8').trimEnd().split('\n');
@@ -102,14 +113,18 @@ try {
   const csv = [lines[0], ...lines.slice(1, 1501),
     'e2e-bad,not a time,A,B,,,,,,',
     `e2e-unknown,08:00:00,NO-SUCH-STOP,${first[3]},,,,,,`,
-    `e2e-crowd,08:00:00,${first[2]},${first[3]},,,,,e2e-crowd,40`].join('\n') + '\n';
+    `e2e-crowd,08:00:00,${first[2]},${first[3]},,,,,e2e-crowd,40`,
+    `e2e-early,00:20:00,${first[2]},${first[3]},,,,,e2e-early,1`].join('\n') + '\n';
   const uploaded = await ok('POST', `/api/demand?name=${encodeURIComponent('e2e uploaded')}&madeBy=e2e`, gzipSync(csv), { 'content-type': 'application/gzip' });
   made.demand.push(uploaded.id);
   assert.equal(uploaded.state, 'ready');
-  assert.equal(uploaded.report.rowsRead, 1503);
+  assert.equal(uploaded.report.rowsRead, 1504);
   assert.equal(uploaded.report.rowsRefused, 1);
-  assert.equal(uploaded.rows, 1502);
-  assert.equal(uploaded.people, 1541);
+  assert.equal(uploaded.rows, 1503);
+  assert.equal(uploaded.people, 1542);
+  assert.equal(uploaded.report.rowsBefore4am, 1);
+  assert.match(uploaded.report.warnings[0], /1 journey starts before 04:00.*24:20/, 'a small-hours start is warned about');
+  assert.equal(uploaded.madeUp, false, 'a set with other people\'s ids in it is not taken for a made-up one');
   const checked = await get(`/api/demand/${uploaded.id}?baseline=${B}`);
   assert.deepEqual(checked.unknownStops, { stops: 1, journeyEnds: 1, examples: ['NO-SUCH-STOP'] });
   assert.equal((await call('POST', '/api/demand?name=x', 'user_id,start_time\nu,08:00\n', { 'content-type': 'text/csv' })).status, 400,
@@ -130,8 +145,15 @@ try {
   assert.equal(bau.madeBy, 'e2e');
   assert.equal(bau.area.name, 'Newcastle and the Hunter');
   assert.equal(bau.summary.demand.rowsRefused, 2, 'the row that cannot be read and the row with the unknown stop');
-  assert.equal(bau.summary.demand.rows, 1501);
-  assert.equal(bau.summary.people.ok + bau.summary.people.noJourney, 1540);
+  assert.equal(bau.summary.demand.rows, 1502);
+  assert.equal(bau.summary.people.ok + bau.summary.people.noJourney, 1541);
+  assert.equal(bau.madeUp, false);
+  assert.equal(bau.capacities.trips, bau.capacities.placeholderOrAssumed, 'every capacity is a placeholder for now, and the run says so');
+  // Nobody waits half a day: a start in the small hours with nothing running for four hours is no journey.
+  const early = await get(`/api/sim-runs/${bau.id}/journeys?user=e2e-early`);
+  assert.equal(early.length, 1);
+  if (early[0].status === 'ok') assert.ok(early[0].waitSecs + (early[0].depart - early[0].start) <= 4 * 3600, 'nobody waits more than four hours in all');
+  else assert.match(early[0].noJourneyReason, /longer wait than the limit|nothing gets there/);
   assert.equal(bau.summary.stops.changedAtOrigin, 0, 'on the published timetable nobody changes stop');
   assert.ok(bau.timetableId.startsWith(`b${B}-a`), 'the router holds the timetable cut to the area under its own id');
   assert.ok(bau.resultRows > 3000);
@@ -207,7 +229,7 @@ try {
   assert.equal(crowded.plansRunId, bau.id);
   assert.equal(crowded.kind, 'bau');
   assert.equal(crowded.summary.capacity, true);
-  assert.equal(crowded.summary.people.ok + crowded.summary.people.stranded + crowded.summary.people.noJourney, 1540);
+  assert.equal(crowded.summary.people.ok + crowded.summary.people.stranded + crowded.summary.people.noJourney, 1541);
   step(`capacity from kept plans: ${crowded.summary.capacityResults.timesLeftBehind} times left behind at half capacity`);
 
   // ---- the results view (docs/simulator-plan.md, section 18) --------------------
@@ -217,11 +239,21 @@ try {
   assert.equal(overview.groups.reduce((x, y) => x + y, 0), overview.compared, 'and is in one group of change');
   assert.equal(overview.groups[4], overview.compared, 'an unedited scenario leaves everyone arriving when they did');
   assert.equal(overview.lost.people + overview.gained, 0);
+  assert.equal(overview.sooner.truly.people + overview.sooner.nearby.people + overview.gaveUp.people, 0);
+  assert.equal(overview.net.hours, 0, 'nothing changed, so no time is lost or gained');
+  assert.equal(overview.madeUp, false);
+  assert.equal(overview.capacity.placeholder, overview.capacity.trips, 'wherever crowding is shown, the placeholder capacities are known');
+  // Made-up people start where the router would send them, so hardly any has a nearby stop that
+  // already beats their own. (The set was made on the whole network and the run is cut to an area.)
+  assert.ok(overview.margin.people > 0 && overview.margin.beaten / overview.margin.people < 0.1,
+    `${overview.margin.beaten} of ${overview.margin.people} travellers start at a stop a nearby one beats`);
   assert.equal(overview.times.a.people, same.summary.people.ok);
   assert.equal(overview.byHour.reduce((x, h) => x + h.groups[4], 0), overview.compared, 'the hours add up to the day');
   const morning = await get(`/api/sim-runs/${same.id}/results/overview?from=23400&to=34200`);
   assert.ok(morning.compared > 0 && morning.compared < overview.compared, 'a part of the day has part of the people');
-  const lineRows = (await get(`/api/sim-runs/${same.id}/results/lines`)).lines;
+  const lineAnswer = await get(`/api/sim-runs/${same.id}/results/lines`);
+  assert.deepEqual(lineAnswer.capacity, overview.capacity);
+  const lineRows = lineAnswer.lines;
   assert.ok(lineRows.length > 0 && lineRows.every((l) => l.a === l.b), 'every line carries what it did');
   const lineDetail = await get(`/api/sim-runs/${same.id}/results/lines/${lineRows[0].id}`);
   assert.ok(lineDetail.hourly.length > 0 && lineDetail.stops.length > 0);
@@ -242,6 +274,8 @@ try {
   assert.equal(crowdedView.vs.id, bau.id);
   assert.equal(crowdedView.lost.people, crowded.summary.people.stranded);
   assert.equal(crowdedView.lost.stranded, crowded.summary.people.stranded);
+  assert.equal((await get(`/api/sim-runs/${crowded.id}/results/people?who=noJourney&limit=1`)).people, crowded.summary.people.stranded);
+  assert.equal((await get(`/api/sim-runs/${crowded.id}/results/people?who=gaveUp&limit=1`)).people, 0);
   // A BAU run has nothing to be set against, and says which runs it could be.
   const alone = await get(`/api/sim-runs/${bau.id}/results/overview`);
   assert.equal(alone.vs, null);

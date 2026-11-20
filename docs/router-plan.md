@@ -201,6 +201,8 @@ The editor has none between nearby stops, so the router generates them at load t
 
 All figures are configuration. They are assumptions, not sourced values, and the metadata endpoint lists them.
 
+**Added 20 Nov 2026, after the review** (section 18, and "Walks" in the service's README): a generated link to or from a platform also takes the feed's pathway time between the platform and the nearest entrance of its station, or 60 s for a railway platform with no pathways; two nearby stops are not linked when the straight line between them crosses a path that ferries sail, unless a bridge keeps the walk within the radius; and a change on foot takes at least the time to change, like a change at one stop. The radius, pace and cap above are the figures of the first version; the ones in use are in section 18.
+
 When the editor gains its own editable transfers (already on its plan), it should export them as `transfers.txt` and the router will prefer them. Once road routing is in (section 7), walk times can come from the footpath network instead of straight lines.
 
 **Getting to and from the network.** A query may give a stop id, a station id (all its platforms are used) or a coordinate. For a coordinate, the first version walks in a straight line to every stop within 800 m, with the same speed and detour factor.
@@ -682,149 +684,129 @@ What would make long journeys much faster, none of it done:
 - Pruning by a lower bound on the time still needed to reach the destination. Needs a bound that is provably safe; straight-line distance over a top speed is not, because timetables have stops a zero-minute hop apart.
 - Range RAPTOR for bulk runs without capacity (already in phase 8).
 
-## 18. Compared with the TfNSW trip planner (15 Nov 2026)
+## 18. Compared with the TfNSW trip planner (15 Nov 2026; rewritten 20 Nov 2026)
 
-300 test journeys inside the Opal area (200 with ends within 25 km, 100 between any two stops) were asked of the TfNSW Trip Planner API for the same service day, Tuesday 17 Nov 2026, and compared with ours. To repeat it:
+300 test journeys inside the Opal area (200 with ends within 25 km, 100 between any two stops) were asked of the TfNSW Trip Planner API for the same service day, Tuesday 17 Nov 2026, and compared with ours. This section was rewritten on 20 Nov after a review found that the first version presented the journeys where ours was quicker as if they had been checked. They had not. What follows says what was checked, what was wrong, what changed, and what is still unchecked.
+
+To repeat it (TfNSW's answers are kept beside the input, so nothing is asked again; `--offline` makes sure of it):
 
 ```
-npm run router:route -- "-ProuteArgs=--random 200 --within 25 --seed 7 --dump data/router/compare/within25.jsonl"
-npm run router:compare -- data/router/compare/within25.jsonl
+curl -o data/router/water-b1.csv "http://localhost:3001/api/sim/water?baseline=1"
+npm run router:route -- "-ProuteArgs=--random 200 --within 25 --seed 7 --water data/router/water-b1.csv --dump data/router/compare/within25.r2.jsonl"
+npm run router:route -- "-ProuteArgs=--random 100 --seed 8 --water data/router/water-b1.csv --dump data/router/compare/any.r2.jsonl"
+npm run router:compare -- data/router/compare/within25.r2.jsonl --water data/router/water-b1.csv --offline
+npm run router:compare -- data/router/compare/any.r2.jsonl --water data/router/water-b1.csv --offline
 ```
 
-TfNSW's answers are kept beside the input, so a second run asks nothing again. The full report, journey by journey, is written beside it as `.report.txt`.
+The full report, journey by journey, is written beside each input as `.report.txt`. The dumps and reports of 15 Nov (`within25.jsonl`, `any.jsonl`) are kept as they were.
 
-**How the two were made comparable.** Both planners go between the map positions of two stops, not the stops themselves. Asked for a stop, TfNSW boards only at that stop: it answered some journeys hours late where a 300 m walk to a station would have done. Asked for a position, it snaps to the nearest street address and walks along paths, so its walks at the two ends differ from ours by a few minutes either way. Differences of a few minutes are therefore mostly noise.
+### What has been checked, and what has not
 
-### What the comparison found wrong with ours, and the fix
+| Claim | Checked? | How |
+|---|---|---|
+| Every ride in our answers exists in the timetable at the times stated | Yes | Every journey is replayed against the stop times by code that shares nothing with the search (`JourneyChecker`); 0 failures in 6,000 journeys on 15 Nov and in 1,462 on 20 Nov. The review of 20 Nov confirmed all 393 rides of the journeys where ours was quicker against the database. |
+| The search finds the earliest arrival its rules allow | Yes, on small timetables | The brute-force check: 10,000 queries on 400 random timetables, and 15,000 with full vehicles. One-ride answers matched an independent SQL search on 20 requests of the real day. More than one ride has not been cross-checked on the real network. |
+| No change of vehicle is shorter than 2 minutes | Yes, since 20 Nov | The rule is in the search, the checker and the brute-force check. In the 270 test journeys that change vehicle, the least is 120 s. |
+| No walk crosses water that a ferry sails | Yes, since 20 Nov, as far as the water file goes | 0 of 296 answers. Water that no ferry sails is not known (the service's README, "Walks"). |
+| A walk can be made in the time given | No | A walk is a straight line times 1.3 at 1.03 m/s. Nothing knows the streets. Where both planners make the same last walk, TfNSW's path is a median 1.37 times our straight line and takes as long as ours (median 1.01 times), from 48 walks in the first set; 1.39 and 1.04 from 21 in the second. That is agreement in the middle, not walk by walk. |
+| A journey of ours that beats TfNSW's can really be made | No | See "Where ours still gets off sooner" below. Nobody has made one. |
 
-Our journeys changed vehicles at one stop with no time to spare: off one bus and onto another in the same second. In 769 changes at one stop in TfNSW's answers, none was under 2 minutes. **A change at one stop now takes at least 2 minutes** (`changeSecs`, a setting of the query; `--change <secs>` on the command line). A walk to another stop still takes the link's own time, and staying aboard a vehicle that runs on as another trip takes none. The search stays exact: the brute-force check now includes this rule and vehicles that run on, and passes on 10,000 queries. Speed is unchanged (median 3.2 ms within 25 km, 8.6 ms for any two stops).
+### What was wrong with the first comparison
 
-### Result, after the fix
+The first version compared arrival at the destination and reported that ours arrived sooner in 132 of 297 journeys (44%). The review of 20 Nov took those 132 apart:
 
-Our fastest arrival against the earliest of TfNSW's (it returns up to 6 journeys):
+- **The two planners do not start from the same place.** Ours starts on the platform or wharf itself; TfNSW starts at the nearest street address and walks. 41 of the 132 were that and nothing else.
+- **About 32 rested on a change TfNSW would not offer:** off one vehicle and onto another a walk away with seconds to spare (Central platform 16 to 17 in 61 s, Epping platform 6 to 3 with 1 s spare). The 2-minute rule of 15 Nov applied only to a change at the one stop; 76 of 77 changes sampled were on foot.
+- **Two walked across water,** one of them the largest win of all (585 minutes, ending with 779 m across the Brisbane Water channel to Wagstaffe).
+- **Platforms were reached too quickly.** Martin Place platform 3, five levels down, to a bus stand in Elizabeth St took 46 s; the feed's own pathways make it 204 s.
+- The causes were counted by the first that fitted, so a journey with a tight change and more rides was counted once. And the statement that path lengths "agree well" was not measured on the same walks.
+
+### What changed in the router (20 Nov)
+
+| Rule | Before | Now |
+|---|---|---|
+| A change on foot | The walk's own time; the next vehicle could leave the second it ended | At least `changeSecs` (2 minutes) between getting off and the next leaving, as at one stop; longer if the walk is longer |
+| A walk to or from a platform | The straight line on the surface | Plus the pathway time between the platform and its station's nearest entrance (1,699 stops), or 60 s for a railway platform with no pathways (54) |
+| A walk over water | Offered | Not offered, unless a bridge keeps it within the walking limit. 20 pairs of stops within 500 m lost their link |
+
+Martin Place platform 3 to Elizabeth St Stand C is now 250 s. Scotland Island to Church Point, Chiswick to Huntleys Point, Stockton to Queens Wharf and Barangaroo to Pyrmont Bay are answered with the ferry; Booker Bay to Wagstaffe by the bus that goes round the water; and Burwood to Wagstaffe, the 585-minute win, now ends with the ferry from Ettalong and arrives at 11:00. The search stays exact: the brute-force check has the same rule for a change on foot and passes. Speed is no worse: 1,500 journeys within 25 km at a median of 2.2 ms and a 95th percentile of 7.8 ms on one thread, all of them replaying.
+
+### Result
+
+The comparison now runs from the first boarding to the last alighting: when each planner gets off its last vehicle. That is the part both can be held to. The old measure is shown for reference.
 
 | | Ends within 25 km | Any two stops |
 |---|---|---|
-| Both planners answer | 198 of 200 | 99 of 100 |
-| Arrive within a minute of each other | 85 (43%) | 41 (41%) |
-| Ours arrives sooner | 102 (52%), median 4 min | 51 (52%), median 3 min |
-| TfNSW arrives sooner | 11 (6%), median 6 min | 7 (7%), median 12 min |
-| One of ours uses exactly the vehicles of one of TfNSW's | 94 (47%) | 37 (37%) |
-| Only TfNSW answers | 2 | 1 |
+| Both planners answer | 198 of 200 | 98 of 100 |
+| **Last alighting, router of 20 Nov** | | |
+| Within a minute of each other | 129 (65%) | 56 (57%) |
+| Ours gets off sooner | 22 (11%), median 7 min | 11 (11%), median 12 min |
+| TfNSW gets off sooner | 47 (24%), median 9 min | 31 (32%), median 7 min |
+| One of ours uses exactly the vehicles of one of TfNSW's | 118 (60%) | 42 (43%) |
+| **Last alighting, router of 15 Nov (the same journeys)** | | |
+| Within a minute of each other | 120 (61%) | 52 (53%) |
+| Ours gets off sooner | 38 (19%) | 17 (17%) |
+| TfNSW gets off sooner | 40 (20%) | 30 (30%) |
+| **Arrival at the destination, for reference** | | |
+| Ours sooner, router of 15 Nov | 86 (43%) | 46 (46%) |
+| Ours sooner, router of 20 Nov | 66 (33%) | 30 (31%) |
 
-Before the fix, 38% of the first set arrived within a minute.
+So of the 132 journeys first reported as quicker than TfNSW's, 55 still got off the last vehicle sooner once the start was made the same, and 33 do under the rules of 20 Nov.
 
-**Where TfNSW arrives sooner (18 journeys).** Read one by one; every one has one of these causes, none a fault of the search:
+### Where ours still gets off sooner (33 journeys)
 
-- TfNSW walks further than our limits: up to 1.5 km at an end (ours: 800 m), 670 m between two stops (ours: 400 m), and 1.7 km instead of riding at all.
-- On-demand services (for example D400 around Concord), which are not in the timetable feed.
-- TfNSW allows less time for some walks between stops than our rule does (186 m from a York St stand to a Town Hall platform in 3 minutes; ours needs just under 4).
+Every reason that fits is counted, so the rows add up to more than 33.
 
-**Where ours arrives sooner (153 journeys).** By the first cause that fits:
-
-| Cause | Within 25 km | Any two stops |
+| Reason | Within 25 km (22) | Any two stops (11) |
 |---|---|---|
-| Same vehicles as one of TfNSW's; only the walking at the ends differs | 43 | 20 |
-| Ours changes more often than TfNSW's | 11 | 11 |
-| Ours makes a change on foot with under a minute to spare | 24 | 9 |
-| Ours rides a school bus | 1 | 1 |
-| None of these | 23 | 10 |
+| Ours boards a vehicle that TfNSW, walking from the street, could not reach | 7 | 3 |
+| Ours makes a change with under a minute to spare once the walk is done | 12 | 7 |
+| Ours changes more often than TfNSW's | 10 | 4 |
+| A walk of ours is over water | 0 | 0 |
+| None of these | 6 | 2 |
 
-- **Walking pace.** TfNSW walks at a median of 1.03 m/s along the path (2,661 walks of 200 m or more). Ours walks at 1.2 m/s along 1.3 times the straight line. The path lengths agree well; the pace does not, so our walks are about 15% quicker. That is most of the first and third rows.
-- **Fewer changes.** TfNSW does not return the earliest arrival; it prefers fewer changes. Our recommended journey (2.67 rides on average in the first set) is closer to its habit than our fastest (2.91); TfNSW's earliest averages 2.85.
-- **TfNSW misses journeys.** In several cases it answers an hour or more later than a journey of ours that replays correctly against the timetable (for example Gorokan to Green Point at 08:34: ours by bus and train arrives 10:10, TfNSW's first arrives 11:04). TfNSW is a sanity check, not the truth.
+- **The 8 with none of these are what survives:** journeys different from TfNSW's that get off the last vehicle 2 to 43 minutes sooner, with rides that exist and changes of two minutes or more. They have been checked against the timetable and nothing else. The review judged 7 of the top 20 of the first comparison to be real journeys TfNSW missed; nobody has judged these 8 one by one.
+- **A tight change is still possible after a walk.** The 2 minutes is the least time between getting off and the next vehicle leaving. Where the walk itself takes longer than that, the next vehicle may leave as the walk ends: 68 and 35 of the journeys have a change with under a minute to spare once the walk is done, some with none. The walk's time includes 30 s that is not walking, and the pace is TfNSW's median, so half of real walkers are quicker and half slower. Whether to ask for a margin after a walk is a question for the owner (below).
+- **TfNSW does not return the earliest arrival;** it prefers fewer changes and returns up to six journeys. Being beaten by a journey with more changes is expected.
+
+### Where TfNSW gets off sooner (78 journeys)
+
+More often than ours does, now. The 18 of the first comparison on 15 Nov were read one by one and each had one of the first two causes below; the 78 of 20 Nov have not been read one by one.
+
+- TfNSW walks further than our limits in a few cases, and walks instead of riding.
+- On-demand services, which are not in the timetable feed (8 journeys on 15 Nov), and school buses, which ours leaves out unless asked (8).
+- 13 of TfNSW's journeys use a trip our timetable lacks.
+- Our rules are now the stricter in places: TfNSW accepts a 60 s change across a street, and ours asks for 120 s everywhere; our platform times are added to walks that TfNSW measures along its own paths.
+
+### What is still unchecked
+
+- Any walk, against the streets.
+- The 8 surviving journeys, and the 78 where TfNSW is sooner, read one by one.
+- Water without a ferry, and foot bridges that no bus crosses (the list has one).
+- More than one ride on the real network against an independent search.
+- The comparison is of one Tuesday, 300 journeys, planned times only.
 
 ### Questions for the owner
 
-1. **Walking pace:** stay at 1.2 m/s, or match TfNSW's 1.03 m/s? Slower walking makes changes on foot less tight and brings the two planners closer. It is a setting; changing it rebuilds the walking links.
-2. **Walk limits:** 800 m at the ends and 400 m between stops now. TfNSW goes to about 1.5 km and 670 m. Longer limits cost speed.
-3. **On-demand services** are not in the feed, so no journey uses them. Noted, not fixable from the timetable.
+1. **A margin after a walk.** Should a change on foot need the walk plus a margin (say a minute), not only two minutes in all? It would remove most of the "tight" journeys above and make ours slower than TfNSW's more often.
+2. **The 60 s for a railway platform without pathways** is my figure, not a sourced one.
+3. **Foot bridges.** The list of foot bridges that ferries sail under has one entry. The Parramatta River east of the wharf needs its foot bridges added, by someone who can check where they are.
 
-### Owner's answers, and the comparison again (15 Nov 2026)
+### Settings the comparison led to (15 Nov 2026)
 
-The owner answered the three questions and the school-bus question of section 17:
+These were decided on 15 Nov and still stand. The tables that went with them compared arrival at the destination under the rules of that day, and are in this file's history; they are not repeated here because the measure was the wrong one.
 
-| Setting | Was | Now |
-|---|---|---|
-| Walking pace | 1.2 m/s | 1.03 m/s, TfNSW's |
-| Walk to the first stop or from the last, straight line | 800 m | 1,200 m (about 1.5 km on the ground with the 1.3 detour) |
-| Walk between two stops, straight line | 400 m | 500 m (about 650 m on the ground) |
-| School buses | used | left out unless a query asks (`--avoid none`) |
-
-The limits are straight-line figures chosen so that, with the detour, they match the longest walks TfNSW offered. Walking links went from 598,000 to 859,000 (the most at one stop is 68) and the timetable from 57 MB to 80 MB.
-
-The same 300 journeys again:
-
-| | Ends within 25 km | Any two stops |
-|---|---|---|
-| Arrive within a minute of each other | 87 (44%) | 41 (41%) |
-| Ours arrives sooner | 86 (43%), median 3 min | 46 (46%), median 3 min |
-| TfNSW arrives sooner | 25 (13%), median 3 min | 12 (12%), median 15 min |
-| One of ours uses exactly the vehicles of one of TfNSW's | 109 (55%) | 38 (38%) |
-| Rides on average: ours recommended, TfNSW's earliest | 2.56, 2.85 | 3.20, 3.40 |
-| Walking on average: ours fastest, TfNSW's earliest | 16.3 min, 9.9 min | 17.3 min, 10.4 min |
-
-What moved, and why:
-
-- **Ours arrives sooner less often** (153 journeys down to 132). The slower pace removed most of the head start our walks had.
-- **TfNSW arrives sooner more often** (18 up to 37). Eight of the 37 are journeys where TfNSW rides a school bus, which ours now leaves out; eight use on-demand services; most of the rest are the same vehicles with our walk now a minute or three longer than TfNSW's.
-- **The same vehicles more often** in the shorter set (94 up to 109).
-- **Ours walks more**: about 16 minutes a journey against TfNSW's 10. The search still takes the earliest arrival, and with longer limits a long walk to a faster line often wins. Nothing yet prefers less walking; that would be a new preference, like the one for fewer changes.
-
-Speed, 3,000 journeys each: median 2.9 ms and 95th percentile 10.9 ms within 25 km (726 a second on 6 threads); 8.2 ms and 18.3 ms for any two stops (331 a second). Leaving out school buses pays for the longer walks. All 6,000 journeys replay against the timetable.
-
-### Preferring less walking (15 Nov 2026)
-
-At the owner's request the recommended journey now prefers less walking. Two parts, both settings in `Preferences`:
-
-- **Walking costs double.** The recommended journey is the one with the lowest cost: arrival time, plus 5 minutes per vehicle boarded, plus the time walked again (`walkCostPercent` 100).
-- **A second search with shorter walks.** The search finds the earliest arrival for each number of rides, and those often walk a long way to a faster line, so there was nothing with less walking to choose. The router now searches again allowing at most 10 minutes' walk at each end and 4 minutes between stops, and offers the best of that search, labelled `lessWalking`, if its cost is lower than everything from the first. The second search is skipped when no journey of the first walks further than that. The fastest journey is still listed first.
-
-The 100%, 10 minutes and 4 minutes are my choices, not sourced values.
-
-The same 300 journeys, our recommended journey against the earliest of TfNSW's:
-
-| | Ends within 25 km | | Any two stops | |
-|---|---|---|---|---|
-| | Before | Now | Before | Now |
-| Walking in our recommended journey (TfNSW's: 9.9 and 10.4 min) | 16.9 min | 11.7 min | 18.3 min | 14.4 min |
-| Rides in our recommended journey (TfNSW's: 2.85 and 3.40) | 2.56 | 2.75 | 3.20 | 3.35 |
-| Arrive within a minute of each other | 77 (39%) | 82 (41%) | 36 (36%) | 40 (40%) |
-| Ours arrives sooner | 80 (40%) | 74 (37%) | 44 (44%) | 39 (39%) |
-| TfNSW arrives sooner | 41 (21%) | 42 (21%) | 19 (19%) | 20 (20%) |
-| Recommended uses exactly the vehicles of one of TfNSW's | 92 (46%) | 84 (42%) | 33 (33%) | 31 (31%) |
-| Recommended is the one that walks less | none | 71 | none | 31 |
-
-Walking and rides moved to TfNSW's figures and arrival times agree a little more often. The exact-same-vehicles count fell slightly: with less walking ours often rides one more short bus where TfNSW walks a middling distance. Our fastest journey is unchanged, so the earlier table for it still holds.
-
-**Speed got worse**, because about a third of queries now run two searches:
-
-| | Median | 95th percentile | Per second, 6 threads |
+| Setting | Was | Now | Why |
 |---|---|---|---|
-| Ends within 25 km | 4.2 ms (was 2.9) | 18.7 ms (was 10.9) | 458 (was 726) |
-| Any two stops | 11.8 ms (was 8.2) | 33.3 ms (was 18.3) | 191 (was 331) |
+| Least time to change at one stop | none | 2 minutes (`changeSecs`) | In 769 changes at one stop in TfNSW's answers, none was shorter. Extended to changes on foot on 20 Nov. |
+| Walking pace | 1.2 m/s | 1.03 m/s | TfNSW's median along the path, from 2,661 walks of 200 m or more |
+| Walk to the first stop or from the last, straight line | 800 m | 1,200 m | With the 1.3 detour, about the 1.5 km that was the longest TfNSW offered |
+| Walk between two stops, straight line | 400 m | 500 m | With the detour, about the 670 m that was the longest TfNSW offered |
+| School buses | used | left out unless a query asks | The owner's answer |
+| Recommended journey | lowest of arrival plus 5 minutes per vehicle | the same, plus the time walked counted again (`walkCostPercent` 100) | The owner asked for less walking. My figures, not sourced. |
+| A second search with shorter walks (10 minutes at each end, 4 between stops) | | off unless asked for (`Preferences.lessWalking()`, `lessWalking` in a request) | It cost about a third more time per query; the owner chose speed |
 
-The any-two-stops set now misses the single-query targets of section 10.3 (10 ms and 30 ms); the within-25 km set still meets them. A caller that does not need the walking preference, such as a bulk run, passes `new Preferences(300, 1800)` and gets the one search at the old speed. All 6,000 journeys replay against the timetable.
-
-### The second search is off unless asked for (15 Nov 2026)
-
-The owner chose speed: keep the longer walks and do not pay for the second search. `Preferences.defaults()` now runs the one search; walking still counts double when choosing among the journeys that search finds, which costs no time. `Preferences.lessWalking()` turns the second search on for a caller that wants it.
-
-The same 300 journeys, our recommended journey against the earliest of TfNSW's:
-
-| | Ends within 25 km | | | Any two stops | | |
-|---|---|---|---|---|---|---|
-| | No walking preference | Walking counts double (now) | With second search | No walking preference | Walking counts double (now) | With second search |
-| Walking in our recommended journey (TfNSW's: 9.9 and 10.4 min) | 16.9 min | 15.8 min | 11.7 min | 18.3 min | 17.2 min | 14.4 min |
-| Rides in our recommended journey (TfNSW's: 2.85 and 3.40) | 2.56 | 2.64 | 2.75 | 3.20 | 3.24 | 3.35 |
-| Arrive within a minute of each other | 77 | 82 | 82 | 36 | 38 | 40 |
-| Ours arrives sooner | 80 | 82 | 74 | 44 | 44 | 39 |
-| TfNSW arrives sooner | 41 | 34 | 42 | 19 | 17 | 20 |
-| Recommended uses exactly the vehicles of one of TfNSW's | 92 | 90 | 84 | 33 | 34 | 31 |
-
-Without the second search the recommended journey walks about a minute less than with no preference at all, not five: the one search rarely finds a journey with less walking to choose.
-
-Speed, 3,000 journeys each, 6 threads: median 3.4 ms and 95th percentile 12.8 ms within 25 km (561 a second); 8.9 ms and 20.1 ms for any two stops (308 a second). Both sets meet the single-query targets of section 10.3 again. These runs came out 10 to 20% slower than the same search measured earlier in the day (2.9 and 10.9 ms; 8.2 and 18.3 ms); the search code is the same, so I take that to be the machine and have not looked further. All 6,000 journeys replay against the timetable.
+TfNSW is a sanity check, not the truth: it has its own walking and interchange rules, it misses journeys (Gorokan to Green Point at 08:34: ours by bus and train arrives 10:10, TfNSW's first arrives 11:04), and it starts from a street address.
 
 ## 19. Phase 3 findings (17 Nov 2026)
 

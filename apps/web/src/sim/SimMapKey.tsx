@@ -2,7 +2,7 @@
 // is folded away, since that is when the map is being read.
 import { useStore } from '../store.ts';
 import { EMPTY_COLOR } from './loads.ts';
-import { BLUES, FULL_STEPS, MIDDLE, REDS, whoHasSide, whoLabel, whoPhrase, type SimMapState } from './results.ts';
+import { BLUES, FULL_STEPS, MIDDLE, REDS, placeholderNote, whoHasSide, whoLabel, whoPhrase, type SimMapState } from './results.ts';
 
 /** Filled in by the map as it draws, so that the key can say what the widths and sizes stand for. */
 export const mapScale: { flowMax: number; placeMax: number; people: number | null; note: string | null } = { flowMax: 0, placeMax: 0, people: null, note: null };
@@ -29,6 +29,7 @@ export function SimMapKey() {
   const update = (partial: Partial<SimMapState>) => set({ simMap: { ...useStore.getState().simMap, ...partial } });
   const alone = run.kind === 'bau' && run.plansRunId === null && results.vs === null;
   const flow = alone && map.flow === 'change' ? 'passengers' : map.flow;
+  const placeholders = placeholderNote(run.capacities ? { trips: run.capacities.trips, placeholder: run.capacities.placeholderOrAssumed } : null);
 
   return (
     <div className="panel map-key" aria-label="Results on the map">
@@ -82,6 +83,7 @@ export function SimMapKey() {
             Width is passengers{mapScale.flowMax ? `: the widest is ${Math.round(mapScale.flowMax).toLocaleString('en-AU')} or more` : ''}
             {flow === 'full' ? '. Colour is passengers aboard as a share of places, over the hours chosen.' : flow === 'change' ? '. A stretch nobody uses any more is drawn at the width it had.' : '.'} Each direction is drawn on its own side.
           </div>
+          {flow === 'full' && placeholders && <div className="small warn-text">{placeholders}</div>}
         </>
       )}
 
@@ -169,7 +171,8 @@ export function SimMapKey() {
               </span>
             ))}
           </div>
-          <div className="small muted">Each vehicle is coloured by the passengers aboard as a share of its places, at the time on the clock. Capacities are placeholders, so this is illustrative.</div>
+          <div className="small muted">Each vehicle is coloured by the passengers aboard as a share of its places, at the time on the clock.</div>
+          <div className="small warn-text">{placeholders ?? 'Capacities are placeholders, so this is illustrative.'}</div>
           {(run.kind === 'scenario' ? run.scenarioId : null) !== scenarioId && (
             <div className="small warn-text">
               This run was made on {run.kind === 'bau' ? 'the published timetable' : `"${run.scenarioName ?? 'a scenario that has been removed'}"`}, which is not the timetable open, so its

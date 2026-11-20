@@ -899,6 +899,336 @@ try {
 } finally {
   await send('DELETE', `/api/scenarios/${S}`);
 }
+// Reality: what an edit must never produce, whatever is asked of it. In a scenario of its own.
+//  - the same trip twice (an edit sent again, naming a trip that has already been replaced)
+//  - a trip that arrives before it left ("skip this stop on every trip like this one")
+//  - a loop line left running through a closure, unlisted
+//  - a bus put back together across a closure it was split at
+//  - many vehicles added without the figure being shown first
+// It ends with a GTFS export of the scenario, checked file by file.
+{
+  const made = await send('POST', '/api/scenarios', { baselineId: baseline.id, name: 'e2e test' });
+  assert.equal(made.status, 200);
+  const R = made.body.id;
+  const rq = `?s=${R}`;
+  try {
+    const edit = (body) => send('POST', `/api/scenarios/${R}/edits`, body);
+    const inOrder = (trip) => {
+      for (let i = 0; i < trip.stopTimes.length; i++) {
+        const s = trip.stopTimes[i];
+        if (s.dep < s.arr) return false;
+        if (i > 0 && s.arr < trip.stopTimes[i - 1].dep) return false;
+      }
+      return true;
+    };
+
+    // The same trip cannot be edited twice by its old id.
+    const first = baseTrips.find((t) => t.stopCount >= 5);
+    const once = await edit({ kind: 'shift', tripIds: [first.id], delta: 240, ripple: 'none' });
+    assert.equal(once.status, 200, JSON.stringify(once.body));
+    const again = await edit({ kind: 'shift', tripIds: [first.id], delta: 600, ripple: 'none' });
+    assert.equal(again.status, 409, 'an edit on a trip that has already been replaced must be refused');
+    assert.equal((await send('POST', `/api/scenarios/${R}/edits`, { kind: 'delete', tripIds: [first.id] })).status, 409);
+    assert.equal((await get(`/api/routes/${t1.id}/trips${rq}`)).length, baseTrips.length, 'the refused edit must not add a trip');
+    assert.equal((await get(`/api/scenarios/${R}`)).stats.trips, (await get(`/api/scenarios/${R}`)).stats.baselineTrips);
+    step('an edit naming a trip that was already replaced is refused, and makes no second copy');
+
+    // Skipping a stop on every trip of a bus stop pattern: trips of one pattern take different times
+    // over the same stretch, so each must save its own share.
+    const buses = routes.filter((r) => r.modeId === 'bus').sort((a, b) => b.tripCount - a.tripCount);
+    let swept = 0;
+    let patternsTried = 0;
+    for (const line of buses.slice(0, 40)) {
+      if (patternsTried >= 4) break;
+      const trips = await get(`/api/routes/${line.id}/trips${rq}`);
+      const sample = trips.find((t) => t.stopCount >= 12);
+      if (!sample) continue;
+      const detail = await get(`/api/trips/${sample.id}${rq}`);
+      // The stop whose stretch is shortest on this trip: the likeliest to go wrong on another.
+      let pick = null;
+      for (let i = 1; i < detail.stopTimes.length - 1; i++) {
+        const gap = detail.stopTimes[i + 1].arr - detail.stopTimes[i - 1].dep;
+        if (gap >= 60 && (!pick || gap > pick.gap)) pick = { seq: detail.stopTimes[i].seq, gap };
+      }
+      if (!pick) continue;
+      const skip = await edit({ kind: 'skipStop', tripId: sample.id, stopSeq: pick.seq, scope: 'pattern' });
+      if (skip.status !== 200) continue;
+      patternsTried++;
+      // The server refuses the whole edit if any trip would run backwards; a spread of them is read back as well.
+      const changed = Object.values(skip.body.idMap);
+      const every = Math.max(1, Math.floor(changed.length / 40));
+      for (const id of changed.filter((_, k) => k % every === 0)) {
+        const trip = await get(`/api/trips/${id}${rq}`);
+        assert.ok(inOrder(trip), `${line.shortName}: a trip runs backwards in time after a stop was skipped on its whole pattern`);
+        assert.equal(trip.stopTimes[trip.stopTimes.length - 1].arr, trip.endSecs);
+        swept++;
+      }
+    }
+    assert.ok(swept > 0, 'no bus pattern could be tested');
+    let info = await get(`/api/scenarios/${R}`);
+    assert.ok(!info.conflicts.some((c) => c.kind === 'speed' && /before it left/.test(c.title)), 'no trip arrives before it left');
+    step(`a stop skipped on every trip of a pattern: ${patternsTried} patterns, ${swept} trips read back, none runs backwards`);
+    for (let i = 0; i < patternsTried; i++) await send('POST', `/api/scenarios/${R}/undo`);
+
+    // A loop line across a closure is listed, not passed over. The Harbour Bridge carries line 100,
+    // whose path ends where it began.
+    const bridge = await send('POST', `/api/close-preview${rq}`, { what: 'cut', line: [[151.2085, -33.852], [151.2125, -33.852]], widthM: 20 });
+    assert.equal(bridge.status, 200, JSON.stringify(bridge.body));
+    const loopLine = bridge.body.lines.find((l) => l.name === '100');
+    if (loopLine) {
+      const all = routes.find((r) => r.id === loopLine.routeId);
+      assert.ok(loopLine.trips >= all.tripCount * 0.9, `line 100 has ${all.tripCount} trips and only ${loopLine.trips} are listed across the bridge`);
+      step(`a loop line across a closure is listed in full (line 100: ${loopLine.trips} of ${all.tripCount} trips)`);
+    } else step('line 100 does not cross the bridge on this day (skipped)');
+
+    // A road closed across a busy bus corridor, each line split there. Asked for unconfirmed, as the
+    // editor asks: if it adds many vehicles it comes back described and nothing is changed.
+    const bondi = { kind: 'close', what: 'cut', line: [[151.262, -33.8915], [151.262, -33.8955]], widthM: 20, roads: 'split' };
+    const headBefore = (await get(`/api/scenarios/${R}`)).head;
+    const asked = await edit({ ...bondi, confirm: false });
+    assert.equal(asked.status, 200, JSON.stringify(asked.body));
+    let split = asked;
+    if (asked.body.needsConfirm) {
+      assert.ok(asked.body.needsConfirm.added >= 10 && /would add \d+ vehicles/.test(asked.body.needsConfirm.message));
+      assert.equal((await get(`/api/scenarios/${R}`)).head, headBefore, 'nothing is applied until the vehicles are agreed to');
+      assert.equal((await get(`/api/scenarios/${R}/closures`)).features.length, 0);
+      step(`asked first: ${asked.body.needsConfirm.message.split('. ')[0]}`);
+      split = await edit({ ...bondi, confirm: true });
+      assert.equal(split.status, 200, JSON.stringify(split.body));
+    }
+    assert.ok(!split.body.needsConfirm && split.body.summary);
+    assert.match(split.body.summary, /stay on their own side of the closure/);
+    // Each part is a line of its own, named for its side. No vehicle works both sides.
+    const nowRoutes = await get(`/api/baselines/${baseline.id}/routes${rq}`);
+    const partLines = nowRoutes.filter((r) => /^333-[NSEW]$/.test(r.shortName ?? ''));
+    assert.equal(partLines.length, 2, 'line 333 runs as two parts');
+    const sideOfVehicle = new Map();
+    let partTrips = 0;
+    for (const part of partLines) {
+      for (const t of await get(`/api/routes/${part.id}/trips${rq}`)) {
+        partTrips++;
+        assert.ok(t.vehicleDayId, 'every part has a vehicle');
+        const known = sideOfVehicle.get(t.vehicleDayId);
+        assert.ok(!known || known === part.shortName, `a vehicle runs both ${known} and ${part.shortName}: it would have to cross the closure`);
+        sideOfVehicle.set(t.vehicleDayId, part.shortName);
+      }
+    }
+    info = await get(`/api/scenarios/${R}`);
+    assert.ok(!info.conflicts.some((c) => c.kind === 'speed'), `a split made an impossible stretch: ${JSON.stringify(info.conflicts.find((c) => c.kind === 'speed'))}`);
+    step(`a road closed across bus lines: ${partTrips} parts of line 333 on ${sideOfVehicle.size} vehicles, none of which works both sides`);
+
+    // The export of all this is valid GTFS: checked by the same script as `npm run export:check`.
+    const { spawnSync } = await import('node:child_process');
+    const check = spawnSync(process.execPath, ['packages/gtfs/src/export-check.ts', String(R), '--box=-33.98,151.1,-33.78,151.32', '--no-shapes', '--out=check-e2e'], { encoding: 'utf8' });
+    assert.equal(check.status, 0, `the scenario's export failed its check:\n${check.stdout}\n${check.stderr}`);
+    step('the scenario exports as valid GTFS (references, order of times and distances, speeds, blocks)');
+
+    for (;;) if ((await send('POST', `/api/scenarios/${R}/undo`)).status !== 200) break;
+    info = await get(`/api/scenarios/${R}`);
+    assert.equal(info.stats.trips, info.stats.baselineTrips);
+    assert.equal(info.stats.vehicles, info.stats.baselineVehicles);
+  } finally {
+    await send('DELETE', `/api/scenarios/${R}`);
+  }
+}
+
+// Deleting a station, a stop or a platform, in a scenario of its own so that each case starts from
+// the published timetable: a stop in the middle of a bus line, a terminus, one platform of a
+// station, a whole station, and a stop the scenario added itself. Each is previewed, applied,
+// checked and undone.
+{
+  const made = await send('POST', '/api/scenarios', { baselineId: baseline.id, name: 'e2e test' });
+  assert.equal(made.status, 200);
+  const D = made.body.id;
+  const dq = `?s=${D}`;
+  try {
+    const edit = (body) => send('POST', `/api/scenarios/${D}/edits`, body);
+    const previewOf = (stopIds) => send('POST', `/api/delete-stop-preview${dq}`, { stopIds });
+    const published = await get(`/api/scenarios/${D}`);
+    const sameTimes = (now, was, seqs) => {
+      for (const seq of seqs) {
+        const a = now.stopTimes.find((s) => s.seq === seq);
+        const b = was.stopTimes.find((s) => s.seq === seq);
+        assert.ok(a && a.arr === b.arr && a.dep === b.dep, `the time at stop ${seq} must not change`);
+      }
+    };
+    /** A trip after a deletion: in order, consistent, and nowhere quicker than half or slower than before. */
+    const realistic = (now, was, goneIds) => {
+      assert.ok(now.stopTimes.length >= 2, 'a trip keeps at least two stops');
+      assert.ok(!now.stopTimes.some((s) => goneIds.includes(s.stopId)), 'no call is left at a deleted stop');
+      assert.equal(now.stopTimes[0].dep, now.startSecs);
+      assert.equal(now.stopTimes[now.stopTimes.length - 1].arr, now.endSecs);
+      assert.equal(now.vehicleDayId, was.vehicleDayId, 'the trip stays on its vehicle');
+      for (let i = 0; i < now.stopTimes.length; i++) {
+        const s = now.stopTimes[i];
+        assert.ok(s.dep >= s.arr, 'a stop is left after it is reached');
+        if (i === 0) continue;
+        const p = now.stopTimes[i - 1];
+        assert.ok(s.arr >= p.dep && s.seq > p.seq && s.dist >= p.dist, 'times, numbering and distance stay in order');
+        const before = was.stopTimes.find((x) => x.seq === s.seq).arr - was.stopTimes.find((x) => x.seq === p.seq).dep;
+        assert.ok(s.arr - p.dep <= before, 'no stretch takes longer than before');
+        assert.ok(s.arr - p.dep >= Math.round(before * 0.5), 'no stretch takes less than half the time it did');
+      }
+    };
+    /** Applies a deletion and checks what is true of every one; returns the preview and the edit's answer. */
+    const deleteAndCheck = async (stopIds) => {
+      const preview = await previewOf(stopIds);
+      assert.equal(preview.status, 200, JSON.stringify(preview.body));
+      const before = await get(`/api/scenarios/${D}`);
+      const done = await edit({ kind: 'deleteStop', stopIds });
+      assert.equal(done.status, 200, JSON.stringify(done.body));
+      assert.ok(done.body.summary.startsWith(preview.body.summary), 'the change does what the preview said');
+      const after = await get(`/api/scenarios/${D}`);
+      assert.equal(before.stats.trips - after.stats.trips, preview.body.totals.removed, 'only the trips the preview named are removed');
+      assert.equal(before.stats.vehicles - after.stats.vehicles, preview.body.vehicles.noTripsLeft, 'the number of vehicles changes only as the preview said');
+      assert.ok(after.stats.vehicles <= before.stats.vehicles, 'a deletion never adds a vehicle');
+      const said = done.body.summary.match(/Clashes in the scenario: (\d+) before, (\d+) now/);
+      if (said) assert.deepEqual([Number(said[1]), Number(said[2])], [before.conflicts.length, after.conflicts.length], 'the summary counts the clashes');
+      else assert.equal(after.conflicts.length, before.conflicts.length, 'clashes are as before unless the summary says otherwise');
+      const drawn = (await get(`/api/scenarios/${D}/deleted-stops`)).features.map((f) => f.properties.stop_id);
+      assert.ok(stopIds.every((id) => drawn.includes(id) || preview.body.what === 'station'), 'the deleted stop is still on the map, marked');
+      assert.equal((await previewOf(stopIds)).status, 404, 'it cannot be deleted twice');
+      return { preview: preview.body, done: done.body, before, after };
+    };
+    const undoAndCheck = async (state) => {
+      assert.equal((await send('POST', `/api/scenarios/${D}/undo`)).status, 200);
+      const back = await get(`/api/scenarios/${D}`);
+      assert.deepEqual(back.stats, state.before.stats, 'undo brings every trip and vehicle back');
+      assert.equal(back.conflicts.length, state.before.conflicts.length);
+    };
+
+    // A two-way bus line, long enough to have a middle.
+    let line = null;
+    for (const r of routes.filter((x) => x.modeId === 'bus' && x.tripCount > 40).slice(0, 40)) {
+      const d = await get(`/api/routes/${r.id}`);
+      if (d.directions.length === 2 && d.patterns[0].stopCount >= 10) {
+        line = d;
+        break;
+      }
+    }
+    assert.ok(line, 'found a two-way bus line');
+    const main = line.patterns[0];
+    const lineStops = (await get(`/api/patterns/${main.id}/stops`)).stops;
+    const sample = (await get(`/api/routes/${line.id}/trips`)).find((t) => t.patternId === main.id);
+    const sampleWas = await get(`/api/trips/${sample.id}`);
+
+    // 1. A stop in the middle: trips no longer call there, keep their path, and are no slower.
+    {
+      const mid = lineStops[Math.floor(lineStops.length / 2)];
+      const state = await deleteAndCheck([mid.id]);
+      assert.equal(state.preview.what, 'stop');
+      assert.ok(state.preview.totals.noLongerCall > 0 && state.preview.totals.moved === 0);
+      const now = await get(`/api/trips/${state.done.idMap[sample.id]}${dq}`);
+      realistic(now, sampleWas, state.preview.stopIds);
+      assert.equal(now.stopTimes.length, sampleWas.stopTimes.length - 1, 'the trip has one stop fewer');
+      assert.equal(now.startSecs, sampleWas.startSecs, 'the trip still leaves at the same time');
+      const midSeq = sampleWas.stopTimes.find((s) => s.stopId === mid.id).seq;
+      sameTimes(now, sampleWas, sampleWas.stopTimes.filter((s) => s.seq < midSeq).map((s) => s.seq));
+      const panel = await get(`/api/stations/${mid.id}/summary${dq}`);
+      assert.ok(panel.platforms.find((p) => p.id === mid.id).deleted.latest, 'the station panel says it is deleted');
+      assert.equal(panel.platforms.find((p) => p.id === mid.id).calls, 0);
+      const nowStops = (await get(`/api/patterns/${now.patternId}/stops`)).stops.map((s) => s.id);
+      assert.ok(!nowStops.includes(mid.id), 'the line\'s stop pattern no longer lists it');
+      // Nothing can be sent there afterwards.
+      const reuse = await send('POST', `/api/reshape-preview${dq}`, { patternId: now.patternId, stopIds: [...nowStops.slice(0, 3), mid.id, ...nowStops.slice(3)], bothWays: false });
+      assert.equal(reuse.status, 400, 'a line cannot be sent to a deleted stop');
+      step(`stop deleted from the middle of a line: ${state.done.summary}`);
+      await undoAndCheck(state);
+      assert.ok((await get(`/api/routes/${line.id}/trips${dq}`)).some((t) => t.id === sample.id), 'undo brings the published trip back');
+      assert.equal((await get(`/api/stations/${mid.id}/summary${dq}`)).platforms.find((p) => p.id === mid.id).deleted, null);
+    }
+
+    // 2. A terminus: trips that ended there end one stop sooner, at the time they already called there.
+    {
+      const end = lineStops[lineStops.length - 1];
+      const state = await deleteAndCheck([end.id]);
+      assert.ok(state.preview.totals.cutShort > 0, 'trips that ended there are cut short');
+      const now = await get(`/api/trips/${state.done.idMap[sample.id]}${dq}`);
+      realistic(now, sampleWas, state.preview.stopIds);
+      const lastKept = sampleWas.stopTimes[sampleWas.stopTimes.length - 2];
+      assert.equal(now.stopTimes[now.stopTimes.length - 1].stopId, lastKept.stopId, 'the trip ends at its previous stop');
+      assert.equal(now.endSecs, lastKept.arr, 'at the time it already reached it');
+      assert.equal(now.startSecs, sampleWas.startSecs);
+      sameTimes(now, sampleWas, sampleWas.stopTimes.slice(0, -2).map((s) => s.seq));
+      step(`terminus deleted: ${state.done.summary}`);
+      await undoAndCheck(state);
+    }
+
+    // 3 and 4. On a train line: one platform of a station with others, then a whole station.
+    {
+      const train = await get(`/api/trips/${baseTrips[0].id}`);
+      // The quietest station in the middle of the run that has two or more platforms in use.
+      let quiet = null;
+      for (const call of train.stopTimes.slice(1, -1)) {
+        const s = await get(`/api/stations/${call.stopId}/summary`);
+        const used = s.platforms.filter((p) => p.calls > 0 && p.platformCode);
+        if (used.length >= 2 && (!quiet || s.calls < quiet.station.calls)) quiet = { station: s, call, used };
+      }
+      assert.ok(quiet, 'found a station with two platforms in use');
+      const own = quiet.station.platforms.find((p) => p.id === quiet.call.stopId);
+
+      const state = await deleteAndCheck([own.id]);
+      assert.equal(state.preview.what, 'platform');
+      assert.equal(state.preview.totals.moved, own.calls, 'every call at the platform moves');
+      assert.equal(state.preview.totals.noLongerCall + state.preview.totals.cutShort + state.preview.totals.removed, 0, 'no trip loses the station');
+      const moved = await get(`/api/trips/${state.done.idMap[train.id]}${dq}`);
+      const movedCall = moved.stopTimes.find((s) => s.seq === quiet.call.seq);
+      assert.ok(movedCall.stopId !== own.id && quiet.station.platforms.some((p) => p.id === movedCall.stopId), 'the call is at another platform of the same station');
+      sameTimes(moved, train, train.stopTimes.map((s) => s.seq));
+      const panel = await get(`/api/stations/${quiet.station.id}/summary${dq}`);
+      assert.equal(panel.calls, quiet.station.calls, 'the station has as many calls as before');
+      assert.ok(panel.platforms.find((p) => p.id === own.id).deleted && !panel.deleted);
+      assert.ok(!(await get(`/api/stations/${quiet.station.id}/platforms${dq}`)).platforms.some((p) => p.id === own.id), 'the platform chart no longer has it');
+      assert.ok(!(await get(`/api/trips/${moved.id}/platforms${dq}&seq=${quiet.call.seq}`)).some((c) => c.id === own.id), 'and it is not offered as a platform to move to');
+      step(`platform deleted: ${state.done.summary}`);
+      await undoAndCheck(state);
+
+      const whole = await deleteAndCheck([quiet.station.id]);
+      assert.equal(whole.preview.what, 'station');
+      assert.ok(quiet.station.platforms.every((p) => whole.preview.stopIds.includes(p.id)), 'every platform goes with the station');
+      assert.ok(whole.preview.totals.noLongerCall > 0);
+      const through = await get(`/api/trips/${whole.done.idMap[train.id]}${dq}`);
+      realistic(through, train, whole.preview.stopIds);
+      assert.equal(through.stopTimes.length, train.stopTimes.length - 1);
+      assert.ok(through.endSecs <= train.endSecs && through.endSecs >= train.endSecs - 600, 'the trip is a little quicker, not a lot');
+      const gone = await get(`/api/stations/${quiet.station.id}/summary${dq}`);
+      assert.ok(gone.deleted && gone.calls === 0 && gone.lines.length === 0, 'nothing calls at the deleted station');
+      step(`station deleted: ${whole.done.summary}`);
+      await undoAndCheck(whole);
+    }
+
+    // 5. A stop the scenario added itself, with a line extended to it.
+    {
+      const end = lineStops[lineStops.length - 1];
+      const beforeEnd = lineStops[lineStops.length - 2];
+      const added = await edit({ kind: 'addStop', name: 'E2E Gone', modeId: 'bus', pair: false, lon: end.lon + (end.lon - beforeEnd.lon) * 0.3, lat: end.lat + (end.lat - beforeEnd.lat) * 0.3 });
+      assert.equal(added.status, 200, JSON.stringify(added.body));
+      const stop = added.body.stops[0];
+      const extended = await edit({ kind: 'reshape', patternId: main.id, stopIds: [...lineStops.map((s) => s.id), stop.id], bothWays: false });
+      assert.equal(extended.status, 200, JSON.stringify(extended.body));
+      const longer = await get(`/api/trips/${extended.body.idMap[sample.id]}${dq}`);
+      assert.equal(longer.stopTimes[longer.stopTimes.length - 1].stopId, stop.id);
+      const state = await deleteAndCheck([stop.id]);
+      assert.ok(state.preview.totals.cutShort > 0);
+      const now = await get(`/api/trips/${state.done.idMap[longer.id]}${dq}`);
+      realistic(now, longer, [stop.id]);
+      assert.equal(now.stopTimes[now.stopTimes.length - 1].stopId, end.id, 'trips end where they used to');
+      assert.ok(!(await get(`/api/scenarios/${D}/stops`)).features.some((f) => f.properties.stop_id === stop.id), 'it is no longer drawn as a live stop');
+      step(`a stop the scenario added is deleted: ${state.done.summary}`);
+      await undoAndCheck(state);
+      assert.ok((await get(`/api/scenarios/${D}/stops`)).features.some((f) => f.properties.stop_id === stop.id), 'undo brings the stop back');
+    }
+
+    // Everything undone leaves the published timetable.
+    for (;;) if ((await send('POST', `/api/scenarios/${D}/undo`)).status !== 200) break;
+    assert.deepEqual((await get(`/api/scenarios/${D}`)).stats, published.stats);
+    assert.equal((await get(`/api/scenarios/${D}/deleted-stops`)).features.length, 0);
+    step('deletions undone: the scenario is the published timetable again');
+  } finally {
+    await send('DELETE', `/api/scenarios/${D}`);
+  }
+}
+
 const leftovers = (await get(`/api/scenarios?baseline=${baseline.id}`)).filter((s) => s.name === 'e2e test');
 assert.equal(leftovers.length, 0);
 assert.equal((await get(`/api/routes/${t1.id}`)).tripCount, before.tripCount, 'the baseline is unchanged after the test');

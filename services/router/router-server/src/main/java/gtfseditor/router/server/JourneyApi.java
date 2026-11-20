@@ -295,6 +295,9 @@ final class JourneyApi {
         return loads == null ? null : Capacity.of(loads.state(), options.fullAt(), group);
     }
 
+    /** A departure before this is answered with a warning: see {@link #single}. */
+    private static final int SMALL_HOURS_END = 4 * 3600;
+
     /** Answers {@code POST /v1/journeys}. */
     static ObjectNode single(Timetables.Loaded loaded, JsonNode body) {
         Options options = Options.read(body, false);
@@ -348,6 +351,12 @@ final class JourneyApi {
         answer.put("status", status(outcome.status()));
         if (outcome.journey() == null) {
             answer.put("reason", reason(outcome, options));
+        }
+        if (item.depart() < SMALL_HOURS_END) {
+            // "00:20" is the small hours at the start of the service day, when little runs; the
+            // caller may have meant twenty past midnight at the end of it, which is "24:20".
+            answer.put("warning", "The time asked for is before 04:00 at the start of the service day. For a journey"
+                    + " after midnight at the end of the day, keep counting past 24:00: \"24:20\", not \"00:20\".");
         }
         // What was found is listed even when the passenger could not be given any of it.
         answer.put("recommended", result.recommended());

@@ -51,9 +51,27 @@ const js = async (expression) => {
   if (r.exceptionDetails) throw new Error(`page script failed: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
   return r.result.value;
 };
+// A change that would add ten or more vehicles is described first and waits for "Go ahead"
+// (EditConfirm). While waiting for anything, the test reads what is asked and agrees to it.
+const confirmsSeen = [];
+const agreeIfAsked = async () => {
+  const asked = await js(`(() => {
+    const go = document.querySelector('.edit-confirm .confirm-go:not([disabled])');
+    if (!go) return null;
+    const said = document.querySelector('.edit-confirm')?.textContent ?? '';
+    go.click();
+    return said;
+  })()`).catch(() => null);
+  if (asked) {
+    assert.match(asked, /This adds [0-9,]+ vehicles/, 'the question says how many vehicles the change adds');
+    assert.match(asked, /Nothing has been changed yet/);
+    confirmsSeen.push(asked.match(/This adds [0-9,]+ vehicles/)[0]);
+  }
+};
 const waitFor = async (expression, what, timeout = 20000) => {
   const started = Date.now();
   for (;;) {
+    await agreeIfAsked();
     const value = await js(expression).catch(() => null);
     if (value) return value;
     if (Date.now() - started > timeout) throw new Error(`Timed out waiting for ${what}`);
@@ -166,6 +184,49 @@ try {
   await shot('loaded');
   step(`app loads; ${await text('.moving-count')} vehicles moving`);
 
+  // 1a. A vehicle that has finished a trip stays on the map until its next trip leaves. The clock is
+  // stopped in the middle of a train's wait at its terminus: the train must still be drawn, at the
+  // place its trip ended, and be gone from there the second its next trip starts.
+  /** An expression that runs code in the page with the app's own store (s), vehicles (v) and clock. */
+  const inApp = (code) => `(async () => {
+    const find = (name) => import(performance.getEntriesByType('resource').map((e) => e.name).filter((n) => n.includes('/src/' + name)).pop() ?? '/src/' + name);
+    const [{ useStore }, v, { clock }] = await Promise.all([find('store.ts'), find('vehicles.ts'), find('clock.ts')]);
+    const s = useStore.getState();
+    ${code}
+  })()`;
+  {
+    await waitFor(inApp(`return !!v.vehicleData.get('train')?.holdUntil.some((until) => until > 0);`), 'the waits between train trips', 60000);
+    const held = await js(inApp(`
+      const mv = v.vehicleData.get('train');
+      for (let i = 0; i < mv.pack.meta.tripCount; i++) {
+        const end = mv.pack.tripEnd[i];
+        const wait = mv.holdUntil[i] - end;
+        if (end > 8 * 3600 && wait >= 300 && wait <= 900) return { i, id: mv.pack.tripId[i], end, until: mv.holdUntil[i], was: clock.secs };
+      }
+      return null;`));
+    assert.ok(held, 'some train waits 5 to 15 minutes at the end of a trip');
+    /** Whether the train's dot is in the frame last drawn, and whether it stands where its trip ended. */
+    const drawnAt = (secs) => js(inApp(`
+      s.set({ playing: false });
+      clock.set(${secs});
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      const mv = v.vehicleData.get('train');
+      const k = Array.from(mv.frameTrip.subarray(0, mv.count)).indexOf(${held.i});
+      if (k < 0) return { drawn: false };
+      const out = new Float64Array(2);
+      v.vehicleAt(mv, ${held.i}, mv.pack.tripEnd[${held.i}], out, 0);
+      return { drawn: true, atTheEnd: Math.abs(mv.positions[k * 2] - out[0]) < 1e-9 && Math.abs(mv.positions[k * 2 + 1] - out[1]) < 1e-9, waiting: mv.waiting };`));
+    const during = await drawnAt(Math.round((held.end + held.until) / 2));
+    assert.ok(during.drawn, `a train that has finished trip ${held.id} is still drawn while it waits for its next one`);
+    assert.ok(during.atTheEnd, 'the waiting train stands where its trip ended');
+    assert.ok(during.waiting > 0, 'waiting vehicles are counted');
+    assert.match(await text('.moving-waiting'), /[1-9][\d,]* waiting/, 'the time bar says how many vehicles are waiting');
+    await shot('waiting-vehicle');
+    assert.ok(!(await drawnAt(held.until)).drawn, 'the wait ends the second the next trip starts, so the train is not drawn twice');
+    await js(inApp(`clock.set(${held.was}); s.set({ playing: true });`));
+    step(`a train stays on the map between two trips (${Math.round((held.until - held.end) / 60)} min at its terminus); ${during.waiting} trains waiting`);
+  }
+
   // 1b. The passenger simulator (docs/simulator-plan.md, phase S4): make up a few journeys, run them
   // through the published timetable in Newcastle, read the summary, look one person up, and see
   // passengers on a line and on a trip. Needs the journey router (`npm run router:dev`).
@@ -211,6 +272,8 @@ try {
     await shot('sim-drawing-a-box');
     await mouse('mouseReleased', 940, 480);
     await waitFor(`document.querySelector('.sim-wizard')?.offsetParent != null`, 'the wizard to come back');
+    // The wizard is back a moment before the box it was given is chosen in the list.
+    await waitFor(`/box of my own/.test(document.querySelector('.sim-wizard select[aria-label="Area of the run"]')?.selectedOptions[0]?.textContent ?? '')`, 'the drawn box to be chosen', 8000).catch(() => {});
     assert.match(await js(`document.querySelector('.sim-wizard select[aria-label="Area of the run"]').selectedOptions[0].textContent`), /box of my own/);
     assert.match(await text('.sim-wizard'), /-3\d\.\d+, 15\d\.\d+ to -3\d\.\d+, 15\d\.\d+/, 'the box drawn is shown');
     assert.equal(await js(`!!document.querySelector('.inspector h2')`), false, 'drawing the box opened nothing on the map');
@@ -534,7 +597,9 @@ try {
   await waitFor(`document.querySelector('.inspector strong')?.textContent === 'Close a road or a line'`, 'the closure panel');
   assert.ok((await text('.inspector-body')).includes('Not drawn yet'), 'the panel asks for a line');
   // Four clicks round the station, and a fifth back at the start: whichever way the track runs, the line crosses it.
-  const corners = [[-70, -70], [70, -70], [70, 70], [-70, 70], [-70, -70]];
+  // Kept small: how far the map is zoomed out here depends on the line drawn earlier, and a line
+  // of more than 20 km is refused.
+  const corners = [[-30, -30], [30, -30], [30, 30], [-30, 30], [-30, -30]];
   for (const [i, [dx, dy]] of corners.entries()) {
     await clickAt(shut.x + dx, shut.y + dy);
     if (i === 0) await waitFor(`document.querySelector('.inspector-body')?.textContent.includes('One point placed')`, 'the first point of the line');
@@ -766,6 +831,45 @@ try {
   await waitFor(`document.querySelector('.inspector .tile-value')?.textContent === ${JSON.stringify(ferryTrips)}`, 'undo to bring the line back', 30000);
   step(`line deleted from its panel (F1, ${ferryTrips} trips) and brought back with undo`);
 
+  // 17b. Delete a station from its panel. The preview says what happens to the trips before anything
+  // changes; afterwards the panel says it is deleted, the map still has it (crossed out), and
+  // "Put it back" undoes it. The station is the quietest wharf in the middle of the busiest ferry line.
+  {
+    const ferries = (await api(`/api/baselines/${baseline.id}/routes`)).filter((r) => r.modeId === 'ferry').sort((a, b) => b.tripCount - a.tripCount);
+    const ferry = await api(`/api/routes/${ferries[0].id}`);
+    const wharves = (await api(`/api/patterns/${ferry.patterns[0].id}/stops`)).stops.slice(1, -1);
+    let quiet = null;
+    for (const w of wharves) {
+      const s = await api(`/api/stations/${w.id}/summary`);
+      if (s.calls > 0 && (!quiet || s.calls < quiet.calls)) quiet = s;
+    }
+    assert.ok(quiet, 'found a wharf to delete');
+    await pane('Timetable');
+    await js(inApp(`s.open({ kind: 'station', id: ${quiet.id} }); return true;`));
+    await waitFor(`(document.querySelector('.inspector h2')?.textContent ?? '').includes(${JSON.stringify(quiet.name)})`, 'the station panel');
+    before = await changeCount();
+    await click('.inspector .actions button', 'Delete this');
+    await waitFor(`/call there today|Nothing calls there/.test(document.querySelector('[data-testid="delete-preview"]')?.textContent ?? '')`, 'the preview of the deletion', 30000);
+    const deletePreview = await text('[data-testid="delete-preview"]');
+    assert.match(deletePreview, /Nothing is re-routed, and no vehicle is added/, 'the preview states the rule before anything changes');
+    assert.equal(await changeCount(), before, 'the preview changes nothing');
+    await shot('delete-station-preview');
+    await click('[data-testid="delete-preview"] .button.danger');
+    await waitFor(`!!document.querySelector('[data-testid="deleted-note"]')`, 'the station to be deleted', 60000);
+    assert.equal(await changeCount(), before + 1);
+    assert.match(await text('.inspector h2'), /deleted in this scenario/);
+    assert.equal(await js(`document.querySelector('.scenario .error-text')?.textContent ?? ''`), '');
+    const openScenario = await js(inApp(`return s.scenarioId;`));
+    const crossedOut = (await api(`/api/scenarios/${openScenario}/deleted-stops`)).features.map((f) => f.properties.stop_id);
+    assert.ok(crossedOut.includes(quiet.id), 'the deleted station is still in the map\'s data, to be drawn crossed out');
+    await sleep(800);
+    await shot('station-deleted');
+    await click('[data-testid="deleted-note"] button', 'Put it back');
+    await waitFor(`!document.querySelector('[data-testid="deleted-note"]') && [...document.querySelectorAll('.inspector .actions button')].some((b) => b.textContent.includes('Delete this'))`, 'undo to put the station back', 60000);
+    assert.equal((await api(`/api/scenarios/${openScenario}/deleted-stops`)).features.length, 0);
+    step(`station deleted from its panel after a preview, and put back (${quiet.name}): ${deletePreview.replace(/\s+/g, ' ').slice(0, 140)}`);
+  }
+
   // 18. A scenario run, set up in the wizard against the BAU run of step 1b. The scenario is the one
   // this test has been editing; the same people are sent through it.
   if (simBauMade) {
@@ -809,6 +913,7 @@ try {
     await shot('failure').catch(() => {});
   }
 } finally {
+  if (confirmsSeen.length) console.log(`    asked before adding vehicles, and agreed: ${confirmsSeen.join('; ')}`);
   // Remove whatever scenario the test created, and what its simulation left.
   for (const run of await api(`/api/sim-runs?baseline=${baseline.id}`).catch(() => [])) {
     if (!simRunsBefore.has(run.id)) await api(`/api/sim-runs/${run.id}?force=true`, 'DELETE').catch(() => {});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { getJson, type Baseline, type Mode, type RouteListItem } from './api.ts';
 import { clock } from './clock.ts';
 import { ClosurePanel } from './ClosurePanel.tsx';
+import { EditConfirm } from './EditConfirm.tsx';
 import { FleetPanel } from './FleetPanel.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
 import { liveStats } from './liveStats.ts';
@@ -20,7 +21,7 @@ import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
 import { TimelinePanel } from './timeline/TimelinePanel.tsx';
 import { TopBar } from './TopBar.tsx';
-import { applyRemovedTrips, loadModeVehicles, vehicleData } from './vehicles.ts';
+import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from './vehicles.ts';
 
 // Small packs first so something is moving almost immediately.
 // Read the link once at startup, before anything rewrites the address bar.
@@ -58,6 +59,8 @@ export function App() {
     clock.set(7.5 * 3600);
     vehicleData.clear();
     applyRemovedTrips([]);
+    // Where vehicles wait between trips; applied to each mode's vehicles as they load.
+    void loadWaits(baselineId, null);
     set({
       loadedModes: {},
       routes: new Map(),
@@ -161,7 +164,7 @@ export function App() {
   }, []);
 
   const paneOpen = useStore((s) => s.leftPane !== null);
-  const onVehicleCount = useCallback((count: number) => liveStats.setVehicles(count), []);
+  const onVehicleCount = useCallback((count: number, waiting: number) => liveStats.setVehicles(count, waiting), []);
 
   return (
     <div className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}${paneOpen ? ' pane-open' : ''}`}>
@@ -177,6 +180,7 @@ export function App() {
       <TimeBar key={`timebar-${theme}`} />
       <FleetPanel />
       <ScenarioManager />
+      <EditConfirm />
       <SimResults />
       <SimMapKey />
       <SimLibrary />

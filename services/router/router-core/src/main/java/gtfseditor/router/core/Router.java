@@ -202,7 +202,9 @@ public final class Router {
      *   <li>A stop: that stop, and every stop one walking link away.
      *   <li>A station: the same for each of its stops.
      *   <li>A point: every stop within {@code maxWalkMetres} in a straight line, walked at the
-     *       timetable's walking speed and detour factor.
+     *       timetable's walking speed and detour factor, plus the stop's time between street and
+     *       platform. A stop whose straight line is over water is reached by a bridge if one keeps
+     *       the walk within the distance, and otherwise left out.
      * </ul>
      */
     public Query query(Place from, Place to, int depart, int maxRides, double maxWalkMetres) {
@@ -213,8 +215,8 @@ public final class Router {
         int directSecs = -1;
         int directMetres = 0;
         if (from instanceof Place.Point a && to instanceof Place.Point b) {
-            double metres = Geo.metresBetween(a.lat(), a.lon(), b.lat(), b.lon());
-            if (metres <= maxWalkMetres) {
+            double metres = t.water.walkMetres(a.lat(), a.lon(), b.lat(), b.lon());
+            if (metres >= 0 && metres <= maxWalkMetres) {
                 directSecs = pointWalkSecs(metres);
                 directMetres = (int) Math.round(metres);
             }
@@ -238,7 +240,24 @@ public final class Router {
      * does to keep a passenger to their own stop or to let them use any stop near it.
      */
     public List<Access> near(double lat, double lon, double maxWalkMetres) {
-        return List.copyOf(reach(new Place.Point(lat, lon), true, maxWalkMetres).values());
+        return near(lat, lon, maxWalkMetres, true);
+    }
+
+    /**
+     * @param leaving true for walks from the point to each stop, false for walks from each stop to
+     *                the point; they differ where a platform takes longer to reach than to leave
+     */
+    public List<Access> near(double lat, double lon, double maxWalkMetres, boolean leaving) {
+        return List.copyOf(reach(new Place.Point(lat, lon), leaving, maxWalkMetres).values());
+    }
+
+    /**
+     * How far it is on foot between two points, as straight lines.
+     *
+     * @return metres, or -1 if the straight line is over water and no bridge gets round it
+     */
+    public double walkMetres(double lat1, double lon1, double lat2, double lon2) {
+        return t.water.walkMetres(lat1, lon1, lat2, lon2);
     }
 
     /** Seconds to walk between a point and a stop this far apart in a straight line. */
@@ -267,8 +286,15 @@ public final class Router {
             }
             case Place.Point p -> {
                 for (StopFinder.Near near : finder.near(p.lat(), p.lon(), maxWalkMetres)) {
-                    offer(reach, new Access(near.stop(), pointWalkSecs(near.metres()),
-                            (int) Math.round(near.metres())));
+                    double metres = near.metres();
+                    if (!t.water.isEmpty()) {
+                        metres = t.water.walkMetres(p.lat(), p.lon(), t.stopLat[near.stop()], t.stopLon[near.stop()]);
+                        if (metres < 0 || metres > maxWalkMetres) {
+                            continue; // over water, and no bridge near enough
+                        }
+                    }
+                    int platform = leaving ? t.stopEntrySecs[near.stop()] : t.stopExitSecs[near.stop()];
+                    offer(reach, new Access(near.stop(), pointWalkSecs(metres) + platform, (int) Math.round(metres)));
                 }
             }
         }

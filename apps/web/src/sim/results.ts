@@ -11,7 +11,7 @@ export type ResultsTab = 'overview' | 'time' | 'lines' | 'patterns' | 'people';
  * or a stop.
  */
 export type Who =
-  | { kind: 'changed' | 'later' | 'sooner' | 'lost' | 'gained' | 'all' }
+  | { kind: 'changed' | 'later' | 'sooner' | 'soonerTruly' | 'soonerNearby' | 'lost' | 'gaveUp' | 'noJourney' | 'gained' | 'all' }
   | { kind: 'group'; group: number }
   | { kind: 'line'; id: number; name: string }
   | { kind: 'link'; from: number; to: number; name: string }
@@ -49,8 +49,16 @@ export function whoLabel(who: Who, side: 'a' | 'b', compared: boolean): string {
       return 'People who arrive later';
     case 'sooner':
       return 'People who arrive sooner';
+    case 'soonerTruly':
+      return 'People who arrive sooner, and not just by using a nearby stop that was already quicker';
+    case 'soonerNearby':
+      return 'People who arrive sooner only by using a nearby stop that was already quicker on the published timetable';
     case 'lost':
       return 'People who can no longer travel';
+    case 'gaveUp':
+      return 'People who gave up because the journey is now too much later';
+    case 'noJourney':
+      return 'People who now have no journey, or were stranded';
     case 'gained':
       return 'People who can now travel';
     case 'all':
@@ -154,20 +162,56 @@ interface Parts {
   vehicles: number;
 }
 
+/** People, the hours they gain or lose between them, and the average for one of them. */
+export interface Change {
+  people: number;
+  hours: number;
+  meanMinutes: number;
+}
+
+/** A run's trips, and how many of their capacities are placeholders or assumed. Null if not known. */
+export type Capacities = { trips: number; placeholder: number } | null;
+
+/** What to say wherever a figure rests on vehicle capacities; nothing when they are real. */
+export const placeholderNote = (capacity: Capacities | undefined): string | null =>
+  !capacity || capacity.placeholder === 0 ? null
+  : capacity.placeholder >= capacity.trips
+    ? 'Every vehicle capacity is a round-number placeholder, so how full a vehicle is, and who is left behind, are illustrative.'
+    : `${capacity.placeholder.toLocaleString('en-AU')} of ${capacity.trips.toLocaleString('en-AU')} trips have a placeholder or assumed capacity, so how full they are is illustrative.`;
+
 export interface Overview {
   run: { id: number; name: string; kind: string };
   vs: { id: number; name: string; kind: string } | null;
   others: { id: number; name: string; kind: string; capacity: boolean }[];
   times: { a: JourneyTimes; b: JourneyTimes | null };
+  /** Whether the journeys were made up, not observed. Null when the demand set has been removed. */
+  madeUp: boolean | null;
+  /**
+   * On the published timetable (the BAU run): travellers, how many of them start or end at a stop
+   * that one nearby already beat, and by how much on average, as the simulator scores a journey.
+   */
+  margin: { people: number; beaten: number; meanMinutes: number } | null;
+  capacity: Capacities;
   // The rest is there only when the run is set against another.
   compared?: number;
   groups?: number[];
-  sooner?: { people: number; hours: number; meanMinutes: number };
-  later?: { people: number; hours: number; meanMinutes: number };
+  /** Of each group, the people who arrive sooner only by a nearby stop that was already quicker. */
+  nearbyGroups?: number[];
+  /** Everyone who arrives sooner; `truly` and `nearby` split them. */
+  sooner?: Change & { truly: Change; nearby: Change };
+  later?: Change;
+  /**
+   * People who gave up, counted by how much later the journey they turned down would have been.
+   * `atLeast` of them are counted at the limit, because the run did not record more: the hours
+   * are then the least they can be.
+   */
+  gaveUp?: Change & { groups: number[]; atLeast: number; limitMinutes: number };
+  /** Hours lost by those later or who gave up, less hours gained by those truly sooner. */
+  net?: { hoursLost: number; hoursGained: number; hours: number; atLeast: boolean };
   lost?: { people: number; gaveUp: number; stranded: number };
   gained?: number;
   parts?: { all: { people: number; a: Parts; b: Parts }; changed: { people: number; a: Parts; b: Parts } };
-  byHour?: { hour: number; groups: number[]; lost: number; gained: number }[];
+  byHour?: { hour: number; groups: number[]; lost: number; gained: number; nearby: number; gaveUp: number }[];
   byLength?: { length: number; people: number; groups: number[]; meanLaterMinutes: number }[];
 }
 
@@ -217,6 +261,7 @@ export interface LineDetail {
 export interface Flows {
   run: number;
   vs: number | null;
+  capacity?: Capacities;
   /** id, lon, lat, name */
   stops: [number, number, number, string][];
   /** from, to, passengers in this run, in the other, places offered in this run, mode */

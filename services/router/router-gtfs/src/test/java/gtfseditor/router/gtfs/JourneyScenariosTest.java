@@ -239,8 +239,9 @@ class JourneyScenariosTest {
         assertEquals(t.stopIndex("C"), walk.fromStop());
         assertEquals(t.stopIndex("C2"), walk.toStop());
         assertEquals(at(8, 14), walk.depart());
-        // About 150 m: 189 s at 1.03 m/s with the 1.3 detour, plus the fixed 30 s.
-        assertEquals(219, walk.arrive() - walk.depart(), 3);
+        // About 150 m: 189 s at 1.03 m/s with the 1.3 detour, plus the fixed 30 s, plus 60 s to get
+        // off the railway platform at C, which has no pathways.
+        assertEquals(279, walk.arrive() - walk.depart(), 3);
         assertEquals(150, walk.metres(), 2);
         assertEquals(walk.arrive() - walk.depart(), j.walkSecs());
     }
@@ -317,7 +318,8 @@ class JourneyScenariosTest {
         assertEquals("foot EXP foot", trips(j));
         Leg first = j.legs().get(0);
         assertEquals(300, first.metres(), 2);
-        assertEquals(379, first.arrive() - first.depart(), 3);
+        // 379 s of walking and 60 s onto the railway platform at A; the same off the one at D.
+        assertEquals(439, first.arrive() - first.depart(), 3);
         assertEquals(at(8, 20) + (first.arrive() - first.depart()), j.arrive(), 3);
 
         // Nothing within walking distance.

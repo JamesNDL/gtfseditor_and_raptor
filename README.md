@@ -24,12 +24,21 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 | `npm run import [-- dates]` | Import service days as baselines |
 | `npm run packs` | Rebuild the vehicle animation files for existing baselines |
 | `npm test` | Unit tests for the core logic |
-| `npm run export:check [-- scenarioId]` | Export the first day (or a scenario) as GTFS through the running API and check it; for the published day, compare it with the original feed |
+| `npm run export:check [-- scenarioId] [-- --box=s,w,n,e --no-shapes]` | Export the first day (or a scenario, on its own day) as GTFS through the running API and check it: references, ids, order of times and distances, two or more stops a trip. For the published day, compare it with the original feed. For a scenario, also require that no trip it made runs faster than its mode can go or backwards, and that the stay-aboard blocks it changed do not overlap. A box and `--no-shapes` make it quick |
 | `npm run test:ui` | Drive the real interface in a headless browser (click, type, drag, shortcuts) against the running app; screenshots go to `data/ui-test/`. With the router running it also sets up and runs simulations |
-| `npm run test:e2e` | End-to-end test of scenario editing against the running API (creates and deletes its own scenario) |
+| `npm run test:e2e` | End-to-end test of scenario editing against the running API (creates and deletes its own scenarios). Its "Reality" block checks what an edit must never produce, and ends by exporting its scenario and running the export check on it |
 | `npm run test:sim` | End-to-end test of the simulator through the running API and router (makes and removes its own journeys, runs and scenario) |
 | `npm run router:dev` | Start the journey router service, which also runs the simulator |
 | `npm run dev` | Start the API and web app |
+
+## Editing through the API
+
+`POST /api/scenarios/:id/edits` with `{ "kind": ..., ... }` applies one change and answers with its summary. Two things to know:
+
+- An edit that names a trip which is no longer in the scenario (it has already been replaced or removed) answers 409 and changes nothing.
+- Sent with `"confirm": false`, an edit that would add ten or more vehicles is not applied: the answer is `{ "needsConfirm": { "added", "message", "summary" } }`. Send it again with `"confirm": true` to apply it. Without `confirm` the edit is applied straight away. The web app always asks first.
+
+`GET /api/scenarios/:id` lists the scenario's clashes. Their kinds are `platform`, `vehicle`, `speed` (a stretch run faster than the mode can go, or backwards), `place` (a vehicle that cannot reach its next trip) and `closure` (a path made after a closure that runs through it). `PLAN.md` has the rules under "What a scenario cannot do".
 
 ## The passenger simulator
 
@@ -43,6 +52,8 @@ In the web app it is the **Simulation** panel, which folds out from the **Simula
 - While a run is chosen, the line, trip and station panels gain a "Passengers" section. The figures show when the timetable the run was made on is the one open.
 - **Library** lists every run, by folder or by date, with scenario runs under their BAU run: open, rename, move, archive, remove.
 - A link can name the run to show: `#route=<id>&sim=<run id>`.
+
+Runs made before 20 Nov 2026 show as out of date: the router's rules for walks and changes changed that day (a change on foot takes at least 2 minutes, platforms take their pathway time to the street, and there is no walk across water that a ferry sails). Make a new BAU run before comparing a scenario with it. The rules and what they cannot catch are in `services/router/README.md`.
 
 The same things are available through the API:
 
@@ -89,7 +100,7 @@ Any of them may add `name`, `folderId`, `madeBy` and `settings`. A run is `queue
 
 - `apps/web`: React app (MapLibre map, deck.gl vehicles, inspector).
 - `apps/api`: Fastify server (map tiles, vehicle data, inspector queries).
-- `packages/core`: shared logic (vehicle-day chaining, animation file format, time formatting).
+- `packages/core`: shared logic (vehicle-day chaining, waits between trips, animation file format, time formatting, the speed limits by mode that edits and clash rules share).
 - `packages/gtfs`: feed download, database schema and import.
 - `services/router`: the journey router and passenger simulator (Java).
 - `docs/`: the plans for the router and the simulator, with what was found building them.

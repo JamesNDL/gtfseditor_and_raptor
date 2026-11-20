@@ -31,7 +31,7 @@ final class ResultWriter implements Sink {
     static final class Totals {
         final long[] rows = new long[4];
         final long[] people = new long[4];
-        final long[] why = new long[4];
+        final long[] why = new long[Plans.WHY_COUNT];
         final long[] minutes = new long[48 * 60 + 1]; // people by journey time, for the median
         long journeySecs;
         long waitSecs;
@@ -46,6 +46,7 @@ final class ResultWriter implements Sink {
         long same;
         long soonerSecs;
         long laterSecs;
+        long gaveUpSecs;
         long newlyServed;
         long lostService;
         long changedOrigin;
@@ -138,15 +139,24 @@ final class ResultWriter implements Sink {
         // Which stop they used at each end, and whether it is their own.
         Leg firstLeg = moved ? travelled.get(0) : null;
         Leg lastLeg = ok ? travelled.get(travelled.size() - 1) : null;
-        boolean originChanged = ok && places.hasOwn(origin)
-                && (firstRide == null || !places.isOwn(origin, firstRide.fromStop()));
-        boolean destinationChanged = ok && places.hasOwn(destination)
-                && (lastRide == null || !places.isOwn(destination, lastRide.toStop()));
+        // Someone whose own stop this timetable no longer has uses another by definition: in a
+        // scenario run that is a change of stop, the plainest kind.
+        boolean gone = reference != null && plans.reason[row] == Plans.GONE;
+        boolean originChanged = ok && (places.hasOwn(origin)
+                ? firstRide == null || !places.isOwn(origin, firstRide.fromStop())
+                : gone && !demand.placeStop[origin].isEmpty());
+        boolean destinationChanged = ok && (places.hasOwn(destination)
+                ? lastRide == null || !places.isOwn(destination, lastRide.toStop())
+                : gone && !demand.placeStop[destination].isEmpty());
         int originWalk = firstLeg != null && firstLeg.kind() == Leg.Kind.WALK ? firstLeg.metres() : 0;
         int destinationWalk = lastLeg != null && lastLeg.kind() == Leg.Kind.WALK && travelled.size() > 1
                 ? lastLeg.metres() : 0;
         boolean hasReference = reference != null && reference.status[row] == Plans.OK;
         int later = ok && hasReference ? arrive - reference.arrive[row] : 0;
+        // Someone who gave up is not put on a vehicle, but how much later the journey they turned
+        // down would have got them there is the measure of what they lost.
+        boolean turnedDown = status == Plans.GAVE_UP && hasReference && plans.arrive[row] >= 0;
+        int laterIfMade = turnedDown ? plans.arrive[row] - reference.arrive[row] : 0;
 
         totals.rows[status]++;
         totals.people[status] += people;
@@ -160,6 +170,9 @@ final class ResultWriter implements Sink {
             }
             if (status == Plans.NO_JOURNEY && hasReference) {
                 totals.lostService += people;
+            }
+            if (turnedDown) {
+                totals.gaveUpSecs += (long) laterIfMade * people;
             }
         }
         if (ok) {
@@ -209,7 +222,8 @@ final class ResultWriter implements Sink {
                 .append(plans.arrive[row] < 0 ? "" : plans.near[row] ? "near" : "own")
                 .append(',');
         number(hasReference ? reference.arrive[row] : -1).append(',');
-        line.append(ok && hasReference ? Integer.toString(later) : "").append(',').append(plans.margin[row])
+        line.append(ok && hasReference ? Integer.toString(later) : turnedDown ? Integer.toString(laterIfMade) : "")
+                .append(',').append(plans.margin[row])
                 .append(',').append(originChanged ? 1 : 0).append(',');
         DemandWriter.quoted(line, firstRide == null || !ok ? "" : t.stopIds[firstRide.fromStop()]).append(',')
                 .append(originWalk).append(',').append(destinationChanged ? 1 : 0).append(',');

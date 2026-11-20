@@ -445,7 +445,10 @@ h3 {
 }
 
 .moving-label {
+  display: block;
   font-size: 11.5px;
+  line-height: 1.25;
+  white-space: nowrap;
   color: var(--muted);
 }
 
@@ -2987,4 +2990,76 @@ select.cell {
 .app.pane-open .map-key,
 .app.pane-open .rail-hint {
   left: 410px;
+}
+
+/* Deleting a station, a stop or a platform (the station panel) */
+.platform-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.platform-row .row {
+  flex: 1;
+  min-width: 0;
+}
+
+.struck {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.delete-preview {
+  border: 1px solid var(--danger-text);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.delete-preview .actions {
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.deleted-note {
+  border: 1px solid var(--border);
+}
+
+.deleted-note p {
+  margin: 0 0 6px;
+}
+
+/* ---------- Asking before a change that adds many vehicles ---------- */
+.edit-confirm {
+  width: min(520px, calc(100vw - 32px));
+  padding: 18px 20px;
+  margin: 18vh auto 0;
+}
+.edit-confirm h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.edit-confirm p {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+.edit-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.export-warning {
+  margin: 6px 0 0;
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+.fleet-limits-note {
+  color: var(--text);
 }

@@ -116,8 +116,23 @@ public final class Timetable {
     public final int[] transferOffset;
     public final int[] transferTargets;
     public final int[] transferSecs;
-    /** Straight-line distance of each link, in metres. */
+    /**
+     * Distance of each link in metres, as straight lines: the one straight line between the two
+     * stops, or by way of a bridge where that line is over water.
+     */
     public final int[] transferMetres;
+
+    /**
+     * Seconds from each stop out to the street, beyond the walk on the surface: the feed's pathway
+     * time from a platform to its station's nearest entrance, or the settings' allowance for a
+     * railway platform with no pathways. 0 for a stop on the street.
+     */
+    public final int[] stopExitSecs;
+    /** The same coming in from the street; pathways need not take the same time both ways. */
+    public final int[] stopEntrySecs;
+
+    /** Where a straight walk would cross water, as far as the timetable's source could say. */
+    public final Water water;
 
     private volatile Map<String, Integer> stopIndex;
     private volatile Map<String, Integer> tripIndex;
@@ -156,6 +171,11 @@ public final class Timetable {
         public int[] transferTargets;
         public int[] transferSecs;
         public int[] transferMetres;
+        /** Left null, every stop is on the street. */
+        public int[] stopExitSecs;
+        public int[] stopEntrySecs;
+        public double[] waterLines = {};
+        public double[] waterBridges = {};
 
         /**
          * Checks the parts against each other and builds the timetable.
@@ -199,11 +219,19 @@ public final class Timetable {
         transferTargets = b.transferTargets;
         transferSecs = b.transferSecs;
         transferMetres = b.transferMetres;
+        stopExitSecs = b.stopExitSecs == null ? new int[b.stopIds.length] : b.stopExitSecs;
+        stopEntrySecs = b.stopEntrySecs == null ? new int[b.stopIds.length] : b.stopEntrySecs;
+        water = b.waterLines.length == 0 && b.waterBridges.length == 0 ? Water.NONE
+                : new Water(b.waterLines, b.waterBridges);
 
         int stops = stopIds.length;
         check(stationNames.length == stationIds.length, "station names");
         check(stopNames.length == stops && stopLat.length == stops && stopLon.length == stops
-                && stopStation.length == stops, "stop arrays differ in length");
+                && stopStation.length == stops && stopExitSecs.length == stops && stopEntrySecs.length == stops,
+                "stop arrays differ in length");
+        for (int s = 0; s < stops; s++) {
+            check(stopExitSecs[s] >= 0 && stopEntrySecs[s] >= 0, "a stop's time to the street is negative");
+        }
         for (int station : stopStation) {
             check(station >= -1 && station < stationIds.length, "a stop names a station that does not exist");
         }
@@ -463,10 +491,10 @@ public final class Timetable {
                 patternHead,
                 patternCalls, transferLinks, tripRoute, tripPattern, tripCapacity,
                 tripStayAboard, stopPatternOffset, stopPatterns, stopPatternPositions, transferOffset,
-                transferTargets, transferSecs, transferMetres}) {
+                transferTargets, transferSecs, transferMetres, stopExitSecs, stopEntrySecs}) {
             bytes += 16 + 4L * array.length;
         }
-        bytes += 2 * (16 + 8L * stopLat.length);
+        bytes += 2 * (16 + 8L * stopLat.length) + 3 * (16 + 8L * water.lines.length);
         bytes += 2 * (16L + patternStopFlags.length) + tripCapacityFlags.length;
         for (String[] texts : new String[][] {stationIds, stationNames, stopIds, stopNames, routeIds,
                 routeNames, tripIds}) {

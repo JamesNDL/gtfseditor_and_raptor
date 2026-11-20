@@ -5,7 +5,7 @@ package gtfseditor.router.core;
  *
  * @param stop   the stop's number in the timetable
  * @param secs   walking time; 0 when the journey starts or ends at the stop itself
- * @param metres straight-line distance
+ * @param metres distance as straight lines: one, or two by way of a bridge
  */
 public record Access(int stop, int secs, int metres) {
 

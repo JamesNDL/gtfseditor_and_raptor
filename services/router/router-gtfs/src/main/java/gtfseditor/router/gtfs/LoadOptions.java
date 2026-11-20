@@ -2,6 +2,8 @@ package gtfseditor.router.gtfs;
 
 import gtfseditor.router.core.Mode;
 import gtfseditor.router.core.TransferSettings;
+import gtfseditor.router.core.Water;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
@@ -14,14 +16,19 @@ import java.util.Map;
  * @param transfers       how walking links are generated
  * @param capacityFactor  every capacity is multiplied by this
  * @param defaultCapacity capacity for a trip the feed names no vehicle for, by mode
+ * @param water           where a straight walk would cross water; {@link Water#NONE} if not known
  */
 public record LoadOptions(
         int serviceDate,
         TransferSettings transfers,
         double capacityFactor,
-        Map<Mode, Integer> defaultCapacity) {
+        Map<Mode, Integer> defaultCapacity,
+        Water water) {
 
     public LoadOptions {
+        if (water == null) {
+            throw new IllegalArgumentException("say Water.NONE where no water is known");
+        }
         if (serviceDate < 0) {
             throw new IllegalArgumentException("the service date cannot be negative");
         }
@@ -53,23 +60,28 @@ public record LoadOptions(
         capacity.put(Mode.COACH, 50);
         capacity.put(Mode.SCHOOL_BUS, 70);
         capacity.put(Mode.OTHER, 65);
-        return new LoadOptions(0, TransferSettings.defaults(), 1.0, capacity);
+        return new LoadOptions(0, TransferSettings.defaults(), 1.0, capacity, Water.NONE);
     }
 
     public LoadOptions withServiceDate(int date) {
-        return new LoadOptions(date, transfers, capacityFactor, defaultCapacity);
+        return new LoadOptions(date, transfers, capacityFactor, defaultCapacity, water);
     }
 
     public LoadOptions withTransfers(TransferSettings settings) {
-        return new LoadOptions(serviceDate, settings, capacityFactor, defaultCapacity);
+        return new LoadOptions(serviceDate, settings, capacityFactor, defaultCapacity, water);
     }
 
     public LoadOptions withCapacityFactor(double factor) {
-        return new LoadOptions(serviceDate, transfers, factor, defaultCapacity);
+        return new LoadOptions(serviceDate, transfers, factor, defaultCapacity, water);
+    }
+
+    public LoadOptions withWater(Water known) {
+        return new LoadOptions(serviceDate, transfers, capacityFactor, defaultCapacity, known);
     }
 
     /** Every setting as one line of text. Two options with the same text build the same timetable. */
     public String fingerprintText() {
-        return serviceDate + "|" + transfers + "|" + capacityFactor + "|" + defaultCapacity;
+        return serviceDate + "|" + transfers + "|" + capacityFactor + "|" + defaultCapacity
+                + "|water " + water.lines.length + ":" + Arrays.hashCode(water.lines) + ":" + Arrays.hashCode(water.bridges);
     }
 }

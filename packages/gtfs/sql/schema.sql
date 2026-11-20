@@ -378,6 +378,16 @@ create index if not exists scenario_closures_scenario_idx on scenario_closures (
 alter table scenario_closures add column if not exists from_secs int;
 alter table scenario_closures add column if not exists to_secs int;
 
+-- Stops a scenario has deleted: published ones, or ones the scenario added itself. A deleted
+-- station is listed with every stop under it. The trips that called there were changed by the same
+-- edit; like everything else, the row carries the edit that made it, so undo only moves `head`.
+create table if not exists scenario_removed_stops (
+  scenario_id int not null references scenarios on delete cascade,
+  stop_id bigint not null references stops on delete cascade,
+  edit_seq int not null,
+  primary key (scenario_id, stop_id)
+);
+
 -- ---------------------------------------------------------------------------
 -- The passenger simulator (docs/simulator-plan.md, phase S3).
 -- ---------------------------------------------------------------------------

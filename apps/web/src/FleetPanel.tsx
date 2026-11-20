@@ -56,6 +56,14 @@ export function FleetPanel() {
 
   if (!open) return null;
   const refresh = () => set({ dataVersion: useStore.getState().dataVersion + 1 });
+  const listed = types.data ?? [];
+  const noLimits = listed.length > 0 && listed.every((t) => t.fleetSize === null);
+  const limitsFromDay = async () => {
+    const baselineId = useStore.getState().baselineId;
+    if (baselineId === null) return;
+    setError(await save('POST', `/api/vehicle-types/limits-from-day?baseline=${baselineId}`, {}));
+    refresh();
+  };
   const commit = async (id: number, patch: Record<string, unknown>) => {
     setError(await save('PATCH', `/api/vehicle-types/${id}`, patch));
     refresh();
@@ -78,6 +86,18 @@ export function FleetPanel() {
         </header>
 
         {error && <p className="error-text small fleet-error">{error}</p>}
+        {noLimits && (
+          <p className="small fleet-error fleet-limits-note">
+            No fleet sizes are set, so nothing can warn that a scenario needs more vehicles than exist.{' '}
+            <button
+              className="button small-button limits-button"
+              title="Sets each type's fleet size to the number the published timetable uses on this day. These are the editor's own estimates: correct any you know."
+              onClick={() => void limitsFromDay()}
+            >
+              Set each to what the published timetable uses
+            </button>
+          </p>
+        )}
 
         <div className="fleet-scroll">
           <table className="fleet-table">

@@ -21,7 +21,7 @@ import java.util.Set;
  *
  * <pre>
  * RouteCli &lt;feed.zip&gt; &lt;from&gt; &lt;to&gt; &lt;time&gt; [--date 20261117] [--snapshots &lt;folder&gt;] [--rides 8] [--walk 1200]
- *          [--avoid school_bus,ferry] [--change 120]
+ *          [--avoid school_bus,ferry] [--change 120] [--water &lt;file&gt;]
  * RouteCli &lt;feed.zip&gt; --random 2000 [--area opal|all] [--within 25] [--threads 8] [--show 5] [--seed 1] [...]
  * RouteCli &lt;feed.zip&gt; --random 300 --dump &lt;file&gt; [...]
  * </pre>
@@ -61,6 +61,7 @@ public final class RouteCli {
             switch (args[i]) {
                 case "--date" -> options = options.withServiceDate(Integer.parseInt(value(args, ++i)));
                 case "--snapshots" -> snapshots = Path.of(value(args, ++i));
+                case "--water" -> options = options.withWater(WaterFile.read(Path.of(value(args, ++i))));
                 case "--rides" -> rides = Integer.parseInt(value(args, ++i));
                 case "--walk" -> walk = Double.parseDouble(value(args, ++i));
                 case "--random" -> random = Integer.parseInt(value(args, ++i));
@@ -228,7 +229,7 @@ public final class RouteCli {
     private static void usage(String problem) {
         System.err.println(problem);
         System.err.println("Usage: RouteCli <feed.zip> <from> <to> <time> [--date 20261117] [--snapshots <folder>]"
-                + " [--rides 8] [--walk 1200] [--avoid school_bus,ferry] [--change 120]");
+                + " [--rides 8] [--walk 1200] [--avoid school_bus,ferry] [--change 120] [--water <file>]");
         System.err.println("       RouteCli <feed.zip> --random <count> [--area opal|all] [--within <km>] [--threads 8] [--show 5] [--seed 1]"
                 + " [--dump <file>]");
         System.exit(2);

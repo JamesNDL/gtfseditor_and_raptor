@@ -211,8 +211,8 @@ class BruteForceTest {
             for (int trip = 0; trip < t.tripCount(); trip++) {
                 rodeToEnd[trip] |= rodeNow[trip];
             }
-            // After a ride the passenger may change where they are, which takes time, or walk one link;
-            // then they may board again.
+            // After a ride the passenger may change where they are, or walk one link and change there.
+            // Either takes the time to change; the walk takes its own time if that is longer.
             int[] next = canBoardFrom.clone();
             for (int stop = 0; stop < stops; stop++) {
                 if (byRide[stop] == NONE) {
@@ -222,7 +222,7 @@ class BruteForceTest {
                 for (int j = t.transferOffset[stop]; j < t.transferOffset[stop + 1]; j++) {
                     int to = t.transferTargets[j];
                     if (t.transferSecs[j] <= q.maxLinkSecs()) {
-                        next[to] = Math.min(next[to], byRide[stop] + t.transferSecs[j]);
+                        next[to] = Math.min(next[to], byRide[stop] + Math.max(t.transferSecs[j], q.changeSecs()));
                     }
                 }
             }

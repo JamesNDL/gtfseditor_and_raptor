@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
  *       same parent stop that the timetable links to it, at that link's walking time. For a station
  *       id, every stop of the station at no walk. None if the timetable does not have the id.
  *   <li><b>Any stop near.</b> Every stop within the walking distance of the place's position, at
- *       the walk from that position, and the own stops as above.
+ *       the walk from that position, and the own stops as above. A stop across water is left out
+ *       unless a bridge keeps the walk within the distance. Where the place is a platform, the
+ *       walk to any stop outside its station also takes the platform's time to the street.
  * </ul>
  *
  * <p>Safe to share between threads.
@@ -145,24 +147,29 @@ final class PlaceIndex {
 
     /** The stops a journey from the place may start at: its own, or any near. */
     List<Access> access(int place, boolean near) {
-        return near ? near(place, nearAccess, ownAccess) : ownAccess.get(place);
+        return near ? near(place, nearAccess, ownAccess, true) : ownAccess.get(place);
     }
 
     /** The stops a journey to the place may end at: its own, or any near. */
     List<Access> egress(int place, boolean near) {
-        return near ? near(place, nearEgress, ownEgress) : ownEgress.get(place);
+        return near ? near(place, nearEgress, ownEgress, false) : ownEgress.get(place);
     }
 
     private List<Access> near(int place, AtomicReferenceArray<List<Access>> cache,
-            AtomicReferenceArray<List<Access>> own) {
+            AtomicReferenceArray<List<Access>> own, boolean leaving) {
         List<Access> known = cache.get(place);
         if (known != null) {
             return known;
         }
         Map<Integer, Access> reach = new TreeMap<>();
         if (walkMetres > 0) {
-            for (Access access : router.near(demand.placeLat[place], demand.placeLon[place], walkMetres)) {
-                reach.put(access.stop(), access);
+            // A place that is a platform is that much further from every stop outside its station.
+            int platform = platformSecs(place, leaving);
+            int parent = platform > 0 ? t.stopStation[t.stopIndex(demand.placeStop[place])] : -1;
+            for (Access access : router.near(demand.placeLat[place], demand.placeLon[place], walkMetres, leaving)) {
+                boolean outside = platform > 0 && (parent < 0 || t.stopStation[access.stop()] != parent);
+                reach.put(access.stop(), outside
+                        ? new Access(access.stop(), access.secs() + platform, access.metres()) : access);
             }
         }
         for (Access access : own.get(place)) {
@@ -171,6 +178,20 @@ final class PlaceIndex {
         List<Access> found = List.copyOf(reach.values());
         cache.set(place, found); // two threads may both work it out; they get the same answer
         return found;
+    }
+
+    /**
+     * The time between a place and the street, where the place is a stop of the timetable that
+     * takes time to leave or reach and stands where that stop does; otherwise 0.
+     */
+    private int platformSecs(int place, boolean leaving) {
+        String id = demand.placeStop[place];
+        int stop = id.isEmpty() ? -1 : t.stopIndex(id);
+        if (stop < 0 || Geo.metresBetween(demand.placeLat[place], demand.placeLon[place], t.stopLat[stop],
+                t.stopLon[stop]) > 50) {
+            return 0;
+        }
+        return leaving ? t.stopExitSecs[stop] : t.stopEntrySecs[stop];
     }
 
     /**
@@ -189,10 +210,10 @@ final class PlaceIndex {
         int directSecs = -1;
         int directMetres = 0;
         if (near) {
-            double metres = Geo.metresBetween(demand.placeLat[from], demand.placeLon[from], demand.placeLat[to],
+            double metres = router.walkMetres(demand.placeLat[from], demand.placeLon[from], demand.placeLat[to],
                     demand.placeLon[to]);
-            if (metres <= walkMetres) {
-                directSecs = router.pointWalkSecs(metres);
+            if (metres >= 0 && metres <= walkMetres) {
+                directSecs = router.pointWalkSecs(metres) + platformSecs(from, true) + platformSecs(to, false);
                 directMetres = (int) Math.round(metres);
             }
         }

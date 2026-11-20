@@ -54,7 +54,7 @@ final class Simulations implements AutoCloseable {
     /** The settings each kind of run may be given. The rest come from the run it is made from. */
     private static final Set<String> FOR_ANY = Set.of("fullAt", "maxLeftBehind");
     private static final Set<String> FOR_BAU = Set.of("capacity", "walkMetres", "changePenaltySecs", "schoolBuses",
-            "shareOneIn", "area");
+            "shareOneIn", "area", "maxWaitSecs");
     private static final Set<String> FOR_SCENARIO = Set.of("capacity", "switchThresholdSecs", "giveUpSecs");
 
     private enum State { QUEUED, RUNNING, DONE, FAILED, STOPPED }
@@ -325,6 +325,7 @@ final class Simulations implements AutoCloseable {
                 case "shareOneIn" -> s.shareOneIn = whole(name, value);
                 case "maxLeftBehind" -> s.maxLeftBehind = whole(name, value);
                 case "giveUpSecs" -> s.giveUpSecs = value.isNull() ? -1 : whole(name, value);
+                case "maxWaitSecs" -> s.maxWaitSecs = value.isNull() ? -1 : whole(name, value);
                 case "area" -> s.area = area(value);
                 default -> throw new IllegalStateException(name);
             }

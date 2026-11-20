@@ -1,6 +1,6 @@
 import { ScatterplotLayer } from '@deck.gl/layers';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { tripPosition } from '@gtfs-editor/core';
+import { formatClock } from '@gtfs-editor/core';
 import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -14,7 +14,7 @@ import { BLUES, MIDDLE, REDS, divergingColor, fetchResults, fullColor, mins, min
 import { mapView } from './sim/simApi.ts';
 import { mapScale } from './sim/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from './theme.ts';
-import { computeFrame, vehicleData } from './vehicles.ts';
+import { computeFrame, vehicleAt, vehicleData, vehicleFrames, waitingUntil } from './vehicles.ts';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
@@ -56,7 +56,8 @@ const STEP_RGB = [0, 1, 2, 3, 4].map((step) => {
 });
 
 interface Props {
-  onVehicleCount: (count: number) => void;
+  /** Vehicles drawn, and how many of them are standing between two trips. */
+  onVehicleCount: (count: number, waiting: number) => void;
 }
 
 export function MapView({ onVehicleCount }: Props) {
@@ -140,7 +141,7 @@ export function MapView({ onVehicleCount }: Props) {
     // Stops are small, so they get a generous target: the nearest station, platform or stop within
     // STOP_REACH pixels of the pointer.
     const STOP_REACH = 14;
-    const STOP_LAYERS = ['stop-station', 'stop-platform', 'stop-road', 'stop-new', 'stop-new-platform'];
+    const STOP_LAYERS = ['stop-station', 'stop-platform', 'stop-road', 'stop-new', 'stop-new-platform', 'stop-deleted', 'stop-deleted-platform'];
     const stopAt = (x: number, y: number): { id: number; name: string; isStation: boolean; lon: number; lat: number } | null => {
       const layers = STOP_LAYERS.filter((id) => map.getLayer(id));
       if (!layers.length) return null;
@@ -341,6 +342,9 @@ export function MapView({ onVehicleCount }: Props) {
           if (i === undefined) continue;
           const route = routes.get(mv.pack.tripRoute[i]);
           text = route ? `${route.shortName ?? route.longName ?? 'Vehicle'} vehicle` : 'Vehicle';
+          // A vehicle standing at the end of this trip: say so, and when it leaves again.
+          const until = waitingUntil(mv, i, clock.secs);
+          if (until !== null) text += ` · finished this trip, waiting to leave at ${formatClock(until).time}`;
         }
         // With vehicles coloured by how full, say how full this one is.
         const sim = useStore.getState();
@@ -535,7 +539,7 @@ export function MapView({ onVehicleCount }: Props) {
         paint: { 'text-color': P.label, 'text-halo-color': P.ink, 'text-halo-width': 1.4 },
       });
       const empty = { type: 'FeatureCollection' as const, features: [] };
-      for (const id of ['scenario-lines', 'scenario-stops', 'scenario-closures', 'closing', 'builder']) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
+      for (const id of ['scenario-lines', 'scenario-stops', 'scenario-deleted', 'scenario-closures', 'closing', 'builder']) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
       for (const id of ['builder-line', 'builder-points', 'closure-fill', 'closure-edge', 'closing-fill', 'closing-edge', 'closing-parts-edge', 'closing-parts', 'closing-dropped', 'closing-focus-edge', 'closing-focus', 'closing-paths', 'closing-cut-edge', 'closing-cut', 'closing-turns', 'closing-turn-names', 'closing-points']) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
@@ -587,6 +591,53 @@ export function MapView({ onVehicleCount }: Props) {
           'circle-stroke-width': 2,
         },
       });
+      // Stops the scenario has deleted stay on the map, greyed and crossed out over the live stop, so that
+      // what was deleted can be seen, clicked and put back. They are few, so stations and stops show at
+      // every zoom; single platforms only once zoomed in, like live ones.
+      const GONE = '#8e8e93';
+      for (const [id, platform] of [['stop-deleted', false], ['stop-deleted-platform', true]] as const) {
+        if (map.getLayer(id)) continue;
+        map.addLayer({
+          id,
+          type: 'circle',
+          source: 'scenario-deleted',
+          ...(platform ? { minzoom: 14.5 } : {}),
+          filter: platform ? ['==', ['get', 'platform'], true] : ['!=', ['get', 'platform'], true],
+          paint: {
+            'circle-radius': platform ? ['interpolate', ['linear'], ['zoom'], 14.5, 6, 18, 11] : ['interpolate', ['linear'], ['zoom'], 9, 5, 12, 7, 16, 11],
+            'circle-color': GONE,
+            'circle-stroke-color': P.ink,
+            'circle-stroke-width': 1.5,
+          },
+        });
+        map.addLayer({
+          id: `${id}-cross`,
+          type: 'symbol',
+          source: 'scenario-deleted',
+          ...(platform ? { minzoom: 14.5 } : {}),
+          filter: platform ? ['==', ['get', 'platform'], true] : ['!=', ['get', 'platform'], true],
+          layout: { 'text-field': '×', 'text-font': ['Noto Sans Regular'], 'text-size': platform ? 15 : 17, 'text-allow-overlap': true, 'text-ignore-placement': true, 'text-offset': [0, -0.08] },
+          paint: { 'text-color': P.ink, 'text-halo-color': P.ink, 'text-halo-width': 0.6 },
+        });
+      }
+      if (!map.getLayer('stop-deleted-label')) {
+        map.addLayer({
+          id: 'stop-deleted-label',
+          type: 'symbol',
+          source: 'scenario-deleted',
+          minzoom: 11.5,
+          filter: ['!=', ['get', 'platform'], true],
+          layout: {
+            'text-field': ['concat', ['get', 'name'], ' (deleted)'],
+            'text-font': ['Noto Sans Regular'],
+            'text-size': 11,
+            'text-offset': [0, -1.1],
+            'text-anchor': 'bottom',
+            'text-max-width': 9,
+          },
+          paint: { 'text-color': GONE, 'text-halo-color': P.ink, 'text-halo-width': 1.4 },
+        });
+      }
       // Closed roads and lines: those the scenario has made, and the one being set up.
       for (const [id, source, opacity] of [['closure', 'scenario-closures', 0.45], ['closing', 'closing', 0.45]] as const) {
         map.addLayer({
@@ -721,7 +772,7 @@ export function MapView({ onVehicleCount }: Props) {
     let cancelled = false;
     const show = (source: string, data: GeoJSON.FeatureCollection) =>
       whenLoaded(() => (map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data));
-    for (const [source, what] of [['scenario-lines', 'lines'], ['scenario-stops', 'stops'], ['scenario-closures', 'closures']]) {
+    for (const [source, what] of [['scenario-lines', 'lines'], ['scenario-stops', 'stops'], ['scenario-deleted', 'deleted-stops'], ['scenario-closures', 'closures']]) {
       if (scenarioId === null) show(source, { type: 'FeatureCollection', features: [] });
       else
         fetch(`/api/scenarios/${scenarioId}/${what}`)
@@ -1228,6 +1279,8 @@ export function MapView({ onVehicleCount }: Props) {
     let last = performance.now();
     let lastSecs = -1;
     let lastCount = -1;
+    let lastWaiting = -1;
+    let lastFrames = -1;
     const ring = new Float64Array(2);
 
     const draw = (now: number) => {
@@ -1237,8 +1290,9 @@ export function MapView({ onVehicleCount }: Props) {
       const state = useStore.getState();
       if (state.playing) clock.advance(elapsed, state.speed);
       const secs = clock.secs;
-      if (secs === lastSecs && !dirtyRef.current) return;
+      if (secs === lastSecs && !dirtyRef.current && vehicleFrames.version === lastFrames) return;
       lastSecs = secs;
+      lastFrames = vehicleFrames.version;
       dirtyRef.current = false;
 
       const layers: ScatterplotLayer[] = [];
@@ -1247,6 +1301,7 @@ export function MapView({ onVehicleCount }: Props) {
       const byLoad = !!simRun && tripLoads.runId === simRun.id && (simRun.kind === 'scenario' ? simRun.scenarioId : null) === state.scenarioId;
       const fade = state.closing !== null || (state.builder !== null && !!state.builder.reshape) || (state.simRunId !== null && state.simMap.layer !== 'none' && !byLoad);
       let total = 0;
+      let waiting = 0;
       let ringAt: [number, number] | null = null;
       // The scenario's own trips are drawn last, on top, with a white edge so edits stand out.
       for (const mode of [...MODE_ORDER, 'scenario']) {
@@ -1255,6 +1310,7 @@ export function MapView({ onVehicleCount }: Props) {
         if (!mv || (!edited && !state.enabledModes[mode])) continue;
         const count = computeFrame(mv, secs, state.enabledModes);
         total += count;
+        waiting += mv.waiting;
         if (byLoad) {
           for (let i = 0; i < count; i++) {
             const step = stepAt(mv.pack.tripId[mv.frameTrip[i]], secs);
@@ -1291,7 +1347,8 @@ export function MapView({ onVehicleCount }: Props) {
         );
         if (state.highlightTripId !== null) {
           const i = mv.indexByTripId.get(state.highlightTripId);
-          if (i !== undefined && tripPosition(mv.pack, i, secs, ring, 0)) ringAt = [ring[0], ring[1]];
+          // The ring stays on the vehicle while it stands at the end of the trip, as its dot does.
+          if (i !== undefined && vehicleAt(mv, i, secs, ring, 0)) ringAt = [ring[0], ring[1]];
         }
       }
       if (ringAt) {
@@ -1312,9 +1369,10 @@ export function MapView({ onVehicleCount }: Props) {
         );
       }
       overlayRef.current?.setProps({ layers });
-      if (total !== lastCount) {
+      if (total !== lastCount || waiting !== lastWaiting) {
         lastCount = total;
-        onVehicleCount(total);
+        lastWaiting = waiting;
+        onVehicleCount(total, waiting);
       }
     };
     frame = requestAnimationFrame(draw);

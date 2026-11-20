@@ -59,8 +59,13 @@ export function slicePath(coords: Coord[], dists: ArrayLike<number>, from: numbe
 }
 
 /**
- * Which point of a path each stop sits at: the nearest point at or after the previous stop's.
+ * Which point of a path each stop sits at, at or after the previous stop's.
  * The first and last stops take the path's two ends.
+ *
+ * A path can pass the same place twice (a divided road, a turn-round, a loop). The stop belongs to
+ * the first pass that comes about as close as any pass does: taking the nearest point of the whole
+ * remaining path could jump to the second pass, and every stop after it would then be squeezed
+ * into what is left of the path.
  */
 export function locateStops(coords: Coord[], stops: Coord[]): number[] {
   const out: number[] = [];
@@ -68,16 +73,15 @@ export function locateStops(coords: Coord[], stops: Coord[]): number[] {
   stops.forEach((s, i) => {
     if (i === stops.length - 1) at = coords.length - 1;
     else if (i > 0) {
-      let best = at;
+      const d = (k: number) => distanceM(s[0], s[1], coords[k][0], coords[k][1]);
       let bestD = Infinity;
-      for (let k = at; k < coords.length; k++) {
-        const d = distanceM(s[0], s[1], coords[k][0], coords[k][1]);
-        if (d < bestD) {
-          bestD = d;
-          best = k;
-        }
-      }
-      at = best;
+      for (let k = at; k < coords.length; k++) bestD = Math.min(bestD, d(k));
+      // The first point that is nearly as close as the closest, then on to the closest point of that pass.
+      const near = bestD + Math.max(25, bestD * 0.5);
+      let k = at;
+      while (k < coords.length - 1 && d(k) > near) k++;
+      while (k < coords.length - 1 && d(k + 1) <= d(k)) k++;
+      at = k;
     }
     out.push(at);
   });
@@ -153,7 +157,25 @@ export interface OldCall {
  * - detour: both stops are kept but the vehicle goes a different way between them; each trip keeps
  *   its own time (less any stops it no longer makes), scaled by how much longer the new way is.
  */
-export type ReshapeSection = { kind: 'same' } | { kind: 'passing' } | { kind: 'new'; secs: number; byBand?: number[] } | { kind: 'detour'; factor: number };
+export type ReshapeSection =
+  | { kind: 'same' }
+  | { kind: 'passing' }
+  | { kind: 'new'; secs: number; byBand?: number[] }
+  | {
+      kind: 'detour';
+      /** How many times longer the new way is than the published one. */
+      factor: number;
+      /**
+       * The new way's length and how much longer it is than the published one, in metres, with the
+       * typical speed of the mode and the fastest it can go, in metres per second. Given these, a
+       * detour is never timed faster than the vehicle can go: a published time of nought (bus
+       * timetables are in whole minutes) would otherwise stay nought however long the way round.
+       */
+      lengthM?: number;
+      extraM?: number;
+      speed?: number;
+      maxSpeed?: number;
+    };
 
 export interface NewCall {
   arr: number;
@@ -194,7 +216,16 @@ export function retime(
     let saving = 0;
     for (let a = a0 + 1; a < a1; a++) if (!isPassing(old[a])) saving += old[a].dep - old[a].arr + options.skipPenaltySecs;
     const passing = Math.max(0, Math.round(current * 0.5), current - saving);
-    return s.kind === 'detour' ? Math.round(passing * s.factor) : passing;
+    if (s.kind !== 'detour') return passing;
+    const scaled = Math.round(passing * s.factor);
+    if (s.lengthM === undefined || s.maxSpeed === undefined || !(s.maxSpeed > 0)) return scaled;
+    const least = Math.ceil(s.lengthM / s.maxSpeed);
+    const added = s.speed !== undefined && s.speed > 0 ? Math.round(passing + Math.max(0, s.extraM ?? 0) / s.speed) : null;
+    // Up to three times the length, the trip's own time is scaled. Beyond that the published time
+    // says little about the new way, and where it is nought (or too short to mean anything) it
+    // cannot be scaled at all: the extra distance is timed at the mode's typical speed instead.
+    const secs = added !== null && (s.factor > 3 || scaled < least) ? added : scaled;
+    return Math.max(secs, least);
   };
   const dwell = (i: number): number => {
     if (i === 0 || i === n - 1) return 0;

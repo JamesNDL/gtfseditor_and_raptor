@@ -23,7 +23,7 @@ import java.util.Optional;
 public final class TimetableSnapshot {
 
     /** Raise this whenever the file layout or the meaning of a stored value changes. */
-    public static final int FORMAT = 4;
+    public static final int FORMAT = 5;
 
     private static final int MAGIC = 0x52545442; // "RTTB"
     private static final int END = 0x454e4421;   // "END!"
@@ -59,6 +59,7 @@ public final class TimetableSnapshot {
                 out.writeInt(s.maxPerStop());
                 out.writeInt(s.defaultPathwaySecs());
                 out.writeInt(s.maxPathwaySecs());
+                out.writeInt(s.platformSecs());
                 out.writeDouble(t.capacityFactor);
                 writeTexts(out, t.notes.toArray(String[]::new));
                 writeTexts(out, t.stationIds);
@@ -87,6 +88,10 @@ public final class TimetableSnapshot {
                 writeInts(out, t.transferTargets);
                 writeInts(out, t.transferSecs);
                 writeInts(out, t.transferMetres);
+                writeInts(out, t.stopExitSecs);
+                writeInts(out, t.stopEntrySecs);
+                writeDoubles(out, t.water.lines);
+                writeDoubles(out, t.water.bridges);
                 out.writeInt(END);
             }
             try {
@@ -119,7 +124,8 @@ public final class TimetableSnapshot {
             b.feedVersion = r.text();
             b.serviceDate = in.readInt();
             b.transferSettings = new TransferSettings(in.readDouble(), in.readDouble(), in.readDouble(),
-                    in.readInt(), in.readInt(), in.readDouble(), in.readInt(), in.readInt(), in.readInt());
+                    in.readInt(), in.readInt(), in.readDouble(), in.readInt(), in.readInt(), in.readInt(),
+                    in.readInt());
             b.capacityFactor = in.readDouble();
             b.notes = List.of(r.texts(false));
             b.stationIds = r.texts(false);
@@ -148,6 +154,10 @@ public final class TimetableSnapshot {
             b.transferTargets = r.ints();
             b.transferSecs = r.ints();
             b.transferMetres = r.ints();
+            b.stopExitSecs = r.ints();
+            b.stopEntrySecs = r.ints();
+            b.waterLines = r.doubles();
+            b.waterBridges = r.doubles();
             if (in.readInt() != END) {
                 return Optional.empty();
             }

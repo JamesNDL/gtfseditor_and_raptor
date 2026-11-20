@@ -4,6 +4,7 @@ import gtfseditor.router.core.Timetable;
 import gtfseditor.router.gtfs.GtfsException;
 import gtfseditor.router.gtfs.GtfsLoader;
 import gtfseditor.router.gtfs.LoadOptions;
+import gtfseditor.router.gtfs.WaterFile;
 import gtfseditor.router.gtfs.TimetableCache;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -73,6 +74,7 @@ public final class SimCli {
                 case "--people" -> people = Integer.parseInt(value(args, ++i));
                 case "--date" -> options = options.withServiceDate(Integer.parseInt(value(args, ++i)));
                 case "--snapshots" -> snapshots = Path.of(value(args, ++i));
+                case "--water" -> options = options.withWater(WaterFile.read(Path.of(value(args, ++i))));
                 default -> zip = plain(args[i], zip);
             }
         }
@@ -80,7 +82,8 @@ public final class SimCli {
             usage("demand generate needs a zip and --out <file>");
         }
         Timetable t = load(zip, options, snapshots);
-        Demand demand = DemandGenerator.generate(t, area, journeys, seed, within, focus, people);
+        Demand demand = DemandGenerator.generate(new gtfseditor.router.core.Router(t), area, journeys, seed, within,
+                focus, people, new SimSettings().threads);
         DemandWriter.write(demand, out);
         DemandReport.Figures f = DemandReport.figures(demand);
         System.out.printf("Wrote %,d made-up journeys by %,d users, standing for %,d people, to %s%n", f.rows(),
@@ -100,6 +103,7 @@ public final class SimCli {
                 case "--zip" -> zip = Path.of(value(args, ++i));
                 case "--date" -> options = options.withServiceDate(Integer.parseInt(value(args, ++i)));
                 case "--snapshots" -> snapshots = Path.of(value(args, ++i));
+                case "--water" -> options = options.withWater(WaterFile.read(Path.of(value(args, ++i))));
                 default -> file = plain(args[i], file);
             }
         }
@@ -141,6 +145,10 @@ public final class SimCli {
                 case "--share" -> settings.shareOneIn = Integer.parseInt(value(args, ++i));
                 case "--school-buses" -> settings.schoolBuses = true;
                 case "--threshold" -> settings.switchThresholdSecs = Integer.parseInt(value(args, ++i));
+                case "--longest-wait" -> {
+                    String limit = value(args, ++i);
+                    settings.maxWaitSecs = limit.equals("none") ? -1 : Integer.parseInt(limit);
+                }
                 case "--give-up" -> {
                     String limit = value(args, ++i);
                     settings.giveUpSecs = limit.equals("none") ? -1 : Integer.parseInt(limit);
@@ -152,6 +160,7 @@ public final class SimCli {
                 case "--no-reuse" -> settings.reusePlans = false;
                 case "--date" -> options = options.withServiceDate(Integer.parseInt(value(args, ++i)));
                 case "--snapshots" -> snapshots = Path.of(value(args, ++i));
+                case "--water" -> options = options.withWater(WaterFile.read(Path.of(value(args, ++i))));
                 default -> zip = plain(args[i], zip);
             }
         }
@@ -228,12 +237,13 @@ public final class SimCli {
                 + " [--area opal] [--within 25] [--focus 1] [--people 1]");
         System.err.println("       SimCli demand check <file> [--zip <feed.zip>]");
         System.err.println("       SimCli run <feed.zip> --demand <file> --out <folder> [--area all] [--walk 500]"
-                + " [--change-penalty 600] [--share 1] [--school-buses]");
+                + " [--change-penalty 600] [--share 1] [--school-buses] [--longest-wait 14400|none]");
         System.err.println("       SimCli run <feed.zip> --bau <folder> --out <folder> [--threshold 600]"
                 + " [--give-up 3600|none]");
         System.err.println("       SimCli run <feed.zip> --from-plans <folder> [--out <folder>]");
         System.err.println("       any run: [--capacity] [--full-at 1.0] [--left-behind 5] [--threads n] [--no-reuse]"
                 + " [--name text]");
+        System.err.println("       wherever a zip is named: [--date 20261117] [--snapshots <folder>] [--water <file>]");
         System.exit(2);
     }
 }
