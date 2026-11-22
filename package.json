@@ -34,7 +34,8 @@
     "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport",
     "lint": "oxlint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

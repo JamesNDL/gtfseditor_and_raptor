@@ -37,7 +37,13 @@ import { closureRoutes, editClose } from './closures.ts';
 import { deleteStopRoutes, editDeleteStop } from './delete-stop.ts';
 import { describeMethod, linePath, type PathMethod } from './roads.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
-import { bestFree, platformChoices, scheduleEdits, scheduleRoutes } from './schedule.ts';
+import {
+  bestFree,
+  platformChoices,
+  scheduleEdits,
+  scheduleRoutes,
+  type Described,
+} from './schedule.ts';
 import { editAddStop, scenarioStopsGeoJson, stopVisible, type AddedStop } from './stops.ts';
 
 export interface Scenario {
@@ -81,6 +87,21 @@ const TRIP_COLUMNS = `baseline_id, route_id, pattern_id, shape_id, service_gtfs_
   trip_name, run_key, set_type, cars, vehicle_type_id, first_stop_id, last_stop_id, extra`;
 
 type Tx = Sql;
+
+/** The row `describe` reads, before it adds the label. */
+type DescribeRow = Omit<Described, 'label'> & {
+  from: string;
+  to: string;
+  scenario_id: number | null;
+};
+
+/** One stop time as the playback pack reads it. */
+interface PackStopRow {
+  trip_id: number;
+  arr: number;
+  dep: number;
+  dist: number;
+}
 
 interface EditResult {
   summary: string;
@@ -201,7 +222,7 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
   }
 
   const describe = async (tx: Tx, tripId: number) => {
-    const [t] = await tx`
+    const [t] = await tx<DescribeRow[]>`
       select coalesce(r.short_name, r.long_name, 'trip') as line, t.start_secs, f.name as "from", l.name as "to",
              t.route_id, t.direction_id, t.pattern_id, t.vehicle_day_id, t.baseline_id, t.scenario_id, m.rule_set
       from trips t join routes r on r.id = t.route_id join modes m on m.id = r.mode_id
@@ -2068,14 +2089,14 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
 
     const n = trips.length;
     const stops = n
-      ? await sql`
+      ? await sql<PackStopRow[]>`
           select st.trip_id, st.arr, st.dep, coalesce(st.dist, 0)::float4 as dist from stop_times st
           where st.trip_id = any(${trips.map((t) => t.id)}) order by st.trip_id, st.seq`
       : [];
-    const byTrip = new Map<number, typeof stops>();
+    const byTrip = new Map<number, PackStopRow[]>();
     for (const s of stops) {
       let list = byTrip.get(s.trip_id);
-      if (!list) byTrip.set(s.trip_id, (list = [] as unknown as typeof stops));
+      if (!list) byTrip.set(s.trip_id, (list = []));
       list.push(s);
     }
     const tripStOffset = new Uint32Array(n + 1);

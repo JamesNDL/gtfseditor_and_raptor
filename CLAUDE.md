@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Start: `npm run db:up`, then `npm run dev` (API + web). The router is separate: `npm run router:dev`.
 - The dev machine is short on memory. Start the dev servers in their own terminal, and don't run several heavy jobs (Gradle, export, dev servers) at once.
 - Unit tests: `npm test`. Single file: `npx vitest run packages/core/src/reshape.test.ts`, and add `-t "name"` for a single test.
-- Web typecheck: `npm run typecheck -w @gtfs-editor/web`. The API and packages have no typecheck script.
+- Typecheck: `npm run typecheck` checks every workspace (web, API, core, gtfs). One workspace: `npm run typecheck -w @gtfs-editor/api`. Shared settings are in `tsconfig.base.json`.
 - Lint: `npm run lint` (oxlint, not ESLint: typescript-eslint doesn't support TypeScript 7). Format: `npm run format` / `npm run format:check` (Prettier). A hook formats each file Claude edits. Markdown, SQL and `services/` aren't formatted.
 - Need running servers: `npm run test:e2e` (API), `npm run test:sim` (API + router), `npm run test:ui` (`npm run dev`, headless Edge/Chrome over CDP), `npm run export:check` (API; about 5 min).
 - The dev API restarts on any source change, which kills an export in progress. Don't edit files while `export:check` runs.

@@ -184,6 +184,53 @@ async function router(
   return { status: res.status, body: parsed };
 }
 
+/** A run as the library query reads it, before the figures are worked out. */
+interface SimRunRow {
+  id: number;
+  name: string;
+  kind: string;
+  baselineId: number | null;
+  scenarioId: number | null;
+  scenarioName: string | null;
+  demandSetId: number | null;
+  demandSetName: string | null;
+  bauRunId: number | null;
+  bauRunName: string | null;
+  madeUp: boolean | null;
+  plansRunId: number | null;
+  capacity: boolean;
+  settings: Record<string, unknown>;
+  state: string;
+  progress: Record<string, unknown>;
+  error: string | null;
+  folderId: number | null;
+  madeBy: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  resultRows: number;
+  archived: boolean;
+  timetableId: string;
+  timetable_version: string;
+  plan_version: string;
+  /** The box: the four sides are all set or all null. */
+  area_name: string | null;
+  area_south: number | null;
+  area_west: number | null;
+  area_north: number | null;
+  area_east: number | null;
+  /** The router's summary of the run; only the parts read here are named. */
+  summary: {
+    work?: { journeysPlannedPerSecond?: number };
+    capacities?: unknown;
+    people?: unknown;
+  } | null;
+  scenarioRuns: number;
+  capacityRuns: number;
+  scenario_head: number | null;
+  scenario_now: number | null;
+}
+
 // ---------------------------------------------------------------------------
 // Which timetable, and which version of it
 // ---------------------------------------------------------------------------
@@ -1131,7 +1178,7 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
    * date when only vehicle capacities have changed since.
    */
   async function runs(where: ReturnType<typeof sql>, full = false) {
-    const rows = await sql`
+    const rows = await sql<SimRunRow[]>`
       select r.id, r.name, r.kind, r.baseline_id as "baselineId", r.scenario_id as "scenarioId", s.name as "scenarioName",
              r.demand_set_id as "demandSetId", d.name as "demandSetName", r.bau_run_id as "bauRunId", b.name as "bauRunName",
              ${madeUp} as "madeUp",
@@ -1160,7 +1207,7 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
     );
     const keys = new Map<string, TimetableKey | null>();
     const out = [];
-    for (const row of rows as Record<string, any>[]) {
+    for (const row of rows) {
       const {
         timetable_version: version,
         plan_version: planVersion,
@@ -1184,9 +1231,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
             at,
             await timetableKey(
               sql,
-              run.baselineId,
+              run.baselineId!, // not null: a run without one is gone
               run.scenarioId
-                ? { id: run.scenarioId, baselineId: run.baselineId, head: scenario_head }
+                ? { id: run.scenarioId, baselineId: run.baselineId!, head: scenario_head! }
                 : null,
               null,
             ).catch(() => null),
@@ -1205,9 +1252,9 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
             : {
                 name: area_name,
                 south: area_south,
-                west: area_west,
-                north: area_north,
-                east: area_east,
+                west: area_west!,
+                north: area_north!,
+                east: area_east!,
               },
         timetableVersion: version,
         sizeBytes: sizes.get(run.id) ?? 0,

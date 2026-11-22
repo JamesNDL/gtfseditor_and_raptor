@@ -66,7 +66,7 @@ await unzip(zipPath, outDir);
 
 const db = await (await DuckDBInstance.create(':memory:')).connect();
 const q = async (sql: string) =>
-  (await db.run(sql)).getRowObjectsJson() as Record<string, string | number | null>[];
+  (await (await db.run(sql)).getRowObjectsJson()) as Record<string, string | number | null>[];
 const csv = (name: string, dir = outDir) =>
   `read_csv('${path.join(dir, name).split(path.sep).join('/')}', header=true, all_varchar=true)`;
 for (const t of ['agency', 'routes', 'stops', 'calendar', 'trips', 'stop_times', 'pathways']) {

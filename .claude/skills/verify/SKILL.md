@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Run the checks that match what changed (unit tests, web typecheck, router tests, e2e suites) and report what passed, failed or was skipped. Use before calling a change done or before committing.
+description: Run the checks that match what changed (unit tests, typecheck, router tests, e2e suites) and report what passed, failed or was skipped. Use before calling a change done or before committing.
 ---
 
 Work out what changed: `git status --short` and `git diff --name-only master...HEAD` (plus uncommitted changes). Then run only the checks that apply, one at a time, since the machine is short on memory.
@@ -9,7 +9,7 @@ Work out what changed: `git status --short` and `git diff --name-only master...H
 |---|---|
 | any TS/JS/CSS/JSON | `npm run lint` and `npm run format:check` (lint warnings are not failures, but mention new ones in changed files) |
 | `packages/**` or `apps/api/**` | `npm test` |
-| `apps/web/**` or `packages/core/**` | `npm run typecheck -w @gtfs-editor/web` |
+| any TS, or a `tsconfig*.json` | `npm run typecheck` (checks every workspace) |
 | `services/router/**` | `npm run router:test` (javac warnings fail the build, so read them) |
 | `apps/api/**` or `packages/gtfs/**` | `npm run test:e2e` if the API answers on http://localhost:3001 |
 | `apps/api/src/sim*.ts`, `services/router/router-sim/**` or `router-server/**` | `npm run test:sim` if both the API (3001) and the router (3002) answer |

@@ -10,7 +10,7 @@ import { stopDwell } from './timings.ts';
 const fail = (statusCode: number, message: string) =>
   Object.assign(new Error(message), { statusCode });
 
-interface Described {
+export interface Described {
   label: string;
   line: string;
   start_secs: number;

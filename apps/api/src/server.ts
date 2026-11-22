@@ -431,7 +431,7 @@ app.get('/api/patterns/:id/stringline', async (req) => {
   // Other lines must share at least three stations to count as using the corridor; two is usually just a
   // shared interchange. The line itself only needs two.
   const enough = (t: StringTrip) => t.calls.length >= (t.routeId === pattern.route_id ? 8 : 12);
-  const tripsWhere = async (which: ReturnType<typeof sql>): Promise<StringTrip[]> => {
+  const tripsWhere = async (which: ReturnType<typeof visible>): Promise<StringTrip[]> => {
     const calls = await sql`
       select st.trip_id, t.route_id, coalesce(s.parent_id, s.id) as station_id, st.arr, st.dep,
              (st.pickup_type = 1 and st.drop_off_type = 1) as passing, (t.scenario_id is not null) as edited
@@ -562,7 +562,9 @@ app.get('/api/stations/:id/summary', async (req) => {
         }
       : null;
   };
-  const platformRows = await sql`
+  const platformRows = await sql<
+    { id: number; name: string; platformCode: string | null; calls: number }[]
+  >`
     select c.id, c.name, c.platform_code as "platformCode",
            (select count(*)::int from stop_times st join trips t on t.id = st.trip_id
             where st.stop_id = c.id and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}) as calls
@@ -611,7 +613,17 @@ app.get('/api/routes/:id/vehicles', async (req) => {
   const id = int((req.params as any).id);
   const sc = await scenarioOf(req, sql);
   const vis = visible(sql, 't', sc);
-  const days = await sql`
+  const days = await sql<
+    {
+      id: number;
+      label: string;
+      source: string;
+      startSecs: number;
+      endSecs: number;
+      gapCount: number;
+      isNew: boolean;
+    }[]
+  >`
     select vd.id, vd.label, vd.source, vd.start_secs as "startSecs", vd.end_secs as "endSecs", vd.gap_count as "gapCount",
            (vd.scenario_id is not null) as "isNew"
     from vehicle_days vd
