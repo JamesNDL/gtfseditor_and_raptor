@@ -1,6 +1,7 @@
 // Builds a baseline (one service day) from the staged raw feed.
 import type { FeedVersion } from '../feed-cache.ts';
 import type { Sql } from '../db.ts';
+import { guardReplace, isoDate } from './replace-guard.ts';
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -28,33 +29,6 @@ export interface ImportBaselineOptions {
   replace?: boolean;
 }
 
-function isoDate(date: string): string {
-  if (!/^\d{8}$/.test(date)) throw new Error(`Date must be YYYYMMDD, got ${date}`);
-  return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
-}
-
-/** Counts the scenarios on the baseline that importing `date` (YYYYMMDD) from this feed would delete. */
-export async function countScenariosOnDay(sql: Sql, feedId: string, date: string): Promise<number> {
-  const [{ n }] = await sql`
-    select count(*)::int as n from scenarios s join baselines b on b.id = s.baseline_id
-    where b.feed_id = ${feedId} and b.service_date = ${isoDate(date)}`;
-  return n;
-}
-
-/** Thrown when a day with scenarios is re-imported without `replace`. Nothing has been deleted. */
-export class ReplaceRefusedError extends Error {
-  name = 'ReplaceRefusedError';
-}
-
-/** The message given when a day with scenarios is re-imported without --replace. */
-export function replaceRefusal(date: string, scenarios: number): string {
-  const these = scenarios === 1 ? '1 scenario' : `${scenarios} scenarios`;
-  return (
-    `${isoDate(date)} has ${these}. Re-importing the day deletes ${scenarios === 1 ? 'it' : 'them'}. ` +
-    'Run `npm run db:backup` first, then add --replace.'
-  );
-}
-
 export async function importBaseline(
   sql: Sql,
   feed: FeedVersion,
@@ -63,11 +37,7 @@ export async function importBaseline(
   options: ImportBaselineOptions = {},
 ): Promise<ImportedBaseline> {
   const iso = isoDate(date);
-  const scenarios = await countScenariosOnDay(sql, feed.id, date);
-  if (scenarios > 0 && !options.replace) {
-    throw new ReplaceRefusedError(replaceRefusal(date, scenarios));
-  }
-  if (scenarios > 0) log(`  replacing ${iso}: deleting its ${scenarios} scenario(s)`);
+  await guardReplace(sql, feed.id, date, options.replace ?? false, log);
   const jsDate = new Date(`${iso}T00:00:00Z`);
   const weekday = WEEKDAYS[jsDate.getUTCDay()];
   const dayType = weekday === 'saturday' || weekday === 'sunday' ? weekday : 'weekday';
@@ -323,26 +293,4 @@ export async function importBaseline(
   );
 
   return { id: b, label };
-}
-
-export async function finishBaseline(
-  sql: Sql,
-  baselineId: number,
-): Promise<Record<string, unknown>> {
-  const [{ stats }] = await sql`
-    select jsonb_build_object(
-      'trips', (select count(*) from trips where baseline_id = ${baselineId}),
-      'stopTimes', (select count(*) from stop_times st join trips t on t.id = st.trip_id where t.baseline_id = ${baselineId}),
-      'routesRunning', (select count(*) from routes where baseline_id = ${baselineId} and trip_count > 0),
-      'patterns', (select count(*) from patterns where baseline_id = ${baselineId}),
-      'vehicleDays', (select count(*) from vehicle_days where baseline_id = ${baselineId}),
-      'vehicleDaysInferred', (select count(*) from vehicle_days where baseline_id = ${baselineId} and source = 'inferred'),
-      'baselineConflicts', (select count(*) from baseline_conflicts where baseline_id = ${baselineId}),
-      'tripsWithAssumedVehicle', (select count(*) from trip_vehicle v join trips t on t.id = v.trip_id
-                                  where t.baseline_id = ${baselineId} and v.assumed),
-      'firstDeparture', (select min(start_secs) from trips where baseline_id = ${baselineId}),
-      'lastArrival', (select max(end_secs) from trips where baseline_id = ${baselineId})
-    ) as stats`;
-  await sql`update baselines set stats = ${sql.json(stats)}, ready = true where id = ${baselineId}`;
-  return stats;
 }

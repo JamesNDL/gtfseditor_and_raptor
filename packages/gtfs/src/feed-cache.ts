@@ -53,6 +53,25 @@ async function readManifest(file: string): Promise<Manifest> {
 }
 
 /**
+ * The id of the newest feed already downloaded: the one ensureFeed returns unless TfNSW has
+ * published since. Undefined when there is none or the manifest can't be read.
+ */
+export async function latestCachedFeedId(feedsDir = 'data/feeds'): Promise<string | undefined> {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(await readFile(path.resolve(feedsDir, 'manifest.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+  if (typeof manifest !== 'object' || manifest === null || !('versions' in manifest))
+    return undefined;
+  const { versions } = manifest;
+  const last: unknown = Array.isArray(versions) ? versions.at(-1) : undefined;
+  if (typeof last !== 'object' || last === null || !('id' in last)) return undefined;
+  return typeof last.id === 'string' ? last.id : undefined;
+}
+
+/**
  * A feed already on disk, given as a folder of .txt files or a zip, used in place of the TfNSW
  * download (no API key needed). A zip is extracted to a folder under the system's temp folder.
  * The id is built from the files' names, sizes and times, so an edited feed is staged again.
@@ -63,7 +82,7 @@ export async function localFeed(
 ): Promise<FeedVersion> {
   const source = path.resolve(feedPath);
   const info = await stat(source).catch(() => null);
-  if (!info) throw new Error(`FEED_PATH ${source} does not exist`);
+  if (!info) throw new Error(`${source} does not exist`);
   const isZip = info.isFile();
   const files = isZip ? [source] : (await readdir(source)).map((f) => path.join(source, f));
   const hash = createHash('sha1');
