@@ -3,6 +3,7 @@
 //        npm run export:check -- 3                 (scenario 3, on whichever day it belongs to)
 //        npm run export:check -- 3 --box=-33.95,151.0,-33.6,151.3 --no-shapes
 //                                                  (the same, cut to a box and without shapes.txt: much quicker)
+// Writes to data/exports/<name> (check, or --out=<name>); EXPORTS_DIR=<folder> writes there instead.
 //
 // Checks: every reference resolves; ids are unique; every trip has two or more stop times; times
 // and distances never run backwards; and, for the published day, that trips and stop times match
@@ -16,6 +17,7 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { checkReferences } from './export-references.ts';
 import { unzip } from './unzip.ts';
 
 const API = process.env.API ?? 'http://localhost:3001';
@@ -43,7 +45,8 @@ if (scenario !== null) {
   assert.ok(own, `scenario ${scenario} belongs to a day that is not imported`);
   baseline = own;
 }
-const outDir = path.resolve('data/exports', outName.replace(/[^A-Za-z0-9_-]/g, ''));
+const exportsDir = process.env.EXPORTS_DIR ?? 'data/exports';
+const outDir = path.resolve(exportsDir, outName.replace(/[^A-Za-z0-9_-]/g, ''));
 await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
 const zipPath = path.join(outDir, 'export.zip');
@@ -87,49 +90,7 @@ const sizes = (
 )[0];
 console.log('    ', JSON.stringify(sizes));
 
-// References.
-assert.equal(
-  await count(`select 1 from trips where route_id not in (select route_id from routes)`),
-  0,
-);
-assert.equal(
-  await count(`select 1 from trips where service_id not in (select service_id from calendar)`),
-  0,
-);
-assert.equal(
-  await count(
-    `select 1 from trips where shape_id is not null and shape_id not in (select distinct shape_id from shapes)`,
-  ),
-  0,
-);
-assert.equal(
-  await count(`select 1 from stop_times where trip_id not in (select trip_id from trips)`),
-  0,
-);
-assert.equal(
-  await count(`select 1 from stop_times where stop_id not in (select stop_id from stops)`),
-  0,
-);
-assert.equal(
-  await count(`select 1 from routes where agency_id not in (select agency_id from agency)`),
-  0,
-);
-assert.equal(
-  await count(
-    `select 1 from stops where parent_station is not null and parent_station not in (select stop_id from stops)`,
-  ),
-  0,
-);
-assert.equal(
-  await count(
-    `select 1 from pathways where from_stop_id not in (select stop_id from stops) or to_stop_id not in (select stop_id from stops)`,
-  ),
-  0,
-);
-assert.equal(
-  await count(`select 1 from trips where trip_id not in (select trip_id from stop_times)`),
-  0,
-);
+await checkReferences(count);
 ok('every reference resolves');
 
 // Uniqueness and ordering.
