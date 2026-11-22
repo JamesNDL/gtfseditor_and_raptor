@@ -33,9 +33,7 @@ import {
 import { visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { fail } from './http.ts';
 
 export { ROAD_MODES };
 

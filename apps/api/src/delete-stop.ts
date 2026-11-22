@@ -20,9 +20,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { scenarioOf, visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { fail } from './http.ts';
 
 export interface DeleteStopDeps {
   cloneTrips: (

@@ -45,15 +45,13 @@ import {
   type Described,
 } from './schedule.ts';
 import { editAddStop, scenarioStopsGeoJson, stopVisible, type AddedStop } from './stops.ts';
+import { fail } from './http.ts';
 
 export interface Scenario {
   id: number;
   baselineId: number;
   head: number;
 }
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
 
 /** The scenario named by ?s=, or null for the plain baseline. */
 export async function scenarioOf(req: FastifyRequest, sql: Sql): Promise<Scenario | null> {

@@ -18,9 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { visible, type Scenario } from './scenarios.ts';
 import { buildLinkLoads } from './sim-results.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { fail } from './http.ts';
 
 /** The journey router service. ROUTER_URL is already the road-routing server and keeps that meaning. */
 const ROUTER = (process.env.ROUTER_SERVICE_URL ?? 'http://localhost:3002').replace(/\/+$/, '');

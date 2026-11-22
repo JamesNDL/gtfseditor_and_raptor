@@ -5,9 +5,7 @@ import { distanceM } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { nearestRoad } from './roads.ts';
 import type { Scenario } from './scenarios.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { fail } from './http.ts';
 
 const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
 

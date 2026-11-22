@@ -8,6 +8,7 @@ import { connect, migrate } from '@gtfs-editor/gtfs/db';
 import { packsDir } from '@gtfs-editor/gtfs/packs';
 import { registerExportRoutes } from './export.ts';
 import { registerFleetRoutes } from './fleet.ts';
+import { int, notFound } from './http.ts';
 import { registerScenarioRoutes, scenarioOf, visible } from './scenarios.ts';
 import { registerSimRoutes } from './sim.ts';
 import { registerSimResultRoutes } from './sim-results.ts';
@@ -23,15 +24,6 @@ await migrate(sql);
 
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(compress, { threshold: 1024 });
-
-const int = (value: unknown): number => {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 0)
-    throw Object.assign(new Error('Expected a whole number'), { statusCode: 400 });
-  return n;
-};
-const notFound = (what: string) =>
-  Object.assign(new Error(`${what} not found`), { statusCode: 404 });
 
 // ---------------------------------------------------------------------------
 // Baselines, modes, routes
