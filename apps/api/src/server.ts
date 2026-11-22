@@ -430,8 +430,10 @@ app.get('/api/patterns/:id/stringline', async (req) => {
   }
   // Other lines must share at least three stations to count as using the corridor; two is usually just a
   // shared interchange. The line itself only needs two.
+  /** Which trips to read: visible() for this scenario, or the trips it removed (below). */
+  type Condition = ReturnType<typeof visible>;
   const enough = (t: StringTrip) => t.calls.length >= (t.routeId === pattern.route_id ? 8 : 12);
-  const tripsWhere = async (which: ReturnType<typeof visible>): Promise<StringTrip[]> => {
+  const tripsWhere = async (which: Condition): Promise<StringTrip[]> => {
     const calls = await sql`
       select st.trip_id, t.route_id, coalesce(s.parent_id, s.id) as station_id, st.arr, st.dep,
              (st.pickup_type = 1 and st.drop_off_type = 1) as passing, (t.scenario_id is not null) as edited
@@ -617,7 +619,7 @@ app.get('/api/routes/:id/vehicles', async (req) => {
     {
       id: number;
       label: string;
-      source: string;
+      source: 'run_number' | 'inferred';
       startSecs: number;
       endSecs: number;
       gapCount: number;

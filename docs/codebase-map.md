@@ -14,7 +14,7 @@ A GTFS timetable editor and passenger simulator for NSW. It has a React web app,
 The commands and their quirks are in `CLAUDE.md`. In short:
 - `npm run db:up`, then `npm run dev` (web on :5173, API on :3001).
 - `npm run router:dev` (on :3002).
-- Tests: `npm test` (unit), `npm run typecheck -w @gtfs-editor/web`, `npm run lint`, `npm run router:test`. `npm run test:e2e`, `npm run test:sim` and `npm run test:ui` need the servers running.
+- Tests: `npm test` (unit), `npm run typecheck` (every workspace), `npm run lint`, `npm run router:test`. `npm run test:e2e`, `npm run test:sim` and `npm run test:ui` need the servers running.
 
 ## Parts of the application
 

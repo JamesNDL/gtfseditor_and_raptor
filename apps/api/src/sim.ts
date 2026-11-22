@@ -35,7 +35,10 @@ const DEMAND_DIR =
 /** Whether the router reads files where this API wrote them. Set to 0 when it runs on another machine. */
 const SHARED_FILES = process.env.ROUTER_SHARES_FILES !== '0';
 
-const ACTIVE = ['queued', 'preparing', 'running', 'importing'];
+/** A run's state, as schema.sql lists them for sim_runs.state. */
+type RunState = 'queued' | 'preparing' | 'running' | 'importing' | 'done' | 'failed' | 'stopped';
+
+const ACTIVE: readonly RunState[] = ['queued', 'preparing', 'running', 'importing'];
 const RESULT_TABLES = ['sim_journeys', 'sim_legs', 'sim_trip_loads', 'sim_stop_activity'] as const;
 type ResultTable = (typeof RESULT_TABLES)[number];
 
@@ -188,7 +191,7 @@ async function router(
 interface SimRunRow {
   id: number;
   name: string;
-  kind: string;
+  kind: 'bau' | 'scenario';
   baselineId: number | null;
   scenarioId: number | null;
   scenarioName: string | null;
@@ -200,7 +203,7 @@ interface SimRunRow {
   plansRunId: number | null;
   capacity: boolean;
   settings: Record<string, unknown>;
-  state: string;
+  state: RunState;
   progress: Record<string, unknown>;
   error: string | null;
   folderId: number | null;
@@ -561,7 +564,7 @@ async function countResults(sql: Sql, runId: number) {
 // ---------------------------------------------------------------------------
 const stopping = new Set<number>();
 
-async function setState(sql: Sql, id: number, state: string, more: Record<string, unknown> = {}) {
+async function setState(sql: Sql, id: number, state: RunState, more: Record<string, unknown> = {}) {
   await sql`update sim_runs set ${sql({ state, ...more } as never)} where id = ${id}`;
 }
 
@@ -1232,6 +1235,8 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
             await timetableKey(
               sql,
               run.baselineId!, // not null: a run without one is gone
+              // scenario_head is not null here: deleting a scenario clears the run's scenario id
+              // (on delete set null), and scenarios.head is never null.
               run.scenarioId
                 ? { id: run.scenarioId, baselineId: run.baselineId!, head: scenario_head! }
                 : null,

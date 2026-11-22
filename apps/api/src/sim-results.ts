@@ -8,7 +8,7 @@
 // runs), by line with the parts of a split line counted under the line they came from, by station
 // (a platform counts as its station), and by the stretch between two consecutive calls.
 import type { FastifyInstance } from 'fastify';
-import type { Sql } from '@gtfs-editor/gtfs/db';
+import type { QueryValue, Sql } from '@gtfs-editor/gtfs/db';
 
 const fail = (statusCode: number, message: string) =>
   Object.assign(new Error(message), { statusCode });
@@ -710,9 +710,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
     return { condition: made[0] };
   }
   async function whoFragment(p: Pair, text: string | undefined): Promise<[ReturnType<typeof sql>]> {
-    // Values are anything a query takes (text, numbers, arrays, fragments); postgres.js checks them.
-    const sqlOne = (strings: TemplateStringsArray, ...values: unknown[]) =>
-      [sql(strings, ...(values as never[]))] as [ReturnType<typeof sql>];
+    const sqlOne = (strings: TemplateStringsArray, ...values: QueryValue[]) =>
+      [sql(strings, ...values)] as [ReturnType<typeof sql>];
     const who = text ?? (p.vs ? 'changed' : 'all');
     if (who.startsWith('user:')) return sqlOne`j.user_id = ${who.slice(5)}`;
     const [kind, value = '', side] = who.split(':');

@@ -1,0 +1,12 @@
+{
+  // Settings for code Node runs directly (the API, core and gtfs). Node resolves imports itself and
+  // strips types without checking, so the typecheck must fail on what Node would fail on: an import
+  // with no .ts extension (nodenext) and a type imported as a value (verbatimModuleSyntax).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "verbatimModuleSyntax": true,
+    "types": ["node"]
+  }
+}
