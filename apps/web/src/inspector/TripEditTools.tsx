@@ -8,7 +8,7 @@ import { Tag } from './parts.tsx';
 
 const NUDGES = [-300, -60, 60, 300];
 
-/** Retime, copy and delete controls for the open trip. Shown only while a scenario is being edited. */
+/** Retime, copy and delete controls for the open trip. Shown whenever a day is open; the first change starts a scenario. */
 export function TripEditTools({ trip }: { trip: TripDetail }) {
   const ripple = useStore((s) => s.ripple);
   const busy = useStore((s) => s.editBusy);

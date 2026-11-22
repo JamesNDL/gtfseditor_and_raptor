@@ -280,7 +280,8 @@ export function FleetPanel() {
         </div>
         <footer className="muted small fleet-footer">
           Click a value to change it; press Enter or click away to save. To run a line, a vehicle or
-          a trip with a different type, open it while editing a scenario.
+          a trip with a different type, open it: the type pickers are there whenever a day is open,
+          and the first change starts a scenario.
         </footer>
       </section>
     </div>

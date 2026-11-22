@@ -1,6 +1,7 @@
 // The results view of the passenger simulator (docs/simulator-plan.md, section 18): one run set
-// against another made on the same people. Everything here reads the result tables that sim.ts
-// fills; nothing is written.
+// against another made on the same people. Most of this reads the result tables that sim.ts
+// fills. The one thing written is the link loads: buildLinkLoads clears a run's rows in
+// sim_link_loads and fills them again.
 //
 // Two runs cannot be compared trip by trip, because an edited trip is a new trip and a line cut by
 // a closure becomes new lines. So figures are compared by person (the same journey_id in both

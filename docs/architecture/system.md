@@ -250,10 +250,15 @@ flowchart LR
 | # | Found | Where | Who acts |
 |---|---|---|---|
 | I1 | Re-importing a service date deletes that baseline and **all its scenarios** by cascade. PLAN.md (lines 105 and 134) calls a baseline an immutable import loaded once. | `packages/gtfs/src/import/baseline.ts:54`, `schema.sql` `on delete cascade` | Owner to decide; a developer if the code changes. Recorded as risk R2. |
-| I2 | The file header says "nothing is written", but `buildLinkLoads` deletes from and inserts into `sim_link_loads`. | `apps/api/src/sim-results.ts:1-3` versus `:66-80` | Developer: correct the comment |
-| I3 | Undo and redo do not check `editBusy` before starting, so Ctrl+Z during an edit in flight is not refused. `applyEdit` does check it. | `apps/web/src/scenario.ts:244-261` | Developer: confirm and fix |
-| I4 | Two strings still say vehicle types are picked "while editing a scenario". The pickers show whenever a day is open, and the first change starts a scenario. | `apps/web/src/inspector/TripEditTools.tsx:11`, `apps/web/src/FleetPanel.tsx:283` | Developer: update the text |
 | I5 | The importer writes packs to `data/packs` relative to the working directory and ignores `PACKS_DIR`, which the API reads. | `packages/gtfs/src/import/packs.ts:10,25` versus `apps/api/src/server.ts:19` | Developer: make them agree |
+
+### Resolved: fixed in the code
+
+| # | Found | Fixed | The fix |
+|---|---|---|---|
+| I2 | The file header said "nothing is written", but `buildLinkLoads` deletes from and inserts into `sim_link_loads`. | 23 Nov 2026 | The header of `apps/api/src/sim-results.ts` now says the file reads results and also writes the link loads. |
+| I3 | Undo and redo did not check `editBusy`, so Ctrl+Z during an edit in flight was not refused. | 23 Nov 2026 | `step` in `apps/web/src/scenario.ts` returns at once while `editBusy` is set, as `applyEdit` does, so the button and the keys send nothing until the edit lands. |
+| I4 | Two strings said vehicle types are picked "while editing a scenario". | 23 Nov 2026 | `TripEditTools.tsx` and `FleetPanel.tsx` now say the pickers are there whenever a day is open, and the first change starts a scenario. |
 
 ### Resolved: the docs are stale and the code is right (owner, 22 Nov 2026)
 
@@ -300,3 +305,4 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | Date | Change | Why |
 |---|---|---|
 | 22 Nov 2026 | First version, written from the code as built | No architecture document existed; requested by the owner. No BRD. |
+| 23 Nov 2026 | I2, I3 and I4 fixed and moved to the resolved table (ticket T-4) | Small known issues from section 11 |

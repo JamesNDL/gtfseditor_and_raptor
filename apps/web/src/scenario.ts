@@ -243,6 +243,8 @@ export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null
 async function step(direction: 'undo' | 'redo') {
   const state = useStore.getState();
   if (state.scenarioId === null) return;
+  // As in applyEdit: nothing is sent while another change is still on its way.
+  if (state.editBusy) return;
   state.set({ editBusy: true, editError: null });
   try {
     await send('POST', `/api/scenarios/${state.scenarioId}/${direction}`);
