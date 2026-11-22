@@ -1,0 +1,108 @@
+stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type,parent_station,wheelchair_boarding,level_id,platform_code
+XRDF,,Redfern Station,-33.8917,151.1984,1,,1,,
+XRDF1,XRDF1,Redfern Station Platform 1,-33.8917,151.198335,,XRDF,1,,1
+XRDF2,XRDF2,Redfern Station Platform 2,-33.8917,151.198465,,XRDF,1,,2
+XCEN,,Central Station,-33.8832,151.2062,1,,1,,
+XCEN1,XCEN1,Central Station Platform 1,-33.8832,151.206135,,XCEN,1,,1
+XCEN2,XCEN2,Central Station Platform 2,-33.8832,151.206265,,XCEN,1,,2
+XTNH,,Town Hall Station,-33.8732,151.207,1,,1,,
+XTNH1,XTNH1,Town Hall Station Platform 1,-33.8732,151.206935,,XTNH,1,,1
+XTNH2,XTNH2,Town Hall Station Platform 2,-33.8732,151.207065,,XTNH,1,,2
+XWYN,,Wynyard Station,-33.8656,151.2055,1,,1,,
+XWYN1,XWYN1,Wynyard Station Platform 1,-33.8656,151.205435,,XWYN,1,,1
+XWYN2,XWYN2,Wynyard Station Platform 2,-33.8656,151.205565,,XWYN,1,,2
+XMPT,,Milsons Point Station,-33.8463,151.2118,1,,1,,
+XMPT1,XMPT1,Milsons Point Station Platform 1,-33.8463,151.211735,,XMPT,1,,1
+XMPT2,XMPT2,Milsons Point Station Platform 2,-33.8463,151.211865,,XMPT,1,,2
+XNSY,,North Sydney Station,-33.8402,151.2073,1,,1,,
+XNSY1,XNSY1,North Sydney Station Platform 1,-33.8402,151.207235,,XNSY,1,,1
+XNSY2,XNSY2,North Sydney Station Platform 2,-33.8402,151.207365,,XNSY,1,,2
+XWVT,,Waverton Station,-33.8381,151.1978,1,,1,,
+XWVT1,XWVT1,Waverton Station Platform 1,-33.8381,151.197735,,XWVT,1,,1
+XWVT2,XWVT2,Waverton Station Platform 2,-33.8381,151.197865,,XWVT,1,,2
+XWLS,,Wollstonecraft Station,-33.8326,151.1916,1,,1,,
+XWLS1,XWLS1,Wollstonecraft Station Platform 1,-33.8326,151.191535,,XWLS,1,,1
+XWLS2,XWLS2,Wollstonecraft Station Platform 2,-33.8326,151.191665,,XWLS,1,,2
+XSTL,,St Leonards Station,-33.8231,151.1944,1,,1,,
+XSTL1,XSTL1,St Leonards Station Platform 1,-33.8231,151.194335,,XSTL,1,,1
+XSTL2,XSTL2,St Leonards Station Platform 2,-33.8231,151.194465,,XSTL,1,,2
+XART,,Artarmon Station,-33.8089,151.1846,1,,1,,
+XART1,XART1,Artarmon Station Platform 1,-33.8089,151.184535,,XART,1,,1
+XART2,XART2,Artarmon Station Platform 2,-33.8089,151.184665,,XART,1,,2
+XCHW,,Chatswood Station,-33.7969,151.1812,1,,1,,
+XCHW1,XCHW1,Chatswood Station Platform 1,-33.7969,151.181135,,XCHW,1,,1
+XCHW2,XCHW2,Chatswood Station Platform 2,-33.7969,151.181265,,XCHW,1,,2
+X333A01,X333A01,"Circular Quay, Alfred St",-33.861507,151.21113,,,1,,
+X333A02,X333A02,Elizabeth St near Hunter St,-33.866301,151.210761,,,1,,
+X333A03,X333A03,Elizabeth St near Park St,-33.871094,151.210349,,,1,,
+X333A04,X333A04,Liverpool St at Hyde Park,-33.87549,151.211573,,,1,,
+X333A05,X333A05,Oxford St at Crown St,-33.878666,151.215646,,,1,,
+X333A06,X333A06,Oxford St at Taylor Square,-33.881308,151.220427,,,1,,
+X333A07,X333A07,Oxford St near Barcom Ave,-33.883649,151.225444,,,1,,
+X333A08,X333A08,Oxford St near Glenmore Rd,-33.885538,151.230691,,,1,,
+X333A09,X333A09,Oxford St at Paddington Town Hall,-33.887263,151.236059,,,1,,
+X333A10,X333A10,Oxford St near Centennial Park,-33.889163,151.241338,,,1,,
+X333A11,X333A11,"Bondi Junction, Oxford St",-33.891063,151.246616,,,1,,
+X333A12,X333A12,Bondi Rd near Denison St,-33.891669,151.252226,,,1,,
+X333A13,X333A13,Bondi Rd near Wellington St,-33.892364,151.25791,,,1,,
+X333A14,X333A14,Bondi Rd at Watson St,-33.893214,151.263404,,,1,,
+X333A15,X333A15,Bondi Rd near Campbell Pde,-33.892504,151.269088,,,1,,
+X333A16,X333A16,"Bondi Beach, Campbell Pde",-33.890899,151.274452,,,1,,
+X333B01,X333B01,"Circular Quay, Alfred St",-33.861493,151.21087,,,1,,
+X333B02,X333B02,Elizabeth St near Hunter St,-33.866286,151.210502,,,1,,
+X333B03,X333B03,Elizabeth St near Park St,-33.871077,151.21009,,,1,,
+X333B04,X333B04,Liverpool St at Hyde Park,-33.875601,151.211349,,,1,,
+X333B05,X333B05,Oxford St at Crown St,-33.878844,151.215498,,,1,,
+X333B06,X333B06,Oxford St at Taylor Square,-33.881497,151.220299,,,1,,
+X333B07,X333B07,Oxford St near Barcom Ave,-33.883838,151.225316,,,1,,
+X333B08,X333B08,Oxford St near Glenmore Rd,-33.885741,151.230599,,,1,,
+X333B09,X333B09,Oxford St at Paddington Town Hall,-33.887463,151.235956,,,1,,
+X333B10,X333B10,Oxford St near Centennial Park,-33.889363,151.241235,,,1,,
+X333B11,X333B11,"Bondi Junction, Oxford St",-33.891263,151.246514,,,1,,
+X333B12,X333B12,Bondi Rd near Denison St,-33.891886,151.252208,,,1,,
+X333B13,X333B13,Bondi Rd near Wellington St,-33.892572,151.257835,,,1,,
+X333B14,X333B14,Bondi Rd at Watson St,-33.893429,151.263442,,,1,,
+X333B15,X333B15,Bondi Rd near Campbell Pde,-33.892719,151.269126,,,1,,
+X333B16,X333B16,"Bondi Beach, Campbell Pde",-33.891101,151.274548,,,1,,
+X373A01,X373A01,"Museum Station, Elizabeth St",-33.878947,151.208614,,,1,,
+X373A02,X373A02,Elizabeth St near Campbell St,-33.883053,151.211351,,,1,,
+X373A03,X373A03,Albion St near Riley St,-33.886297,151.215328,,,1,,
+X373A04,X373A04,Flinders St near Moore Park Rd,-33.890004,151.218534,,,1,,
+X373A05,X373A05,Anzac Pde at Moore Park,-33.894591,151.219757,,,1,,
+X373A06,X373A06,Anzac Pde near Lang Rd,-33.898814,151.222025,,,1,,
+X373A07,X373A07,Alison Rd near Doncaster Ave,-33.902919,151.224762,,,1,,
+X373A08,X373A08,Alison Rd at Randwick Racecourse,-33.906128,151.22851,,,1,,
+X373A09,X373A09,Belmore Rd at Randwick,-33.908541,151.233336,,,1,,
+X373A10,X373A10,Avoca St near Frances St,-33.91096,151.238164,,,1,,
+X373A11,X373A11,Coogee Bay Rd near Carr St,-33.913545,151.242863,,,1,,
+X373A12,X373A12,Coogee Bay Rd near Brook St,-33.916129,151.247561,,,1,,
+X373A13,X373A13,Coogee Bay Rd near Arden St,-33.918288,151.252536,,,1,,
+X373A14,X373A14,"Coogee Beach, Arden St",-33.920403,151.257559,,,1,,
+X373B01,X373B01,"Museum Station, Elizabeth St",-33.879053,151.208386,,,1,,
+X373B02,X373B02,Elizabeth St near Campbell St,-33.883157,151.211122,,,1,,
+X373B03,X373B03,Albion St near Riley St,-33.886456,151.21515,,,1,,
+X373B04,X373B04,Flinders St near Moore Park Rd,-33.89005,151.21828,,,1,,
+X373B05,X373B05,Anzac Pde at Moore Park,-33.894637,151.219504,,,1,,
+X373B06,X373B06,Anzac Pde near Lang Rd,-33.898918,151.221797,,,1,,
+X373B07,X373B07,Alison Rd near Doncaster Ave,-33.903024,151.224535,,,1,,
+X373B08,X373B08,Alison Rd at Randwick Racecourse,-33.906314,151.228375,,,1,,
+X373B09,X373B09,Belmore Rd at Randwick,-33.908727,151.233202,,,1,,
+X373B10,X373B10,Avoca St near Frances St,-33.911141,151.238021,,,1,,
+X373B11,X373B11,Coogee Bay Rd near Carr St,-33.913726,151.242719,,,1,,
+X373B12,X373B12,Coogee Bay Rd near Brook St,-33.91631,151.247418,,,1,,
+X373B13,X373B13,Coogee Bay Rd near Arden St,-33.918482,151.252419,,,1,,
+X373B14,X373B14,"Coogee Beach, Arden St",-33.920597,151.257441,,,1,,
+X389A01,X389A01,"Pyrmont, Harris St",-33.8694,151.194552,,,1,,
+X389A02,X389A02,Druitt St near Sussex St,-33.871024,151.199016,,,1,,
+X389A03,X389A03,Park St near George St,-33.872468,151.204682,,,1,,
+X389A04,X389A04,Oxford St near Victoria St,-33.882768,151.223555,,,1,,
+X389A05,X389A05,Bondi Junction Interchange,-33.8914,151.247551,,,1,,
+X389B01,X389B01,"Pyrmont, Harris St",-33.8696,151.194448,,,1,,
+X389B02,X389B02,Druitt St near Sussex St,-33.871222,151.198911,,,1,,
+X389B03,X389B03,Park St near George St,-33.872677,151.204612,,,1,,
+X389B04,X389B04,Oxford St near Victoria St,-33.882957,151.223427,,,1,,
+X389B05,X389B05,Bondi Junction Interchange,-33.8916,151.247449,,,1,,
+XCQW,,Circular Quay Wharf,-33.8606,151.2108,1,,1,,
+XCQW1,,"Circular Quay, Wharf 3",-33.860781,151.2108,,XCQW,1,,3
+XMNW,,Manly Wharf,-33.8,151.2845,1,,1,,
+XMNW1,,"Manly, Wharf 1",-33.800181,151.2845,,XMNW,1,,1

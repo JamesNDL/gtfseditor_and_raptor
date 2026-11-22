@@ -1,0 +1,6 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_color,route_text_color,exact_times
+XT1,XTR,T1,Redfern to Chatswood,Test trains,2,F99D1C,FFFFFF,0
+X333,XBS,333,Circular Quay to Bondi Beach,Test buses,700,00B5EF,FFFFFF,0
+X373,XBS,373,Museum to Coogee,Test buses,700,00B5EF,FFFFFF,0
+X389,XBS,389,Pyrmont to Bondi Junction,Test buses,700,00B5EF,FFFFFF,0
+XF1,XFY,F1,Circular Quay to Manly,Test ferries,4,00774B,FFFFFF,0

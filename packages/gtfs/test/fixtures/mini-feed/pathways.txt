@@ -1,0 +1,2 @@
+pathway_id,from_stop_id,to_stop_id,pathway_mode,is_bidirectional,traversal_time
+XCEN-P1-P2,XCEN1,XCEN2,1,1,60

@@ -1,0 +1,4 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone
+XTR,Test Trains,https://example.com/,Australia/Sydney,EN,
+XBS,Test Buses,https://example.com/,Australia/Sydney,EN,
+XFY,Test Ferries,https://example.com/,Australia/Sydney,EN,

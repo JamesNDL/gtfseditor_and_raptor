@@ -1,6 +1,9 @@
-// Downloads the TfNSW complete GTFS bundle once and reuses it until TfNSW publishes a new one.
+// Downloads the TfNSW complete GTFS bundle once and reuses it until TfNSW publishes a new one,
+// or uses a feed already on disk (FEED_PATH, see localFeed).
+import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -47,6 +50,76 @@ async function exists(p: string): Promise<boolean> {
 async function readManifest(file: string): Promise<Manifest> {
   if (!(await exists(file))) return { versions: [] };
   return JSON.parse(await readFile(file, 'utf8')) as Manifest;
+}
+
+/**
+ * The id of the newest feed already downloaded: the one ensureFeed returns unless TfNSW has
+ * published since. Undefined when there is none or the manifest can't be read.
+ */
+export async function latestCachedFeedId(feedsDir = 'data/feeds'): Promise<string | undefined> {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(await readFile(path.resolve(feedsDir, 'manifest.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+  if (typeof manifest !== 'object' || manifest === null || !('versions' in manifest))
+    return undefined;
+  const { versions } = manifest;
+  const last: unknown = Array.isArray(versions) ? versions.at(-1) : undefined;
+  if (typeof last !== 'object' || last === null || !('id' in last)) return undefined;
+  return typeof last.id === 'string' ? last.id : undefined;
+}
+
+/**
+ * A feed already on disk, given as a folder of .txt files or a zip, used in place of the TfNSW
+ * download (no API key needed). A zip is extracted to a folder under the system's temp folder.
+ * The id is built from the files' names, sizes and times, so an edited feed is staged again.
+ */
+export async function localFeed(
+  feedPath: string,
+  log: (message: string) => void = () => {},
+): Promise<FeedVersion> {
+  const source = path.resolve(feedPath);
+  const info = await stat(source).catch(() => null);
+  if (!info) throw new Error(`${source} does not exist`);
+  const isZip = info.isFile();
+  const files = isZip ? [source] : (await readdir(source)).map((f) => path.join(source, f));
+  const hash = createHash('sha1');
+  let bytes = 0;
+  let newest = 0;
+  for (const file of files.sort()) {
+    const s = await stat(file);
+    if (!s.isFile()) continue;
+    bytes += s.size;
+    newest = Math.max(newest, s.mtimeMs);
+    hash.update(`${path.basename(file)}|${s.size}|${s.mtimeMs}\n`);
+  }
+  const name = path.basename(source, '.zip').replace(/[^A-Za-z0-9_-]/g, '-');
+  const id = `local-${name}-${hash.digest('hex').slice(0, 10)}`;
+  let dir = source;
+  if (isZip) {
+    dir = path.join(os.tmpdir(), 'gtfs-editor-feeds', id);
+    if (!(await exists(dir))) {
+      log(`Extracting ${source} ...`);
+      await unzip(source, `${dir}.part`).catch(async (err) => {
+        await rm(`${dir}.part`, { recursive: true, force: true });
+        throw err;
+      });
+      await rename(`${dir}.part`, dir);
+    }
+  }
+  log(`Using the feed at ${source} (${id})`);
+  const lastModified = new Date(newest).toISOString();
+  return {
+    id,
+    etag: '',
+    lastModified,
+    downloadedAt: lastModified,
+    bytes,
+    zipPath: isZip ? source : '',
+    dir,
+  };
 }
 
 /** Returns the current feed, downloading and extracting it only if it is not already cached. */

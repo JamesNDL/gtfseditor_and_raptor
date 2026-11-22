@@ -1,6 +1,7 @@
 // Builds a baseline (one service day) from the staged raw feed.
 import type { FeedVersion } from '../feed-cache.ts';
 import type { Sql } from '../db.ts';
+import { guardReplace, isoDate } from './replace-guard.ts';
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -23,14 +24,20 @@ export interface ImportedBaseline {
   label: string;
 }
 
+export interface ImportBaselineOptions {
+  /** Allow re-importing a day that has scenarios. Re-importing deletes them (on delete cascade). */
+  replace?: boolean;
+}
+
 export async function importBaseline(
   sql: Sql,
   feed: FeedVersion,
   date: string,
   log: (m: string) => void,
+  options: ImportBaselineOptions = {},
 ): Promise<ImportedBaseline> {
-  if (!/^\d{8}$/.test(date)) throw new Error(`Date must be YYYYMMDD, got ${date}`);
-  const iso = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  const iso = isoDate(date);
+  await guardReplace(sql, feed.id, date, options.replace ?? false, log);
   const jsDate = new Date(`${iso}T00:00:00Z`);
   const weekday = WEEKDAYS[jsDate.getUTCDay()];
   const dayType = weekday === 'saturday' || weekday === 'sunday' ? weekday : 'weekday';
@@ -286,26 +293,4 @@ export async function importBaseline(
   );
 
   return { id: b, label };
-}
-
-export async function finishBaseline(
-  sql: Sql,
-  baselineId: number,
-): Promise<Record<string, unknown>> {
-  const [{ stats }] = await sql`
-    select jsonb_build_object(
-      'trips', (select count(*) from trips where baseline_id = ${baselineId}),
-      'stopTimes', (select count(*) from stop_times st join trips t on t.id = st.trip_id where t.baseline_id = ${baselineId}),
-      'routesRunning', (select count(*) from routes where baseline_id = ${baselineId} and trip_count > 0),
-      'patterns', (select count(*) from patterns where baseline_id = ${baselineId}),
-      'vehicleDays', (select count(*) from vehicle_days where baseline_id = ${baselineId}),
-      'vehicleDaysInferred', (select count(*) from vehicle_days where baseline_id = ${baselineId} and source = 'inferred'),
-      'baselineConflicts', (select count(*) from baseline_conflicts where baseline_id = ${baselineId}),
-      'tripsWithAssumedVehicle', (select count(*) from trip_vehicle v join trips t on t.id = v.trip_id
-                                  where t.baseline_id = ${baselineId} and v.assumed),
-      'firstDeparture', (select min(start_secs) from trips where baseline_id = ${baselineId}),
-      'lastArrival', (select max(end_secs) from trips where baseline_id = ${baselineId})
-    ) as stats`;
-  await sql`update baselines set stats = ${sql.json(stats)}, ready = true where id = ${baselineId}`;
-  return stats;
 }
