@@ -6,7 +6,7 @@ import { applyEdit } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
 import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
 import { FrequencyEditor } from './FrequencyEditor.tsx';
-import { RoutePassengers } from '../sim/results/SimFigures.tsx';
+import { RoutePassengers } from '../sim/SimFigures.tsx';
 import { HourlyChart } from './HourlyChart.tsx';
 import { Badge, duration, fmt, Loading, shortStop, Tag, Tile } from '../shared/ui/parts.tsx';
 

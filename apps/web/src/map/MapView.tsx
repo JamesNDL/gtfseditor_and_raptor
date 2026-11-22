@@ -15,14 +15,7 @@ import {
 import { clock } from '../shared/clock.ts';
 import { SIDE_COLORS, useStore } from '../app/store.ts';
 import { fmt } from '../shared/ui/parts.tsx';
-import {
-  loadTripLoads,
-  peakText,
-  stepAt,
-  stepColor,
-  stepLabel,
-  tripLoads,
-} from '../sim/results/loads.ts';
+import { loadTripLoads, peakText, stepAt, stepColor, stepLabel, tripLoads } from '../sim/loads.ts';
 import {
   BLUES,
   MIDDLE,
@@ -37,9 +30,9 @@ import {
   type Flows,
   type Places,
   type Trace,
-} from '../sim/results/results.ts';
+} from '../sim/results.ts';
 import { mapView } from '../sim/sim-api.ts';
-import { mapScale } from '../sim/results/SimMapKey.tsx';
+import { mapScale } from '../sim/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
 import {
   computeFrame,

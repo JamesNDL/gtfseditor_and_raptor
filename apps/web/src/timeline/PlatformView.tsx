@@ -3,7 +3,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo } from 'react';
 import { useApi } from '../shared/api-client.ts';
 import { applyEdit } from '../scenarios/scenario-client.ts';
-import { stepAt, stepColor, useTripColours } from '../sim/results/loads.ts';
+import { stepAt, stepColor, useTripColours } from '../sim/loads.ts';
 import { useStore } from '../app/store.ts';
 import {
   COLORS,

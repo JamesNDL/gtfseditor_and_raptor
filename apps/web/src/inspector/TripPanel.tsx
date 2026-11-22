@@ -2,7 +2,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
 import { getJson, useApi, type TripDetail, type TripSummary } from '../shared/api-client.ts';
 import { clock } from '../shared/clock.ts';
-import { TripPassengers } from '../sim/results/SimFigures.tsx';
+import { TripPassengers } from '../sim/SimFigures.tsx';
 import { useStore } from '../app/store.ts';
 import { applyEdit } from '../scenarios/scenario-client.ts';
 import { Badge, duration, fmt, Loading, shortStop, Tag } from '../shared/ui/parts.tsx';

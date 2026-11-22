@@ -13,7 +13,7 @@ import { ReshapePanel } from '../editing/reshape/ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from '../scenarios/scenario-client.ts';
 import { ScenarioManager } from '../scenarios/ScenarioManager.tsx';
 import { SimLibrary } from '../sim/library/SimLibrary.tsx';
-import { SimMapKey } from '../sim/results/SimMapKey.tsx';
+import { SimMapKey } from '../sim/SimMapKey.tsx';
 import { SimResults } from '../sim/results/SimResults.tsx';
 import { SimWizard } from '../sim/wizard/SimWizard.tsx';
 import { useStore } from './store.ts';

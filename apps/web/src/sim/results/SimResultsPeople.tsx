@@ -20,7 +20,7 @@ import {
   type PeopleList,
   type PersonRow,
   type Who,
-} from './results.ts';
+} from '../results.ts';
 import { walkText, type SimJourney, type SimRun } from '../sim-api.ts';
 
 /** Picks people out: they are followed on the map, and listed in the People tab when asked. */

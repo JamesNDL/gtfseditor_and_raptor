@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Baseline, Mode, RouteListItem } from '../shared/api-client.ts';
 import type { ScenarioInfo, ScenarioSummary } from '../scenarios/scenario-client.ts';
 import type { SimBox, SimJourney, SimRun } from '../sim/sim-api.ts';
-import type { SimMapState, SimResultsState } from '../sim/results/results.ts';
+import type { SimMapState, SimResultsState } from '../sim/results.ts';
 
 export type Selection =
   | { kind: 'route'; id: number }

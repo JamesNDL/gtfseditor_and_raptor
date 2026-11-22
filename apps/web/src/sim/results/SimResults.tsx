@@ -26,7 +26,7 @@ import {
   type ResultsTab,
   type Shift,
   type Who,
-} from './results.ts';
+} from '../results.ts';
 import { OUT_OF_DATE, areaText, type SimRun } from '../sim-api.ts';
 import { PatternsTab, PeopleTab, followPeople } from './SimResultsPeople.tsx';
 

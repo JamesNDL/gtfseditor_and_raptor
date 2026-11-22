@@ -3,13 +3,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
 import { useApi } from '../shared/api-client.ts';
 import { applyEdit } from '../scenarios/scenario-client.ts';
-import {
-  EMPTY_COLOR,
-  peakText,
-  stepColor,
-  tripLoads,
-  useTripColours,
-} from '../sim/results/loads.ts';
+import { EMPTY_COLOR, peakText, stepColor, tripLoads, useTripColours } from '../sim/loads.ts';
 import { currentSelection, useStore } from '../app/store.ts';
 import {
   COLORS,
