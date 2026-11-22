@@ -32,20 +32,20 @@ import {
   ROAD_MODES,
   typicalChange,
   type ReshapeDeps,
-} from './reshape.ts';
-import { closureRoutes, editClose } from './closures.ts';
-import { deleteStopRoutes, editDeleteStop } from './delete-stop.ts';
-import { describeMethod, linePath, type PathMethod } from './routing/roads.ts';
-import { describeTimes, sectionTime, stopDwell, type SectionTime } from './routing/timings.ts';
+} from './edits/reshape.ts';
+import { closureRoutes, editClose } from './edits/closure.ts';
+import { deleteStopRoutes, editDeleteStop } from './edits/delete-stop.ts';
+import { describeMethod, linePath, type PathMethod } from '../routing/roads.ts';
+import { describeTimes, sectionTime, stopDwell, type SectionTime } from '../routing/timings.ts';
 import {
   bestFree,
   platformChoices,
   scheduleEdits,
   scheduleRoutes,
   type Described,
-} from './schedule.ts';
+} from './edits/schedule.ts';
 import { editAddStop, scenarioStopsGeoJson, stopVisible, type AddedStop } from './stops.ts';
-import { fail } from './http.ts';
+import { fail } from '../http.ts';
 
 export interface Scenario {
   id: number;

@@ -3,13 +3,13 @@
 // "Draw a new line" and "Change route" in the same way as published stops.
 import { distanceM } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { nearestRoad } from './routing/roads.ts';
+import { nearestRoad } from '../routing/roads.ts';
 import type { Scenario } from './scenarios.ts';
-import { fail } from './http.ts';
+import { fail } from '../http.ts';
 
 const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
 
-/** SQL condition: this scenario has deleted the stop aliased `alias` (apps/api/src/delete-stop.ts). */
+/** SQL condition: this scenario has deleted the stop aliased `alias` (apps/api/src/scenarios/edits/delete-stop.ts). */
 export function stopDeleted(sql: Sql, alias: string, sc: Scenario | null) {
   const s = sql(alias);
   if (!sc) return sql`false`;

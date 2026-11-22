@@ -3,8 +3,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { int, notFound } from '../http.ts';
-import { scenarioOf, visible } from '../scenarios.ts';
-import { stopDeleted } from '../stops.ts';
+import { scenarioOf, visible } from '../scenarios/scenarios.ts';
+import { stopDeleted } from '../scenarios/stops.ts';
 
 export function registerTimelineRoutes(app: FastifyInstance, sql: Sql) {
   // ---------------------------------------------------------------------------

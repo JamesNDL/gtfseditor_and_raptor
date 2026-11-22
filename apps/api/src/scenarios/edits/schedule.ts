@@ -3,10 +3,10 @@
 import { formatSecs } from '@gtfs-editor/core';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { scenarioOf, visible, type Scenario } from './scenarios.ts';
-import { stopDeleted, stopVisible } from './stops.ts';
-import { stopDwell } from './routing/timings.ts';
-import { fail } from './http.ts';
+import { scenarioOf, visible, type Scenario } from '../scenarios.ts';
+import { stopDeleted, stopVisible } from '../stops.ts';
+import { stopDwell } from '../../routing/timings.ts';
+import { fail } from '../../http.ts';
 
 export interface Described {
   label: string;

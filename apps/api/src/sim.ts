@@ -16,7 +16,7 @@ import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { visible, type Scenario } from './scenarios.ts';
+import { visible, type Scenario } from './scenarios/scenarios.ts';
 import { buildLinkLoads } from './sim-results.ts';
 import { fail } from './http.ts';
 

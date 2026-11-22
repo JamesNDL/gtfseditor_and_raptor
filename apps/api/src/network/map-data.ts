@@ -8,7 +8,7 @@ import { vehicleWaits, type WaitTrip } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { packsDir } from '@gtfs-editor/gtfs/packs';
 import { int, notFound } from '../http.ts';
-import { scenarioOf } from '../scenarios.ts';
+import { scenarioOf } from '../scenarios/scenarios.ts';
 
 // Packs live under <repo>/data/packs regardless of where the server is started from.
 const PACKS_ROOT =
