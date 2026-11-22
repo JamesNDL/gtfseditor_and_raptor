@@ -1,4 +1,4 @@
-import { ensureFeed } from './feed-cache.ts';
+import { ensureFeed } from '../feed/feed-cache.ts';
 
 const apiKey = process.env.API_KEY;
 if (!apiKey) {

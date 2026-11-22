@@ -16,10 +16,8 @@ import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
 import yazl from 'yazl';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { scenarioOf, type Scenario } from './scenarios.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { scenarioOf, type Scenario } from '../scenarios/scenarios.ts';
+import { fail } from '../http.ts';
 
 /** Same rule as `visible()` in scenarios.ts, as plain SQL text: COPY cannot take parameters. */
 function visibleText(alias: string, sc: Scenario | null): string {

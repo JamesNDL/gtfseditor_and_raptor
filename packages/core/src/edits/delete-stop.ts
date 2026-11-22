@@ -1,6 +1,6 @@
 // Deleting a stop from the network: what happens to one trip that called there, and which other
 // platform a call moves to when only one platform of a station goes. No database here, so that the
-// rules can be tested on their own; apps/api/src/delete-stop.ts reads the trips and writes the result.
+// rules can be tested on their own; apps/api/src/scenarios/edits/delete-stop.ts reads the trips and writes the result.
 
 /** One call of a trip, in calling order. */
 export interface RemovalCall {

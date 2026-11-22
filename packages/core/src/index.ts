@@ -3,6 +3,6 @@ export * from './simplify.ts';
 export * from './pack.ts';
 export * from './waits.ts';
 export * from './time.ts';
-export * from './reshape.ts';
+export * from './edits/reshape.ts';
 export * from './limits.ts';
-export * from './delete-stop.ts';
+export * from './edits/delete-stop.ts';

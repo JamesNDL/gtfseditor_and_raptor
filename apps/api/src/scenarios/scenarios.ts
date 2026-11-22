@@ -32,28 +32,26 @@ import {
   ROAD_MODES,
   typicalChange,
   type ReshapeDeps,
-} from './reshape.ts';
-import { closureRoutes, editClose } from './closures.ts';
-import { deleteStopRoutes, editDeleteStop } from './delete-stop.ts';
-import { describeMethod, linePath, type PathMethod } from './roads.ts';
-import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
+} from './edits/reshape.ts';
+import { closureRoutes, editClose } from './edits/closure.ts';
+import { deleteStopRoutes, editDeleteStop } from './edits/delete-stop.ts';
+import { describeMethod, linePath, type PathMethod } from '../routing/roads.ts';
+import { describeTimes, sectionTime, stopDwell, type SectionTime } from '../routing/timings.ts';
 import {
   bestFree,
   platformChoices,
   scheduleEdits,
   scheduleRoutes,
   type Described,
-} from './schedule.ts';
+} from './edits/schedule.ts';
 import { editAddStop, scenarioStopsGeoJson, stopVisible, type AddedStop } from './stops.ts';
+import { fail } from '../http.ts';
 
 export interface Scenario {
   id: number;
   baselineId: number;
   head: number;
 }
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
 
 /** The scenario named by ?s=, or null for the plain baseline. */
 export async function scenarioOf(req: FastifyRequest, sql: Sql): Promise<Scenario | null> {

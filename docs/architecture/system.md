@@ -64,9 +64,9 @@ flowchart LR
 
 | Outside system | Used by | How | Notes |
 |---|---|---|---|
-| TfNSW Open Data GTFS | `packages/gtfs/src/feed-cache.ts` | HTTPS, `API_KEY` | Downloaded once per feed version, checked by etag |
-| OSRM (`ROUTER_URL`) | `apps/api/src/roads.ts` | `route`, `table`, `nearest` | Currently the public demo server, so stop coordinates leave the machine. It cannot be told a road is closed. At most two requests at a time. |
-| OpenFreeMap | `apps/web/src/theme.ts` | Style URLs | Basemap only |
+| TfNSW Open Data GTFS | `packages/gtfs/src/feed/feed-cache.ts` | HTTPS, `API_KEY` | Downloaded once per feed version, checked by etag |
+| OSRM (`ROUTER_URL`) | `apps/api/src/routing/roads.ts` | `route`, `table`, `nearest` | Currently the public demo server, so stop coordinates leave the machine. It cannot be told a road is closed. At most two requests at a time. |
+| OpenFreeMap | `apps/web/src/app/theme.ts` | Style URLs | Basemap only |
 
 ## 4. Components
 
@@ -156,7 +156,7 @@ flowchart LR
   C -->|later edit removes it| X[removed_edit = m]
 ```
 
-- A row is **visible** in scenario S at head h if it is a baseline row not hidden by an edit at or before h, or a row of S with `created_edit <= h` that has not been removed by h. This is `visible()` in `apps/api/src/scenarios.ts`.
+- A row is **visible** in scenario S at head h if it is a baseline row not hidden by an edit at or before h, or a row of S with `created_edit <= h` that has not been removed by h. This is `visible()` in `apps/api/src/scenarios/scenarios.ts`.
 - **Undo and redo move `head`.** A new edit after an undo deletes every row with `created_edit > head`, so the redo history is gone.
 - Each edit runs in one transaction with `FOR UPDATE` on the scenario. An edit naming a trip that has since been replaced gets **409**. An edit that would add ten or more vehicles is rolled back and answers `needsConfirm`, and the browser resends it with `confirm: true`.
 - **The stored rows are the source of truth.** `scenario_edits` keeps only each edit's kind and summary, so edits cannot be replayed. Rebasing a scenario onto a new feed is future work that will need its own design (decision D3).
@@ -257,8 +257,8 @@ flowchart LR
 
 | # | Found | Fixed | The fix |
 |---|---|---|---|
-| I2 | The file header said "nothing is written", but `buildLinkLoads` deletes from and inserts into `sim_link_loads`. | 23 Nov 2026 | The header of `apps/api/src/sim-results.ts` now says the file reads results and also writes the link loads. |
-| I3 | Undo and redo did not check `editBusy`, so Ctrl+Z during an edit in flight was not refused. | 23 Nov 2026 | `step` in `apps/web/src/scenario.ts` returns at once while `editBusy` is set, as `applyEdit` does, so the button and the keys send nothing until the edit lands. |
+| I2 | The file header said "nothing is written", but `buildLinkLoads` deletes from and inserts into `sim_link_loads`. | 23 Nov 2026 | The header of `apps/api/src/sim/results-read.ts` now says the file reads results and also writes the link loads. |
+| I3 | Undo and redo did not check `editBusy`, so Ctrl+Z during an edit in flight was not refused. | 23 Nov 2026 | `step` in `apps/web/src/scenarios/scenario-client.ts` returns at once while `editBusy` is set, as `applyEdit` does, so the button and the keys send nothing until the edit lands. |
 | I4 | Two strings said vehicle types are picked "while editing a scenario". | 23 Nov 2026 | `TripEditTools.tsx` and `FleetPanel.tsx` now say the pickers are there whenever a day is open, and the first change starts a scenario. |
 | I1 | Re-importing a service date deleted that baseline and all its scenarios by cascade, with no warning. | 23 Nov 2026 | The importer refuses a day that has scenarios unless given `--replace`, and says how many it would delete. `npm run db:backup` and `db:restore` back up and restore the whole database. The cascade itself stays. |
 | I5 | The importer wrote packs to `data/packs` relative to the working directory and ignored `PACKS_DIR`, which the API reads. | 23 Nov 2026 | `packsDir` in `packages/gtfs/src/import/packs.ts` now uses `PACKS_DIR`, otherwise the repo's `data/packs` found from the file's own location, as `server.ts` does. |
@@ -270,14 +270,14 @@ Each line below should be corrected in its document when that document is next e
 | Doc line | Says | The code |
 |---|---|---|
 | PLAN.md:87, 95, 98 | Validity rules are shared with the browser and run in both places | Server only (`scenarios.ts` `conflictsIn`) |
-| PLAN.md:96, 98 | `packages/gtfs` does import and export; the server does import | Export is `apps/api/src/export.ts`; import is a CLI |
-| PLAN.md:98 | The browser loads only what is on screen | Every mode's whole-day pack is loaded at start (`apps/web/src/App.tsx:30,132`) |
+| PLAN.md:96, 98 | `packages/gtfs` does import and export; the server does import | Export is `apps/api/src/export/routes.ts`; import is a CLI |
+| PLAN.md:98 | The browser loads only what is on screen | Every mode's whole-day pack is loaded at start (`apps/web/src/app/App.tsx` (pack loading)) |
 | PLAN.md:110, 139 | Import builds the network graph and run times per link | `tracks.ts` builds the graph in memory when first needed; `timings.ts` works out run times at edit time |
 | PLAN.md:121-122 | OSM in the database; Valhalla | An outside OSRM server (`roads.ts`) |
 | PLAN.md:135 | The edit log allows rebasing | Kind and summary only (D3) |
 | PLAN.md:137 | Vehicle days include empty repositioning runs | Only `gap_count`; no deadhead rows |
 | PLAN.md:147 | The catalogue ships with NSW defaults | Seven `DEFAULT-*` placeholders plus train types made at import (D6) |
-| PLAN.md:30 | Five modules; "Phases 0 and 1 are built"; "the editor does not call it yet" | Six modules; phases 0 to 4 are built; `apps/api/src/sim.ts` calls the router |
+| PLAN.md:30 | Five modules; "Phases 0 and 1 are built"; "the editor does not call it yet" | Six modules; phases 0 to 4 are built; `apps/api/src/sim/sim.ts` calls the router |
 | PLAN.md:9; `router-bench/build.gradle.kts:1-2` | The demand generator is next (phase 5) | Built: `router-sim/.../DemandGenerator.java` |
 | PLAN.md:46 | Dragging exists only on the trip diagram | All three charts drag (`PlatformView.tsx`, `VehicleView.tsx`) |
 | PLAN.md:334, 348 | "Draw a new line" is in the left panel; the "Close a road or a line" button is on the map | Rail buttons "Draw a line" and "Close a road" (`LeftRail.tsx`) |
@@ -312,3 +312,4 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | Added D8 (feature folders) and D9 (shared web and API types) | Decisions taken in `docs/refactor-plan.md`; recorded here before files move (ticket T-5) |
 | 23 Nov 2026 | I1 resolved; R2 mitigated | Refactor ticket T-2: import guard and backup scripts |
 | 23 Nov 2026 | I5 resolved: the importer honours `PACKS_DIR`. The importer also takes a feed on disk (`FEED_PATH`), and `npm run test:e2e:fixture` runs the scenario e2e suite on a small test feed. | Ticket T-3: e2e tests without the real data or the dev servers. |
+| 23 Nov 2026 | File paths updated for the feature-folder moves | Stage 2 of `docs/refactor-plan.md` (tickets T-6, T-7) |

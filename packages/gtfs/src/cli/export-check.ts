@@ -18,7 +18,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { checkReferences } from './export-references.ts';
-import { unzip } from './unzip.ts';
+import { unzip } from '../feed/unzip.ts';
 
 const API = process.env.API ?? 'http://localhost:3001';
 const args = process.argv.slice(2);

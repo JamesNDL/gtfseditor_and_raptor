@@ -9,7 +9,7 @@
 //     left with fewer than two stops is removed.
 // Nothing is re-routed: every trip keeps its path and its vehicle. The deleted stops are rows in
 // `scenario_removed_stops`; the trips are changed in the same edit, so nothing in the scenario
-// still calls at a deleted stop. What needs no database is in packages/core/src/delete-stop.ts.
+// still calls at a deleted stop. What needs no database is in packages/core/src/edits/delete-stop.ts.
 import {
   choosePlatform,
   removeCalls,
@@ -18,11 +18,9 @@ import {
 } from '@gtfs-editor/core';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { scenarioOf, visible, type Scenario } from './scenarios.ts';
-import { stopVisible } from './stops.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { scenarioOf, visible, type Scenario } from '../scenarios.ts';
+import { stopVisible } from '../stops.ts';
+import { fail } from '../../http.ts';
 
 export interface DeleteStopDeps {
   cloneTrips: (

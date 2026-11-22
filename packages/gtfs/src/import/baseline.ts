@@ -1,5 +1,5 @@
 // Builds a baseline (one service day) from the staged raw feed.
-import type { FeedVersion } from '../feed-cache.ts';
+import type { FeedVersion } from '../feed/feed-cache.ts';
 import type { Sql } from '../db.ts';
 import { guardReplace, isoDate } from './replace-guard.ts';
 

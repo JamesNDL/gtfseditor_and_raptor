@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bandOf, DAY_BANDS } from './time.ts';
+import { bandOf, DAY_BANDS } from '../time.ts';
 import {
   distanceBetweenPathsM,
   distanceToPathM,

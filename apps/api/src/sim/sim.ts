@@ -16,11 +16,9 @@ import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { visible, type Scenario } from './scenarios.ts';
-import { buildLinkLoads } from './sim-results.ts';
-
-const fail = (statusCode: number, message: string) =>
-  Object.assign(new Error(message), { statusCode });
+import { visible, type Scenario } from '../scenarios/scenarios.ts';
+import { buildLinkLoads } from './results-read.ts';
+import { fail } from '../http.ts';
 
 /** The journey router service. ROUTER_URL is already the road-routing server and keeps that meaning. */
 const ROUTER = (process.env.ROUTER_SERVICE_URL ?? 'http://localhost:3002').replace(/\/+$/, '');
@@ -31,7 +29,7 @@ const SELF = (process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.PORT
 );
 /** Demand files, outside git. */
 const DEMAND_DIR =
-  process.env.SIM_DEMAND_DIR ?? path.resolve(import.meta.dirname, '../../../data/sim/demand');
+  process.env.SIM_DEMAND_DIR ?? path.resolve(import.meta.dirname, '../../../../data/sim/demand');
 /** Whether the router reads files where this API wrote them. Set to 0 when it runs on another machine. */
 const SHARED_FILES = process.env.ROUTER_SHARES_FILES !== '0';
 

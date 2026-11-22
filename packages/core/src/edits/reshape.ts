@@ -1,7 +1,7 @@
 // Reshaping a line (extend, cut short, re-route, add or remove a stop): the parts that need no
 // database, shared by the server's edit and its preview.
-import { bandOf } from './time.ts';
-import { distanceM } from './vehicle-days.ts';
+import { bandOf } from '../time.ts';
+import { distanceM } from '../vehicle-days.ts';
 
 export type Coord = [number, number];
 

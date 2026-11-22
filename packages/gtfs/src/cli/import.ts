@@ -3,14 +3,14 @@
 // A day that already has scenarios is refused unless --replace is given, as re-importing deletes them.
 // With several days it is all or nothing: if any is refused, none is imported.
 // FEED_PATH=<folder or zip> imports a feed already on disk instead, with no API key.
-import { connect, migrate, type Sql } from './db.ts';
-import { ensureFeed, latestCachedFeedId, localFeed, type FeedVersion } from './feed-cache.ts';
-import { importBaseline } from './import/baseline.ts';
-import { finishBaseline } from './import/finish.ts';
-import { buildPacks } from './import/packs.ts';
-import { dateProblem, findRefusals, ReplaceRefusedError } from './import/replace-guard.ts';
-import { stageFeed } from './import/stage.ts';
-import { importVehicleDays } from './import/vehicle-days.ts';
+import { connect, migrate, type Sql } from '../db.ts';
+import { ensureFeed, latestCachedFeedId, localFeed, type FeedVersion } from '../feed/feed-cache.ts';
+import { importBaseline } from '../import/baseline.ts';
+import { finishBaseline } from '../import/finish.ts';
+import { buildPacks } from '../import/packs.ts';
+import { dateProblem, findRefusals, ReplaceRefusedError } from '../import/replace-guard.ts';
+import { stageFeed } from '../import/stage.ts';
+import { importVehicleDays } from '../import/vehicle-days.ts';
 
 /** Where the feed comes from: a folder or zip on disk, or the TfNSW download. */
 type FeedSource = { kind: 'disk'; path: string } | { kind: 'tfnsw'; apiKey: string };
