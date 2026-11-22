@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, fmt } from '../inspector/parts.tsx';
 import { useStore } from '../store.ts';
 import {
-  GROUP_COLORS, GROUP_LABELS, SAME_GROUP, divergingColor, lineName, mins, placeholderNote, resultsUrl, signed, useResults, whoLabel, whoPhrase,
+  GROUP_COLORS, GROUP_LABELS, SAME_GROUP, divergingColor, lineName, mins, placeholderNote, resultsUrl, signed, useResults, whoPhrase,
   type Capacities, type JourneyTimes, type LineDetail, type LineRow, type Overview, type ResultsTab, type Shift, type Who,
 } from './results.ts';
 import { OUT_OF_DATE, areaText, type SimRun } from './simApi.ts';

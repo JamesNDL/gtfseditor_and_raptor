@@ -9,7 +9,6 @@
 // - Each trip still leaves the first stop it shares with the old line at the same time.
 import {
   distanceM,
-  distanceToPathM,
   keptIndexes,
   locateStops,
   mirrorStops,

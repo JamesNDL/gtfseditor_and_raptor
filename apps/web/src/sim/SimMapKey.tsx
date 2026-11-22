@@ -2,7 +2,7 @@
 // is folded away, since that is when the map is being read.
 import { useStore } from '../store.ts';
 import { EMPTY_COLOR } from './loads.ts';
-import { BLUES, FULL_STEPS, MIDDLE, REDS, placeholderNote, whoHasSide, whoLabel, whoPhrase, type SimMapState } from './results.ts';
+import { BLUES, FULL_STEPS, MIDDLE, REDS, placeholderNote, whoHasSide, whoPhrase, type SimMapState } from './results.ts';
 
 /** Filled in by the map as it draws, so that the key can say what the widths and sizes stand for. */
 export const mapScale: { flowMax: number; placeMax: number; people: number | null; note: string | null } = { flowMax: 0, placeMax: 0, people: null, note: null };

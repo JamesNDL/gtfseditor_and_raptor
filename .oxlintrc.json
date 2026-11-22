@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import", "oxc"],
+  "env": { "browser": true, "node": true, "es2024": true },
+  "categories": { "correctness": "error" },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "react/set-state-in-effect": "warn",
+    "react/refs": "warn",
+    "react/globals": "warn",
+    "react/void-use-memo": "warn",
+    "no-unused-expressions": ["error", { "allowTernary": true, "allowShortCircuit": true }],
+    "typescript/consistent-type-imports": "warn"
+  },
+  "ignorePatterns": ["data/**", "**/dist/**", "services/**", "node_modules/**"]
+}
