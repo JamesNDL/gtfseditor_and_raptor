@@ -78,7 +78,7 @@ Within a feature folder that grows past about 10 files, use subfolders by sub-fe
   - `shared/` imports nothing from features.
   - Features may import `shared/` and the app store. A feature imports another feature only through that feature's main file, not its internals.
   - In the API, `scenarios/engine.ts` imports no edit kinds. Edit kinds import the engine; the registry imports the edit kinds.
-  - No import circles, enforced by oxlint's `import/no-cycle` rule once stage 2 is done.
+  - No import circles, enforced by oxlint's `import/no-cycle` rule once stage 3 has broken the API circles.
 - **No barrel files** (`index.ts` that only re-exports), except each package's public entry. Barrels hide circles and slow Vite's reload.
 - **Feature folder names use the glossary terms** once `docs/glossary.md` exists.
 
