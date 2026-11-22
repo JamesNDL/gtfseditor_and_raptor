@@ -10,7 +10,14 @@ export function connect(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL):
     max: 4,
     onnotice: () => {},
     // Our ids fit comfortably in a JS number; return bigint columns as numbers, not strings.
-    types: { int8: { to: 20, from: [20], serialize: (v: number) => String(v), parse: (v: string) => Number(v) } },
+    types: {
+      int8: {
+        to: 20,
+        from: [20],
+        serialize: (v: number) => String(v),
+        parse: (v: string) => Number(v),
+      },
+    },
   }) as unknown as Sql;
 }
 

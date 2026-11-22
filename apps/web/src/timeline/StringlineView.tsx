@@ -22,7 +22,9 @@ const GUTTER = 150;
 const PAD = 12;
 
 export function StringlineView({ patternId, others }: { patternId: number; others: boolean }) {
-  const { data, error } = useApi<StringlineData>(`/api/patterns/${patternId}/stringline?others=${others ? 1 : 0}`);
+  const { data, error } = useApi<StringlineData>(
+    `/api/patterns/${patternId}/stringline?others=${others ? 1 : 0}`,
+  );
   const open = useStore((s) => s.open);
   const editing = useStore((s) => s.baselineId !== null);
   // Trips coloured by how full they are in the chosen simulation run, when that is switched on.
@@ -49,9 +51,15 @@ export function StringlineView({ patternId, others }: { patternId: number; other
     return { color, name, frac, trips };
   }, [data]);
 
-  if (!data || !model) return <div className="muted pad timeline-message">{error ? `Could not load: ${error}` : 'Loading ...'}</div>;
+  if (!data || !model)
+    return (
+      <div className="muted pad timeline-message">
+        {error ? `Could not load: ${error}` : 'Loading ...'}
+      </div>
+    );
 
-  const yOf = (env: Env, stationIndex: number) => env.top + PAD + model.frac[stationIndex] * (env.plotH - 2 * PAD);
+  const yOf = (env: Env, stationIndex: number) =>
+    env.top + PAD + model.frac[stationIndex] * (env.plotH - 2 * PAD);
 
   const tracePath = (env: Env, calls: number[], shift = 0) => {
     const { ctx } = env;
@@ -105,7 +113,11 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       if (y - lastLabelY >= 13) {
         ctx.fillStyle = COLORS.muted;
         ctx.textAlign = 'right';
-        ctx.fillText(fitText(ctx, s.name.replace(/ Station$/, ''), env.gutter - 14), env.gutter - 8, y);
+        ctx.fillText(
+          fitText(ctx, s.name.replace(/ Station$/, ''), env.gutter - 14),
+          env.gutter - 8,
+          y,
+        );
         lastLabelY = y;
       }
     });
@@ -184,7 +196,8 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       }
     }
     // A trip being dragged: a dashed white ghost at the time it would move to.
-    const dragged = env.dragTripId !== null ? model.trips.find((t) => t.id === env.dragTripId) : undefined;
+    const dragged =
+      env.dragTripId !== null ? model.trips.find((t) => t.id === env.dragTripId) : undefined;
     if (dragged) {
       ctx.setLineDash([6, 4]);
       ctx.strokeStyle = COLORS.highlight;
@@ -211,7 +224,8 @@ export function StringlineView({ patternId, others }: { patternId: number; other
           const dx = x - x0;
           const dy = y - y0;
           const len2 = dx * dx + dy * dy;
-          const f = len2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / len2)) : 0;
+          const f =
+            len2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / len2)) : 0;
           const d = Math.hypot(px - (x0 + f * dx), py - (y0 + f * dy));
           // Prefer the line's own trips when two are equally close.
           const score = d - (t.own ? 0.5 : 0);
@@ -240,12 +254,19 @@ export function StringlineView({ patternId, others }: { patternId: number; other
       contentHeight="fit"
       render={render}
       hitTest={hitTest}
-      onHit={(hit) => hit.tripId !== undefined && open({ kind: 'trip', id: hit.tripId }, { replace: true })}
+      onHit={(hit) =>
+        hit.tripId !== undefined && open({ kind: 'trip', id: hit.tripId }, { replace: true })
+      }
       onDragTrip={
         editing
           ? (tripId, delta) => {
               open({ kind: 'trip', id: tripId }, { replace: true });
-              void applyEdit({ kind: 'shift', tripIds: [tripId], delta, ripple: useStore.getState().ripple });
+              void applyEdit({
+                kind: 'shift',
+                tripIds: [tripId],
+                delta,
+                ripple: useStore.getState().ripple,
+              });
             }
           : undefined
       }

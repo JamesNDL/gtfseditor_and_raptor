@@ -1,5 +1,12 @@
 // Loads animation packs and works out where every vehicle is at a given time.
-import { decodePack, tripPosition, VEHICLE_GONE, VEHICLE_WAITING, vehicleState, type Pack } from '@gtfs-editor/core';
+import {
+  decodePack,
+  tripPosition,
+  VEHICLE_GONE,
+  VEHICLE_WAITING,
+  vehicleState,
+  type Pack,
+} from '@gtfs-editor/core';
 import type { RouteListItem } from './api.ts';
 
 export interface ModeVehicles {
@@ -80,7 +87,9 @@ function setHolds(mv: ModeVehicles) {
 export async function loadWaits(baselineId: number, scenarioId: number | null): Promise<void> {
   const request = ++waitsRequest;
   try {
-    const res = await fetch(`/api/baselines/${baselineId}/waits${scenarioId === null ? '' : `?s=${scenarioId}`}`);
+    const res = await fetch(
+      `/api/baselines/${baselineId}/waits${scenarioId === null ? '' : `?s=${scenarioId}`}`,
+    );
     if (!res.ok) throw new Error(`Vehicle waits responded ${res.status}`);
     const pairs = new Int32Array(await res.arrayBuffer());
     if (request !== waitsRequest) return; // a newer request has been made since
@@ -100,7 +109,10 @@ export function applyWaits() {
 }
 
 /** The scenario's own trips, across all modes, as one extra set of vehicles. */
-export async function loadScenarioVehicles(scenarioId: number, routes: Map<number, RouteListItem>): Promise<ModeVehicles> {
+export async function loadScenarioVehicles(
+  scenarioId: number,
+  routes: Map<number, RouteListItem>,
+): Promise<ModeVehicles> {
   const res = await fetch(`/api/scenarios/${scenarioId}/pack`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Scenario vehicle data responded ${res.status}`);
   const mv = build(decodePack(await res.arrayBuffer()), 'scenario', routes, '888888');
@@ -121,7 +133,12 @@ export async function loadModeVehicles(
   return mv;
 }
 
-function build(pack: Pack, modeId: string, routes: Map<number, RouteListItem>, fallbackColor: string): ModeVehicles {
+function build(
+  pack: Pack,
+  modeId: string,
+  routes: Map<number, RouteListItem>,
+  fallbackColor: string,
+): ModeVehicles {
   const n = pack.meta.tripCount;
   const tripColor = new Uint8Array(n * 3);
   const indexByTripId = new Map<number, number>();
@@ -157,7 +174,13 @@ function build(pack: Pack, modeId: string, routes: Map<number, RouteListItem>, f
  * Where the vehicle of pack trip `i` is at `secs`, written into `out`: along its trip, or standing
  * where the trip ended while it waits for its next one. Returns false when it is not on the map.
  */
-export function vehicleAt(mv: ModeVehicles, i: number, secs: number, out: Float64Array, outIndex: number): boolean {
+export function vehicleAt(
+  mv: ModeVehicles,
+  i: number,
+  secs: number,
+  out: Float64Array,
+  outIndex: number,
+): boolean {
   const state = vehicleState(mv.pack.tripStart[i], mv.pack.tripEnd[i], mv.holdUntil[i], secs);
   if (state === VEHICLE_GONE) return false;
   if (state === VEHICLE_WAITING) {
@@ -170,15 +193,23 @@ export function vehicleAt(mv: ModeVehicles, i: number, secs: number, out: Float6
 
 /** When the vehicle of pack trip `i` leaves on its next trip, if it is waiting for it at `secs`; otherwise null. */
 export function waitingUntil(mv: ModeVehicles, i: number, secs: number): number | null {
-  return vehicleState(mv.pack.tripStart[i], mv.pack.tripEnd[i], mv.holdUntil[i], secs) === VEHICLE_WAITING ? mv.holdUntil[i] : null;
+  return vehicleState(mv.pack.tripStart[i], mv.pack.tripEnd[i], mv.holdUntil[i], secs) ===
+    VEHICLE_WAITING
+    ? mv.holdUntil[i]
+    : null;
 }
 
 /**
  * Fills the per-frame buffers with every vehicle on the map at `secs`: those running a trip, and those
  * standing at the end of one until their next trip starts. Returns how many there are.
  */
-export function computeFrame(mv: ModeVehicles, secs: number, enabledModes?: Record<string, boolean>): number {
-  const { pack, positions, colors, frameTrip, tripColor, removed, tripMode, holdUntil, endPos } = mv;
+export function computeFrame(
+  mv: ModeVehicles,
+  secs: number,
+  enabledModes?: Record<string, boolean>,
+): number {
+  const { pack, positions, colors, frameTrip, tripColor, removed, tripMode, holdUntil, endPos } =
+    mv;
   const n = pack.meta.tripCount;
   // Trips are sorted by start time: everything from `end` onward has not started yet.
   let lo = 0;
@@ -215,7 +246,11 @@ export function computeFrame(mv: ModeVehicles, secs: number, enabledModes?: Reco
 }
 
 /** Number of vehicles running in each time bin across the day, for the scrubber backdrop. */
-export function activityHistogram(all: ModeVehicles[], maxSecs: number, binSecs: number): Uint32Array {
+export function activityHistogram(
+  all: ModeVehicles[],
+  maxSecs: number,
+  binSecs: number,
+): Uint32Array {
   const bins = new Uint32Array(Math.ceil(maxSecs / binSecs) + 1);
   for (const { pack, removed } of all) {
     for (let i = 0; i < pack.meta.tripCount; i++) {

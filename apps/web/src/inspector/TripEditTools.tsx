@@ -16,12 +16,20 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
   const set = useStore((s) => s.set);
   const [copyAfter, setCopyAfter] = useState(10);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const addable = useApi<{ stopId: number; name: string; restore: boolean; after: string }[]>(`/api/trips/${trip.id}/addable-stops`);
+  const addable = useApi<{ stopId: number; name: string; restore: boolean; after: string }[]>(
+    `/api/trips/${trip.id}/addable-stops`,
+  );
   const [addStop, setAddStop] = useState('');
-  const clock = (secs: number) => `${String(Math.floor(secs / 3600) % 24).padStart(2, '0')}:${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}`;
+  const clock = (secs: number) =>
+    `${String(Math.floor(secs / 3600) % 24).padStart(2, '0')}:${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}`;
   const [departAt, setDepartAt] = useState(clock(trip.startSecs));
 
-  const rippleNote = ripple === 'vehicle' ? " and its vehicle's later trips" : ripple === 'line' ? ' and every later trip on the line' : '';
+  const rippleNote =
+    ripple === 'vehicle'
+      ? " and its vehicle's later trips"
+      : ripple === 'line'
+        ? ' and every later trip on the line'
+        : '';
 
   return (
     <section className="edit-tools">
@@ -29,7 +37,10 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
         Edit this trip
         {trip.edited && <Tag kind="info">changed</Tag>}
         {trip.pinned && (
-          <Tag kind="info" title="You placed this trip by hand, so frequency changes leave it where it is">
+          <Tag
+            kind="info"
+            title="You placed this trip by hand, so frequency changes leave it where it is"
+          >
             placed by hand
           </Tag>
         )}
@@ -53,7 +64,13 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
       </div>
       <div className="edit-row">
         <span className="muted small">Depart at</span>
-        <input className="day-select" type="time" value={departAt} onChange={(e) => setDepartAt(e.target.value)} aria-label="Departure time" />
+        <input
+          className="day-select"
+          type="time"
+          value={departAt}
+          onChange={(e) => setDepartAt(e.target.value)}
+          aria-label="Departure time"
+        />
         <button
           className="button small-button"
           disabled={busy || departAt === clock(trip.startSecs) || !departAt}
@@ -68,7 +85,9 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
           Set
         </button>
       </div>
-      <p className="muted small edit-hint">Or drag it sideways on the trip diagram. {rippleNote && `Moves this trip${rippleNote}.`}</p>
+      <p className="muted small edit-hint">
+        Or drag it sideways on the trip diagram. {rippleNote && `Moves this trip${rippleNote}.`}
+      </p>
 
       <div className="edit-row">
         <span className="muted small">Add a copy</span>
@@ -85,7 +104,13 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
         <button
           className="button small-button"
           disabled={busy || !(copyAfter >= 1)}
-          onClick={() => applyEdit({ kind: 'duplicate', tripId: trip.id, startSecs: trip.startSecs + copyAfter * 60 })}
+          onClick={() =>
+            applyEdit({
+              kind: 'duplicate',
+              tripId: trip.id,
+              startSecs: trip.startSecs + copyAfter * 60,
+            })
+          }
         >
           Add
         </button>
@@ -94,7 +119,10 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
       <div className="edit-row">
         <span className="muted small">Skipping a stop applies to</span>
         <div className="speeds">
-          <button className={stopScope === 'trip' ? 'on' : ''} onClick={() => set({ stopScope: 'trip' })}>
+          <button
+            className={stopScope === 'trip' ? 'on' : ''}
+            onClick={() => set({ stopScope: 'trip' })}
+          >
             This trip
           </button>
           <button
@@ -111,7 +139,12 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
       {addable.data && addable.data.length > 0 && (
         <div className="edit-row">
           <span className="muted small">Add a stop</span>
-          <select className="day-select grow-select" value={addStop} onChange={(e) => setAddStop(e.target.value)} aria-label="Stop to add to this trip">
+          <select
+            className="day-select grow-select"
+            value={addStop}
+            onChange={(e) => setAddStop(e.target.value)}
+            aria-label="Stop to add to this trip"
+          >
             <option value="">Choose a stop this trip passes</option>
             {addable.data.map((o) => (
               <option key={o.stopId} value={o.stopId}>
@@ -125,7 +158,8 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
             disabled={busy || addStop === ''}
             title="This trip alone stops there; later stops are a little later. To change every trip, use Change route on the line."
             onClick={async () => {
-              if (await applyEdit({ kind: 'addCall', tripId: trip.id, stopId: Number(addStop) })) setAddStop('');
+              if (await applyEdit({ kind: 'addCall', tripId: trip.id, stopId: Number(addStop) }))
+                setAddStop('');
             }}
           >
             Add
@@ -153,7 +187,13 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
         </button>
       </div>
 
-      <VehicleTypePicker scope="trip" id={trip.id} modeId={trip.modeId} currentTypeId={trip.vehicleTypeId} label="Vehicle type" />
+      <VehicleTypePicker
+        scope="trip"
+        id={trip.id}
+        modeId={trip.modeId}
+        currentTypeId={trip.vehicleTypeId}
+        label="Vehicle type"
+      />
 
       <div className="edit-row">
         {confirmDelete ? (

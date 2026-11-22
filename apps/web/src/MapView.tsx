@@ -10,7 +10,21 @@ import { clock } from './clock.ts';
 import { SIDE_COLORS, useStore } from './store.ts';
 import { fmt } from './inspector/parts.tsx';
 import { loadTripLoads, peakText, stepAt, stepColor, stepLabel, tripLoads } from './sim/loads.ts';
-import { BLUES, MIDDLE, REDS, divergingColor, fetchResults, fullColor, mins, minutesColor, resultsUrl, whoParam, type Flows, type Places, type Trace } from './sim/results.ts';
+import {
+  BLUES,
+  MIDDLE,
+  REDS,
+  divergingColor,
+  fetchResults,
+  fullColor,
+  mins,
+  minutesColor,
+  resultsUrl,
+  whoParam,
+  type Flows,
+  type Places,
+  type Trace,
+} from './sim/results.ts';
 import { mapView } from './sim/simApi.ts';
 import { mapScale } from './sim/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from './theme.ts';
@@ -28,7 +42,10 @@ let lastView: { center: [number, number]; zoom: number } | null = null;
 const MODE_ORDER = ['school_bus', 'bus', 'coach', 'ferry', 'light_rail', 'metro', 'train'];
 
 // Opacity is [zoomed out, zoomed in]: dense bus networks stay faint until you are close enough to read them.
-const LINE_STYLE: Record<string, { width: [number, number]; opacity: [number, number]; dash?: number[] }> = {
+const LINE_STYLE: Record<
+  string,
+  { width: [number, number]; opacity: [number, number]; dash?: number[] }
+> = {
   school_bus: { width: [0.5, 1.5], opacity: [0.08, 0.4] },
   bus: { width: [0.5, 2], opacity: [0.07, 0.5] },
   coach: { width: [1, 2], opacity: [0.4, 0.6] },
@@ -110,13 +127,20 @@ export function MapView({ onVehicleCount }: Props) {
     // The simulation wizard can use "what is on screen" as a run's area.
     const noteBounds = () => {
       const b = map.getBounds();
-      mapView.bounds = { name: null, south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
+      mapView.bounds = {
+        name: null,
+        south: b.getSouth(),
+        west: b.getWest(),
+        north: b.getNorth(),
+        east: b.getEast(),
+      };
     };
     map.on('moveend', noteBounds);
     map.once('load', noteBounds);
 
     // Lines the scenario created are listed first so that they win a click over what lies beneath.
-    const lineLayerIds = () => ['line-scenario', ...MODE_ORDER.map((m) => `line-${m}`)].filter((id) => map.getLayer(id));
+    const lineLayerIds = () =>
+      ['line-scenario', ...MODE_ORDER.map((m) => `line-${m}`)].filter((id) => map.getLayer(id));
 
     const pickVehicle = (x: number, y: number, radius = 6): number | null => {
       const info = overlay.pickObject({ x, y, radius });
@@ -141,8 +165,19 @@ export function MapView({ onVehicleCount }: Props) {
     // Stops are small, so they get a generous target: the nearest station, platform or stop within
     // STOP_REACH pixels of the pointer.
     const STOP_REACH = 14;
-    const STOP_LAYERS = ['stop-station', 'stop-platform', 'stop-road', 'stop-new', 'stop-new-platform', 'stop-deleted', 'stop-deleted-platform'];
-    const stopAt = (x: number, y: number): { id: number; name: string; isStation: boolean; lon: number; lat: number } | null => {
+    const STOP_LAYERS = [
+      'stop-station',
+      'stop-platform',
+      'stop-road',
+      'stop-new',
+      'stop-new-platform',
+      'stop-deleted',
+      'stop-deleted-platform',
+    ];
+    const stopAt = (
+      x: number,
+      y: number,
+    ): { id: number; name: string; isStation: boolean; lon: number; lat: number } | null => {
       const layers = STOP_LAYERS.filter((id) => map.getLayer(id));
       if (!layers.length) return null;
       const features = map.queryRenderedFeatures(
@@ -162,7 +197,13 @@ export function MapView({ onVehicleCount }: Props) {
       if (!best) return null;
       const props = best.feature.properties;
       const [lon, lat] = (best.feature.geometry as GeoJSON.Point).coordinates;
-      return { id: Number(props.stop_id), name: String(props.name), isStation: props.station === true || props.station === 'true', lon, lat };
+      return {
+        id: Number(props.stop_id),
+        name: String(props.name),
+        isStation: props.station === true || props.station === 'true',
+        lon,
+        lat,
+      };
     };
 
     // What a click or hover lands on. A vehicle directly under the pointer wins; otherwise a nearby stop
@@ -183,13 +224,26 @@ export function MapView({ onVehicleCount }: Props) {
     };
 
     /** The part of a split line under the pointer while a closure is being set up, with the lines that run along it. */
-    const partAt = (x: number, y: number): { side: string; kept: boolean; routeIds: number[] } | null => {
+    const partAt = (
+      x: number,
+      y: number,
+    ): { side: string; kept: boolean; routeIds: number[] } | null => {
       const layers = ['closing-parts', 'closing-dropped'].filter((id) => map.getLayer(id));
       if (!layers.length) return null;
-      const [feature] = map.queryRenderedFeatures([[x - 5, y - 5], [x + 5, y + 5]], { layers });
+      const [feature] = map.queryRenderedFeatures(
+        [
+          [x - 5, y - 5],
+          [x + 5, y + 5],
+        ],
+        { layers },
+      );
       if (!feature) return null;
       const props = feature.properties as { side: string; kept: boolean | string; ids: string };
-      return { side: props.side, kept: props.kept === true || props.kept === 'true', routeIds: String(props.ids).split(',').map(Number) };
+      return {
+        side: props.side,
+        kept: props.kept === true || props.kept === 'true',
+        routeIds: String(props.ids).split(',').map(Number),
+      };
     };
 
     let hoveredStop = -1;
@@ -197,7 +251,8 @@ export function MapView({ onVehicleCount }: Props) {
       if (id === hoveredStop || !map.getLayer('stop-hover')) return;
       hoveredStop = id;
       map.setFilter('stop-hover', ['==', ['get', 'stop_id'], id]);
-      if (map.getLayer('stop-hover-new')) map.setFilter('stop-hover-new', ['==', ['get', 'stop_id'], id]);
+      if (map.getLayer('stop-hover-new'))
+        map.setFilter('stop-hover-new', ['==', ['get', 'stop_id'], id]);
     };
 
     map.on('click', (e) => {
@@ -224,23 +279,47 @@ export function MapView({ onVehicleCount }: Props) {
       // "Through here": a click picks the stretch or the stop whose passengers are followed.
       if (useStore.getState().simRunId !== null && useStore.getState().simMap.layer === 'through') {
         const state = useStore.getState();
-        const pick = (who: NonNullable<typeof state.simResults.who>) => state.set({ simResults: { ...state.simResults, who }, simPerson: null });
+        const pick = (who: NonNullable<typeof state.simResults.who>) =>
+          state.set({ simResults: { ...state.simResults, who }, simPerson: null });
         const [stretch] = map.getLayer('simr-flow')
-          ? map.queryRenderedFeatures([[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]], { layers: ['simr-flow'] })
+          ? map.queryRenderedFeatures(
+              [
+                [e.point.x - 4, e.point.y - 4],
+                [e.point.x + 4, e.point.y + 4],
+              ],
+              { layers: ['simr-flow'] },
+            )
           : [];
         const stop = stopAt(e.point.x, e.point.y);
         // A stop right under the pointer wins over the stretch that ends at it.
-        const onStop = stop && Math.hypot(map.project([stop.lon, stop.lat]).x - e.point.x, map.project([stop.lon, stop.lat]).y - e.point.y) <= 6;
-        if (stop && (onStop || !stretch)) return pick({ kind: 'stop', id: stop.id, name: stop.name });
-        if (stretch) return pick({ kind: 'link', from: Number(stretch.properties.from), to: Number(stretch.properties.to), name: String(stretch.properties.name) });
+        const onStop =
+          stop &&
+          Math.hypot(
+            map.project([stop.lon, stop.lat]).x - e.point.x,
+            map.project([stop.lon, stop.lat]).y - e.point.y,
+          ) <= 6;
+        if (stop && (onStop || !stretch))
+          return pick({ kind: 'stop', id: stop.id, name: stop.name });
+        if (stretch)
+          return pick({
+            kind: 'link',
+            from: Number(stretch.properties.from),
+            to: Number(stretch.properties.to),
+            name: String(stretch.properties.name),
+          });
         return;
       }
       const target = targetAt(e.point.x, e.point.y);
-      if (target?.kind === 'vehicle') return open({ kind: 'trip', id: target.tripId }, { replace: true });
+      if (target?.kind === 'vehicle')
+        return open({ kind: 'trip', id: target.tripId }, { replace: true });
       if (target?.kind === 'stop') {
         // Details open on the right, like a line or a trip. An open platform chart follows along.
         if (useStore.getState().timeline.open && useStore.getState().timeline.tab === 'platforms') {
-          openTimeline({ tab: 'platforms', stationId: target.id, focusStopId: target.isStation ? null : target.id });
+          openTimeline({
+            tab: 'platforms',
+            stationId: target.id,
+            focusStopId: target.isStation ? null : target.id,
+          });
         }
         return open({ kind: 'station', id: target.id }, { replace: true });
       }
@@ -263,10 +342,14 @@ export function MapView({ onVehicleCount }: Props) {
         setHoveredStop(-1);
         const part = closing.line.length >= 2 ? partAt(e.point.x, e.point.y) : null;
         const focus = part && part.routeIds.length === 1 ? part.routeIds[0] : null;
-        if (focus !== useStore.getState().closingFocus) useStore.getState().set({ closingFocus: focus });
+        if (focus !== useStore.getState().closingFocus)
+          useStore.getState().set({ closingFocus: focus });
         if (part) {
           const known = useStore.getState().closingPreview?.lines ?? [];
-          const names = part.routeIds.map((id) => `${known.find((l) => l.routeId === id)?.name ?? '?'}${part.side ? `-${part.side}` : ''}`);
+          const names = part.routeIds.map(
+            (id) =>
+              `${known.find((l) => l.routeId === id)?.name ?? '?'}${part.side ? `-${part.side}` : ''}`,
+          );
           map.getCanvas().style.cursor = 'pointer';
           tooltip.style.display = 'block';
           tooltip.textContent =
@@ -289,7 +372,14 @@ export function MapView({ onVehicleCount }: Props) {
           (map.getSource('closing') as maplibregl.GeoJSONSource | undefined)?.setData({
             type: 'FeatureCollection',
             features: [
-              { type: 'Feature', geometry: { type: 'LineString', coordinates: [start, [e.lngLat.lng, e.lngLat.lat]] }, properties: { cut: true } },
+              {
+                type: 'Feature',
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [start, [e.lngLat.lng, e.lngLat.lat]],
+                },
+                properties: { cut: true },
+              },
               { type: 'Feature', geometry: { type: 'Point', coordinates: start }, properties: {} },
             ],
           });
@@ -310,9 +400,22 @@ export function MapView({ onVehicleCount }: Props) {
         return;
       }
       // The results of a simulation, where they are drawn, say what is under the pointer.
-      const simLayers = drawing ? [] : ['simr-ends', 'simr-places', 'simr-cells', 'simr-flow'].filter((id) => map.getLayer(id));
-      const simHit = simLayers.length ? map.queryRenderedFeatures([[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]], { layers: simLayers })[0] : undefined;
-      const picking = !drawing && useStore.getState().simRunId !== null && useStore.getState().simMap.layer === 'through';
+      const simLayers = drawing
+        ? []
+        : ['simr-ends', 'simr-places', 'simr-cells', 'simr-flow'].filter((id) => map.getLayer(id));
+      const simHit = simLayers.length
+        ? map.queryRenderedFeatures(
+            [
+              [e.point.x - 4, e.point.y - 4],
+              [e.point.x + 4, e.point.y + 4],
+            ],
+            { layers: simLayers },
+          )[0]
+        : undefined;
+      const picking =
+        !drawing &&
+        useStore.getState().simRunId !== null &&
+        useStore.getState().simMap.layer === 'through';
       if (simHit) {
         setHoveredStop(-1);
         const stretch = picking && simHit.properties.kind === 'flow';
@@ -334,7 +437,11 @@ export function MapView({ onVehicleCount }: Props) {
         return;
       }
       const drawStop = drawing ? stopAt(e.point.x, e.point.y) : null;
-      const target: Target | null = drawing ? (drawStop ? { kind: 'stop', ...drawStop } : null) : targetAt(e.point.x, e.point.y);
+      const target: Target | null = drawing
+        ? drawStop
+          ? { kind: 'stop', ...drawStop }
+          : null
+        : targetAt(e.point.x, e.point.y);
       setHoveredStop(target?.kind === 'stop' ? target.id : -1);
       if (target?.kind === 'vehicle') {
         for (const mv of vehicleData.values()) {
@@ -344,19 +451,28 @@ export function MapView({ onVehicleCount }: Props) {
           text = route ? `${route.shortName ?? route.longName ?? 'Vehicle'} vehicle` : 'Vehicle';
           // A vehicle standing at the end of this trip: say so, and when it leaves again.
           const until = waitingUntil(mv, i, clock.secs);
-          if (until !== null) text += ` · finished this trip, waiting to leave at ${formatClock(until).time}`;
+          if (until !== null)
+            text += ` · finished this trip, waiting to leave at ${formatClock(until).time}`;
         }
         // With vehicles coloured by how full, say how full this one is.
         const sim = useStore.getState();
-        if (sim.simMap.layer === 'vehicles' && tripLoads.runId !== null && tripLoads.runId === sim.simRunId) {
+        if (
+          sim.simMap.layer === 'vehicles' &&
+          tripLoads.runId !== null &&
+          tripLoads.runId === sim.simRunId
+        ) {
           const peak = peakText(target.tripId);
           text += ` · ${stepLabel(stepAt(target.tripId, clock.secs))} now${peak ? ` · ${peak}` : ' · carries nobody all day'}`;
         }
       } else if (target?.kind === 'stop') {
-        text = drawing ? `${target.name} · ${describePick(target)}` : `${target.name} · click for ${target.isStation ? 'station details' : 'stop details'}`;
+        text = drawing
+          ? `${target.name} · ${describePick(target)}`
+          : `${target.name} · click for ${target.isStation ? 'station details' : 'stop details'}`;
       } else if (target?.kind === 'routes') {
         const ids = target.ids;
-        const names = ids.slice(0, 4).map((id) => routes.get(id)?.shortName ?? routes.get(id)?.longName ?? '?');
+        const names = ids
+          .slice(0, 4)
+          .map((id) => routes.get(id)?.shortName ?? routes.get(id)?.longName ?? '?');
         text = names.join(', ') + (ids.length > 4 ? ` +${ids.length - 4} more` : '');
       }
       map.getCanvas().style.cursor = text ? 'pointer' : '';
@@ -384,8 +500,18 @@ export function MapView({ onVehicleCount }: Props) {
       const map = mapRef.current;
       if (!map?.getLayer('sel-changed')) return;
       // A line deleted outright has nothing left to outline.
-      const ids = showChanged ? (scenarioInfo?.impact ?? []).filter((i) => i.tripsAfter > 0).map((i) => i.routeId).slice(0, 400) : [];
-      map.setFilter('sel-changed', ids.length ? ['in', ['get', 'route_id'], ['literal', ids]] : ['==', ['get', 'route_id'], -1]);
+      const ids = showChanged
+        ? (scenarioInfo?.impact ?? [])
+            .filter((i) => i.tripsAfter > 0)
+            .map((i) => i.routeId)
+            .slice(0, 400)
+        : [];
+      map.setFilter(
+        'sel-changed',
+        ids.length
+          ? ['in', ['get', 'route_id'], ['literal', ids]]
+          : ['==', ['get', 'route_id'], -1],
+      );
     });
   }, [scenarioInfo, showChanged, baselineId]);
 
@@ -395,7 +521,12 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map || baselineId === null) return;
     const add = () => {
       for (const layer of map.getStyle().layers) {
-        if (layer.id.startsWith('line-') || layer.id.startsWith('sel-') || layer.id.startsWith('stop-')) map.removeLayer(layer.id);
+        if (
+          layer.id.startsWith('line-') ||
+          layer.id.startsWith('sel-') ||
+          layer.id.startsWith('stop-')
+        )
+          map.removeLayer(layer.id);
       }
       if (map.getSource('network')) map.removeSource('network');
       map.addSource('network', {
@@ -412,7 +543,12 @@ export function MapView({ onVehicleCount }: Props) {
         'source-layer': 'lines',
         filter: ['==', ['get', 'route_id'], -1],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#ffd60a', 'line-opacity': 0.7, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 15, 13], 'line-blur': 1.5 },
+        paint: {
+          'line-color': '#ffd60a',
+          'line-opacity': 0.7,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 15, 13],
+          'line-blur': 1.5,
+        },
       });
       const enabled = useStore.getState().enabledModes;
       for (const mode of MODE_ORDER) {
@@ -423,10 +559,22 @@ export function MapView({ onVehicleCount }: Props) {
           source: 'network',
           'source-layer': 'lines',
           filter: ['==', ['get', 'mode'], mode],
-          layout: { 'line-cap': 'round', 'line-join': 'round', visibility: enabled[mode] ? 'visible' : 'none' },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+            visibility: enabled[mode] ? 'visible' : 'none',
+          },
           paint: {
             'line-color': ['get', 'color'],
-            'line-opacity': ['interpolate', ['linear'], ['zoom'], 10, s.opacity[0], 14, s.opacity[1]],
+            'line-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              10,
+              s.opacity[0],
+              14,
+              s.opacity[1],
+            ],
             'line-width': ['interpolate', ['linear'], ['zoom'], 8, s.width[0], 15, s.width[1]],
             ...(s.dash ? { 'line-dasharray': s.dash } : {}),
           },
@@ -439,7 +587,11 @@ export function MapView({ onVehicleCount }: Props) {
         'source-layer': 'lines',
         filter: ['==', ['get', 'route_id'], -1],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': P.casing, 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 6, 15, 11] },
+        paint: {
+          'line-color': P.casing,
+          'line-opacity': 0.9,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 6, 15, 11],
+        },
       });
       map.addLayer({
         id: 'sel-line',
@@ -448,7 +600,10 @@ export function MapView({ onVehicleCount }: Props) {
         'source-layer': 'lines',
         filter: ['==', ['get', 'route_id'], -1],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 15, 6] },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 15, 6],
+        },
       });
       map.addLayer({
         id: 'stop-road',
@@ -498,7 +653,12 @@ export function MapView({ onVehicleCount }: Props) {
         source: 'network',
         'source-layer': 'stops',
         minzoom: 15.5,
-        filter: ['all', ['!=', ['get', 'station'], true], ['==', ['get', 'rail'], true], ['has', 'platform']],
+        filter: [
+          'all',
+          ['!=', ['get', 'station'], true],
+          ['==', ['get', 'rail'], true],
+          ['has', 'platform'],
+        ],
         layout: {
           'text-field': ['get', 'platform'],
           'text-font': ['Noto Sans Regular'],
@@ -539,8 +699,34 @@ export function MapView({ onVehicleCount }: Props) {
         paint: { 'text-color': P.label, 'text-halo-color': P.ink, 'text-halo-width': 1.4 },
       });
       const empty = { type: 'FeatureCollection' as const, features: [] };
-      for (const id of ['scenario-lines', 'scenario-stops', 'scenario-deleted', 'scenario-closures', 'closing', 'builder']) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
-      for (const id of ['builder-line', 'builder-points', 'closure-fill', 'closure-edge', 'closing-fill', 'closing-edge', 'closing-parts-edge', 'closing-parts', 'closing-dropped', 'closing-focus-edge', 'closing-focus', 'closing-paths', 'closing-cut-edge', 'closing-cut', 'closing-turns', 'closing-turn-names', 'closing-points']) {
+      for (const id of [
+        'scenario-lines',
+        'scenario-stops',
+        'scenario-deleted',
+        'scenario-closures',
+        'closing',
+        'builder',
+      ])
+        if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty });
+      for (const id of [
+        'builder-line',
+        'builder-points',
+        'closure-fill',
+        'closure-edge',
+        'closing-fill',
+        'closing-edge',
+        'closing-parts-edge',
+        'closing-parts',
+        'closing-dropped',
+        'closing-focus-edge',
+        'closing-focus',
+        'closing-paths',
+        'closing-cut-edge',
+        'closing-cut',
+        'closing-turns',
+        'closing-turn-names',
+        'closing-points',
+      ]) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
       map.addLayer(
@@ -549,7 +735,10 @@ export function MapView({ onVehicleCount }: Props) {
           type: 'line',
           source: 'scenario-lines',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 15, 6] },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 15, 6],
+          },
         },
         'stop-road',
       );
@@ -595,7 +784,10 @@ export function MapView({ onVehicleCount }: Props) {
       // what was deleted can be seen, clicked and put back. They are few, so stations and stops show at
       // every zoom; single platforms only once zoomed in, like live ones.
       const GONE = '#8e8e93';
-      for (const [id, platform] of [['stop-deleted', false], ['stop-deleted-platform', true]] as const) {
+      for (const [id, platform] of [
+        ['stop-deleted', false],
+        ['stop-deleted-platform', true],
+      ] as const) {
         if (map.getLayer(id)) continue;
         map.addLayer({
           id,
@@ -604,7 +796,9 @@ export function MapView({ onVehicleCount }: Props) {
           ...(platform ? { minzoom: 14.5 } : {}),
           filter: platform ? ['==', ['get', 'platform'], true] : ['!=', ['get', 'platform'], true],
           paint: {
-            'circle-radius': platform ? ['interpolate', ['linear'], ['zoom'], 14.5, 6, 18, 11] : ['interpolate', ['linear'], ['zoom'], 9, 5, 12, 7, 16, 11],
+            'circle-radius': platform
+              ? ['interpolate', ['linear'], ['zoom'], 14.5, 6, 18, 11]
+              : ['interpolate', ['linear'], ['zoom'], 9, 5, 12, 7, 16, 11],
             'circle-color': GONE,
             'circle-stroke-color': P.ink,
             'circle-stroke-width': 1.5,
@@ -616,7 +810,14 @@ export function MapView({ onVehicleCount }: Props) {
           source: 'scenario-deleted',
           ...(platform ? { minzoom: 14.5 } : {}),
           filter: platform ? ['==', ['get', 'platform'], true] : ['!=', ['get', 'platform'], true],
-          layout: { 'text-field': '×', 'text-font': ['Noto Sans Regular'], 'text-size': platform ? 15 : 17, 'text-allow-overlap': true, 'text-ignore-placement': true, 'text-offset': [0, -0.08] },
+          layout: {
+            'text-field': '×',
+            'text-font': ['Noto Sans Regular'],
+            'text-size': platform ? 15 : 17,
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+            'text-offset': [0, -0.08],
+          },
           paint: { 'text-color': P.ink, 'text-halo-color': P.ink, 'text-halo-width': 0.6 },
         });
       }
@@ -639,7 +840,10 @@ export function MapView({ onVehicleCount }: Props) {
         });
       }
       // Closed roads and lines: those the scenario has made, and the one being set up.
-      for (const [id, source, opacity] of [['closure', 'scenario-closures', 0.45], ['closing', 'closing', 0.45]] as const) {
+      for (const [id, source, opacity] of [
+        ['closure', 'scenario-closures', 0.45],
+        ['closing', 'closing', 0.45],
+      ] as const) {
         map.addLayer({
           id: `${id}-fill`,
           type: 'fill',
@@ -664,7 +868,10 @@ export function MapView({ onVehicleCount }: Props) {
         layout: { 'line-cap': 'butt', 'line-join': 'round' },
         paint: { 'line-color': '#8e8e93', 'line-width': 5, 'line-dasharray': [1, 1] },
       });
-      for (const [id, width, color] of [['closing-parts-edge', 9, '#10151c'], ['closing-parts', 5.5, ['match', ['get', 'sideIndex'], 1, SIDE_COLORS[1], SIDE_COLORS[0]]]] as const) {
+      for (const [id, width, color] of [
+        ['closing-parts-edge', 9, '#10151c'],
+        ['closing-parts', 5.5, ['match', ['get', 'sideIndex'], 1, SIDE_COLORS[1], SIDE_COLORS[0]]],
+      ] as const) {
         map.addLayer({
           id,
           type: 'line',
@@ -675,7 +882,19 @@ export function MapView({ onVehicleCount }: Props) {
         });
       }
       // The line the pointer is on, in the list or on the map, above the others.
-      for (const [id, width, color] of [['closing-focus-edge', 13, '#ffffff'], ['closing-focus', 7, ['case', ['get', 'kept'], ['match', ['get', 'sideIndex'], 1, SIDE_COLORS[1], SIDE_COLORS[0]], '#8e8e93']]] as const) {
+      for (const [id, width, color] of [
+        ['closing-focus-edge', 13, '#ffffff'],
+        [
+          'closing-focus',
+          7,
+          [
+            'case',
+            ['get', 'kept'],
+            ['match', ['get', 'sideIndex'], 1, SIDE_COLORS[1], SIDE_COLORS[0]],
+            '#8e8e93',
+          ],
+        ],
+      ] as const) {
         map.addLayer({
           id,
           type: 'line',
@@ -689,12 +908,25 @@ export function MapView({ onVehicleCount }: Props) {
         id: 'closing-paths',
         type: 'line',
         source: 'closing',
-        filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'cut']], ['!', ['has', 'part']]],
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'LineString'],
+          ['!', ['has', 'cut']],
+          ['!', ['has', 'part']],
+        ],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#ffd60a', 'line-width': 3, 'line-opacity': 0.8, 'line-dasharray': [1.5, 1.2] },
+        paint: {
+          'line-color': '#ffd60a',
+          'line-width': 3,
+          'line-opacity': 0.8,
+          'line-dasharray': [1.5, 1.2],
+        },
       });
       // The line being drawn across what is closed: red on white, so it shows on any background.
-      for (const [id, color, width] of [['closing-cut-edge', '#ffffff', 8], ['closing-cut', '#ff3b30', 4.5]] as const) {
+      for (const [id, color, width] of [
+        ['closing-cut-edge', '#ffffff', 8],
+        ['closing-cut', '#ff3b30', 4.5],
+      ] as const) {
         map.addLayer({
           id,
           type: 'line',
@@ -737,7 +969,12 @@ export function MapView({ onVehicleCount }: Props) {
         type: 'circle',
         source: 'closing',
         filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'turn']]],
-        paint: { 'circle-radius': 6, 'circle-color': '#ff3b30', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#ff3b30',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
       });
       map.addLayer({
         id: 'builder-line',
@@ -771,8 +1008,15 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map) return;
     let cancelled = false;
     const show = (source: string, data: GeoJSON.FeatureCollection) =>
-      whenLoaded(() => (map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data));
-    for (const [source, what] of [['scenario-lines', 'lines'], ['scenario-stops', 'stops'], ['scenario-deleted', 'deleted-stops'], ['scenario-closures', 'closures']]) {
+      whenLoaded(() =>
+        (map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data),
+      );
+    for (const [source, what] of [
+      ['scenario-lines', 'lines'],
+      ['scenario-stops', 'stops'],
+      ['scenario-deleted', 'deleted-stops'],
+      ['scenario-closures', 'closures'],
+    ]) {
       if (scenarioId === null) show(source, { type: 'FeatureCollection', features: [] });
       else
         fetch(`/api/scenarios/${scenarioId}/${what}`)
@@ -805,13 +1049,29 @@ export function MapView({ onVehicleCount }: Props) {
       ...(reshape?.original.filter((s) => !current.has(s.id)).map((s) => point(s, 'gone')) ?? []),
       ...stops.map((s) => point(s, !reshape || !original.has(s.id) ? 'new' : 'kept')),
     ];
-    const line = (coordinates: number[][]) => features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: { color } });
+    const line = (coordinates: number[][]) =>
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates },
+        properties: { color },
+      });
     // The worked-out path when there is one. A new line falls back to straight between its stops;
     // a reshaped line shows nothing until its path is known, since the published line is still drawn.
     if (builderPath) line(builderPath.coords);
-    else if (!reshape && stops.length >= 2) line([...stops, ...(builder?.loop && stops.length >= 3 ? [stops[0]] : [])].map((s) => [s.lon, s.lat]));
+    else if (!reshape && stops.length >= 2)
+      line(
+        [...stops, ...(builder?.loop && stops.length >= 3 ? [stops[0]] : [])].map((s) => [
+          s.lon,
+          s.lat,
+        ]),
+      );
     if (builderPath?.otherCoords) line(builderPath.otherCoords);
-    whenLoaded(() => (map.getSource('builder') as maplibregl.GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features }));
+    whenLoaded(() =>
+      (map.getSource('builder') as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features,
+      }),
+    );
     map.getCanvas().style.cursor = builder ? 'crosshair' : '';
   }, [builder, builderPath]);
 
@@ -824,29 +1084,71 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map) return;
     const features: GeoJSON.Feature[] = [];
     if (closing) {
-      if (closingPreview) features.push({ type: 'Feature', geometry: closingPreview.zone, properties: {} });
-      for (const coordinates of closingPreview?.paths ?? []) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: {} });
+      if (closingPreview)
+        features.push({ type: 'Feature', geometry: closingPreview.zone, properties: {} });
+      for (const coordinates of closingPreview?.paths ?? [])
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates },
+          properties: {},
+        });
       const sideIndex = (side: string) => Math.max(0, closingPreview?.sides.indexOf(side) ?? 0);
       for (const part of closingPreview?.parts ?? []) {
         features.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: part.coords },
-          properties: { part: true, kept: part.kept, side: part.side, sideIndex: sideIndex(part.side), ids: part.routeIds.join(','), focus: closingFocus !== null && part.routeIds.includes(closingFocus) },
+          properties: {
+            part: true,
+            kept: part.kept,
+            side: part.side,
+            sideIndex: sideIndex(part.side),
+            ids: part.routeIds.join(','),
+            focus: closingFocus !== null && part.routeIds.includes(closingFocus),
+          },
         });
       }
       for (const turn of closingPreview?.turns ?? []) {
-        features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [turn.lon, turn.lat] }, properties: { turn: true, kept: turn.kept, name: turn.name, sideIndex: sideIndex(turn.side) } });
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [turn.lon, turn.lat] },
+          properties: {
+            turn: true,
+            kept: turn.kept,
+            name: turn.name,
+            sideIndex: sideIndex(turn.side),
+          },
+        });
       }
-      if (closing.line.length >= 2) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: closing.line }, properties: { cut: true } });
-      for (const coordinates of closing.line) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates }, properties: {} });
+      if (closing.line.length >= 2)
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: closing.line },
+          properties: { cut: true },
+        });
+      for (const coordinates of closing.line)
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates },
+          properties: {},
+        });
     }
-    whenLoaded(() => (map.getSource('closing') as maplibregl.GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features }));
+    whenLoaded(() =>
+      (map.getSource('closing') as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features,
+      }),
+    );
     if (!closing && !useStore.getState().builder) map.getCanvas().style.cursor = '';
   }, [closing, closingPreview, closingFocus]);
 
   // While a line is being closed or its route changed, the rest of the network fades into the
   // background: grey and faint, with its vehicles barely there. What is being edited keeps its colours.
-  const editing = useStore((s) => s.closing !== null || (s.builder !== null && !!s.builder.reshape) || (s.simRunId !== null && s.simMap.layer !== 'none'));
+  const editing = useStore(
+    (s) =>
+      s.closing !== null ||
+      (s.builder !== null && !!s.builder.reshape) ||
+      (s.simRunId !== null && s.simMap.layer !== 'none'),
+  );
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -859,11 +1161,23 @@ export function MapView({ onVehicleCount }: Props) {
         map.setPaintProperty(
           `line-${mode}`,
           'line-opacity',
-          editing ? ['interpolate', ['linear'], ['zoom'], 10, Math.min(s.opacity[0], 0.1), 14, Math.min(s.opacity[1], 0.3)] : ['interpolate', ['linear'], ['zoom'], 10, s.opacity[0], 14, s.opacity[1]],
+          editing
+            ? [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10,
+                Math.min(s.opacity[0], 0.1),
+                14,
+                Math.min(s.opacity[1], 0.3),
+              ]
+            : ['interpolate', ['linear'], ['zoom'], 10, s.opacity[0], 14, s.opacity[1]],
         );
       }
-      if (map.getLayer('line-scenario')) map.setPaintProperty('line-scenario', 'line-opacity', editing ? 0.25 : 1);
-      if (map.getLayer('sel-changed')) map.setPaintProperty('sel-changed', 'line-opacity', editing ? 0 : 0.7);
+      if (map.getLayer('line-scenario'))
+        map.setPaintProperty('line-scenario', 'line-opacity', editing ? 0.25 : 1);
+      if (map.getLayer('sel-changed'))
+        map.setPaintProperty('sel-changed', 'line-opacity', editing ? 0 : 0.7);
     });
   }, [editing, baselineId, loadedModes]);
 
@@ -878,57 +1192,138 @@ export function MapView({ onVehicleCount }: Props) {
       const { south, west, north, east } = simBox;
       features.push({
         type: 'Feature',
-        geometry: { type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [west, south],
+              [east, south],
+              [east, north],
+              [west, north],
+              [west, south],
+            ],
+          ],
+        },
         properties: { kind: 'box' },
       });
     }
     // Their journeys in the run compared with go underneath, in grey; this run's are in pink.
-    for (const [journeys, was] of [[simPerson?.before ?? [], '-before'], [simPerson?.journeys ?? [], '']] as const) {
+    for (const [journeys, was] of [
+      [simPerson?.before ?? [], '-before'],
+      [simPerson?.journeys ?? [], ''],
+    ] as const) {
       for (const journey of journeys) {
         for (const leg of journey.legs) {
-          if (leg.fromLon === null || leg.fromLat === null || leg.toLon === null || leg.toLat === null) continue;
+          if (
+            leg.fromLon === null ||
+            leg.fromLat === null ||
+            leg.toLon === null ||
+            leg.toLat === null
+          )
+            continue;
           features.push({
             type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [[leg.fromLon, leg.fromLat], [leg.toLon, leg.toLat]] },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [leg.fromLon, leg.fromLat],
+                [leg.toLon, leg.toLat],
+              ],
+            },
             properties: { kind: `${leg.kind === 'ride' ? 'ride' : 'walk'}${was}` },
           });
-          for (const [lon, lat] of [[leg.fromLon, leg.fromLat], [leg.toLon, leg.toLat]]) {
-            features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { kind: `stop${was}` } });
+          for (const [lon, lat] of [
+            [leg.fromLon, leg.fromLat],
+            [leg.toLon, leg.toLat],
+          ]) {
+            features.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [lon, lat] },
+              properties: { kind: `stop${was}` },
+            });
           }
         }
       }
     }
     whenLoaded(() => {
       if (!map.getSource('sim')) {
-        map.addSource('sim', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-        map.addLayer({ id: 'sim-box-fill', type: 'fill', source: 'sim', filter: ['==', ['get', 'kind'], 'box'], paint: { 'fill-color': '#4cc2ff', 'fill-opacity': 0.08 } });
-        map.addLayer({ id: 'sim-box-edge', type: 'line', source: 'sim', filter: ['==', ['get', 'kind'], 'box'], paint: { 'line-color': '#4cc2ff', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
-        map.addLayer({
-          id: 'sim-rides-before', type: 'line', source: 'sim', filter: ['==', ['get', 'kind'], 'ride-before'],
-          layout: { 'line-cap': 'round' }, paint: { 'line-color': '#9aa3ae', 'line-width': 9, 'line-opacity': 0.8 },
+        map.addSource('sim', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
         });
         map.addLayer({
-          id: 'sim-walks-before', type: 'line', source: 'sim', filter: ['==', ['get', 'kind'], 'walk-before'],
+          id: 'sim-box-fill',
+          type: 'fill',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'box'],
+          paint: { 'fill-color': '#4cc2ff', 'fill-opacity': 0.08 },
+        });
+        map.addLayer({
+          id: 'sim-box-edge',
+          type: 'line',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'box'],
+          paint: { 'line-color': '#4cc2ff', 'line-width': 2, 'line-dasharray': [2, 1.5] },
+        });
+        map.addLayer({
+          id: 'sim-rides-before',
+          type: 'line',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'ride-before'],
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#9aa3ae', 'line-width': 9, 'line-opacity': 0.8 },
+        });
+        map.addLayer({
+          id: 'sim-walks-before',
+          type: 'line',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'walk-before'],
           paint: { 'line-color': '#9aa3ae', 'line-width': 5, 'line-dasharray': [0.6, 1.2] },
         });
         map.addLayer({
-          id: 'sim-stops-before', type: 'circle', source: 'sim', filter: ['==', ['get', 'kind'], 'stop-before'],
-          paint: { 'circle-radius': 6.5, 'circle-color': '#ffffff', 'circle-stroke-color': '#9aa3ae', 'circle-stroke-width': 2.5 },
+          id: 'sim-stops-before',
+          type: 'circle',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'stop-before'],
+          paint: {
+            'circle-radius': 6.5,
+            'circle-color': '#ffffff',
+            'circle-stroke-color': '#9aa3ae',
+            'circle-stroke-width': 2.5,
+          },
         });
         map.addLayer({
-          id: 'sim-rides', type: 'line', source: 'sim', filter: ['==', ['get', 'kind'], 'ride'],
-          layout: { 'line-cap': 'round' }, paint: { 'line-color': '#ff4fa3', 'line-width': 4, 'line-opacity': 0.9 },
+          id: 'sim-rides',
+          type: 'line',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'ride'],
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#ff4fa3', 'line-width': 4, 'line-opacity': 0.9 },
         });
         map.addLayer({
-          id: 'sim-walks', type: 'line', source: 'sim', filter: ['==', ['get', 'kind'], 'walk'],
+          id: 'sim-walks',
+          type: 'line',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'walk'],
           paint: { 'line-color': '#ff4fa3', 'line-width': 2.5, 'line-dasharray': [0.6, 1.4] },
         });
         map.addLayer({
-          id: 'sim-stops', type: 'circle', source: 'sim', filter: ['==', ['get', 'kind'], 'stop'],
-          paint: { 'circle-radius': 4.5, 'circle-color': '#ffffff', 'circle-stroke-color': '#ff4fa3', 'circle-stroke-width': 2 },
+          id: 'sim-stops',
+          type: 'circle',
+          source: 'sim',
+          filter: ['==', ['get', 'kind'], 'stop'],
+          paint: {
+            'circle-radius': 4.5,
+            'circle-color': '#ffffff',
+            'circle-stroke-color': '#ff4fa3',
+            'circle-stroke-width': 2,
+          },
         });
       }
-      (map.getSource('sim') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
+      (map.getSource('sim') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features,
+      });
     });
   }, [simBox, simPerson, baselineId]);
 
@@ -940,8 +1335,10 @@ export function MapView({ onVehicleCount }: Props) {
     let from: maplibregl.LngLat | null = null;
     const boxTo = (to: maplibregl.LngLat) => ({
       name: null,
-      south: Math.min(from!.lat, to.lat), north: Math.max(from!.lat, to.lat),
-      west: Math.min(from!.lng, to.lng), east: Math.max(from!.lng, to.lng),
+      south: Math.min(from!.lat, to.lat),
+      north: Math.max(from!.lat, to.lat),
+      west: Math.min(from!.lng, to.lng),
+      east: Math.max(from!.lng, to.lng),
     });
     const down = (e: maplibregl.MapMouseEvent) => {
       from = e.lngLat;
@@ -958,7 +1355,8 @@ export function MapView({ onVehicleCount }: Props) {
       if (box.north - box.south < 1e-4 || box.east - box.west < 1e-4) return;
       useStore.getState().set({ simBox: box, simDrawing: false });
     };
-    const escape = (e: KeyboardEvent) => e.key === 'Escape' && useStore.getState().set({ simDrawing: false });
+    const escape = (e: KeyboardEvent) =>
+      e.key === 'Escape' && useStore.getState().set({ simDrawing: false });
     map.dragPan.disable();
     map.getCanvas().style.cursor = 'crosshair';
     map.on('mousedown', down);
@@ -988,8 +1386,15 @@ export function MapView({ onVehicleCount }: Props) {
   const simLayer = simRunId === null ? 'none' : simMap.layer;
   const simWho = useStore((s) => s.simResults.who);
   // The people followed, as the API takes them; null while a stretch or stop is still to be picked.
-  const simWhoKey = simLayer === 'through' && simWho ? whoParam(simWho, simAlone ? 'a' : simMap.side) : null;
-  const [simData, setSimData] = useState<{ flows?: Flows; places?: Places; trace?: Trace; loads?: number; error?: string } | null>(null);
+  const simWhoKey =
+    simLayer === 'through' && simWho ? whoParam(simWho, simAlone ? 'a' : simMap.side) : null;
+  const [simData, setSimData] = useState<{
+    flows?: Flows;
+    places?: Places;
+    trace?: Trace;
+    loads?: number;
+    error?: string;
+  } | null>(null);
   useEffect(() => {
     setSimData(null);
     dirtyRef.current = true;
@@ -999,7 +1404,11 @@ export function MapView({ onVehicleCount }: Props) {
       let live = true;
       void loadTripLoads(simRunId).then(() => {
         if (!live) return;
-        setSimData(tripLoads.runId === simRunId ? { loads: simRunId } : { error: tripLoads.error ?? 'Could not load how full the vehicles are' });
+        setSimData(
+          tripLoads.runId === simRunId
+            ? { loads: simRunId }
+            : { error: tripLoads.error ?? 'Could not load how full the vehicles are' },
+        );
         dirtyRef.current = true;
       });
       return () => {
@@ -1012,13 +1421,19 @@ export function MapView({ onVehicleCount }: Props) {
       if (!controller.signal.aborted) setSimData({ error: err.message });
     };
     if (simLayer === 'through' && simWhoKey !== null) {
-      fetchResults<Trace>(resultsUrl(simRunId, 'trace', state, { who: simWhoKey }), controller.signal).then((trace) => {
+      fetchResults<Trace>(
+        resultsUrl(simRunId, 'trace', state, { who: simWhoKey }),
+        controller.signal,
+      ).then((trace) => {
         setSimData({ trace });
         // The map goes to where these people travel. The far ends are left out of the fit, so that
         // one person from a long way off does not shrink everyone else to a dot.
         const within = (values: number[]): [number, number] => {
           const sorted = [...values].sort((x, y) => x - y);
-          return [sorted[Math.floor(sorted.length * 0.03)], sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.97))]];
+          return [
+            sorted[Math.floor(sorted.length * 0.03)],
+            sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.97))],
+          ];
         };
         if (trace.stops.length) {
           const [west, east] = within(trace.stops.map((s) => s[1]));
@@ -1027,9 +1442,15 @@ export function MapView({ onVehicleCount }: Props) {
         }
       }, failed);
     } else if (simLayer === 'flow' || simLayer === 'through') {
-      fetchResults<Flows>(resultsUrl(simRunId, 'flows', state), controller.signal).then((flows) => setSimData({ flows }), failed);
+      fetchResults<Flows>(resultsUrl(simRunId, 'flows', state), controller.signal).then(
+        (flows) => setSimData({ flows }),
+        failed,
+      );
     } else {
-      fetchResults<Places>(resultsUrl(simRunId, 'places', state, { by: simMap.by, end: simMap.end }), controller.signal).then((places) => setSimData({ places }), failed);
+      fetchResults<Places>(
+        resultsUrl(simRunId, 'places', state, { by: simMap.by, end: simMap.end }),
+        controller.signal,
+      ).then((places) => setSimData({ places }), failed);
     }
     return () => controller.abort();
   }, [simRunId, simLayer, simVs, simBand, simMap.by, simMap.end, simWhoKey]);
@@ -1041,11 +1462,14 @@ export function MapView({ onVehicleCount }: Props) {
     mapScale.flowMax = 0;
     mapScale.placeMax = 0;
     mapScale.people = simData?.trace ? simData.trace.people : null;
-    mapScale.note = simData?.error ?? (simLayer !== 'none' && !simData ? 'Working it out ...' : null);
+    mapScale.note =
+      simData?.error ?? (simLayer !== 'none' && !simData ? 'Working it out ...' : null);
     // The value that 98 in 100 are under: one huge stretch does not make the rest hairlines.
     const nearTop = (values: number[]) => {
       const sorted = values.filter((n) => n > 0).sort((x, y) => x - y);
-      return sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.98))] : 1;
+      return sorted.length
+        ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.98))]
+        : 1;
     };
 
     const traced = simData?.trace;
@@ -1054,9 +1478,18 @@ export function MapView({ onVehicleCount }: Props) {
       const { stops, links } = flows;
       const at = new Map(stops.map((s) => [s[0], s]));
       // The people followed are always shown as a change; the stretches to pick from, as passengers.
-      const colourBy = traced ? (simAlone ? 'passengers' : 'change') : simLayer === 'through' ? 'passengers' : simAlone && simMap.flow === 'change' ? 'passengers' : simMap.flow;
+      const colourBy = traced
+        ? simAlone
+          ? 'passengers'
+          : 'change'
+        : simLayer === 'through'
+          ? 'passengers'
+          : simAlone && simMap.flow === 'change'
+            ? 'passengers'
+            : simMap.flow;
       const noun = traced ? 'of these people' : 'passengers';
-      const sizeOf = (l: Flows['links'][number]) => (colourBy === 'change' ? Math.max(l[2], l[3]) : l[2]);
+      const sizeOf = (l: Flows['links'][number]) =>
+        colourBy === 'change' ? Math.max(l[2], l[3]) : l[2];
       const top = nearTop(links.map(sizeOf));
       mapScale.flowMax = top;
       for (const link of links) {
@@ -1074,41 +1507,86 @@ export function MapView({ onVehicleCount }: Props) {
           const quiet = Math.abs(d) < Math.max(traced ? 1 : 3, 0.05 * size);
           color = quiet ? MIDDLE : divergingColor(d / size, 0);
           opacity = quiet ? (traced ? 0.55 : 0.3) : 0.95;
-          tip += d === 0 ? ', as before' : `, ${fmt(Math.abs(d))} ${d > 0 ? 'more' : 'fewer'} than before (${fmt(b)})`;
+          tip +=
+            d === 0
+              ? ', as before'
+              : `, ${fmt(Math.abs(d))} ${d > 0 ? 'more' : 'fewer'} than before (${fmt(b)})`;
         } else if (colourBy === 'full') {
           color = places ? fullColor(a / places) : MIDDLE;
-          tip += places ? `, ${Math.round((100 * a) / places)}% of the ${fmt(places)} places offered` : '';
+          tip += places
+            ? `, ${Math.round((100 * a) / places)}% of the ${fmt(places)} places offered`
+            : '';
         } else {
           color = BLUES[Math.min(3, Math.floor((4 * size) / top))];
         }
         features.push({
           type: 'Feature',
-          geometry: { type: 'LineString', coordinates: [[from[1], from[2]], [to[1], to[2]]] },
-          properties: { kind: 'flow', color, width, offset: width / 2 + 0.75, opacity, sort: colourBy === 'change' ? Math.abs(d) : size, tip, from: fromId, to: toId, name: `${from[3]} to ${to[3]}` },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [from[1], from[2]],
+              [to[1], to[2]],
+            ],
+          },
+          properties: {
+            kind: 'flow',
+            color,
+            width,
+            offset: width / 2 + 0.75,
+            opacity,
+            sort: colourBy === 'change' ? Math.abs(d) : size,
+            tip,
+            from: fromId,
+            to: toId,
+            name: `${from[3]} to ${to[3]}`,
+          },
         });
       }
-      if (!features.length && !mapScale.note) mapScale.note = traced ? 'None of these people ride anything in this part of the day.' : 'Nobody rides anything in this part of the day.';
+      if (!features.length && !mapScale.note)
+        mapScale.note = traced
+          ? 'None of these people ride anything in this part of the day.'
+          : 'Nobody rides anything in this part of the day.';
       if (traced) {
         // Where the people followed start from and are going, and what was clicked to pick them.
-        const ends = [...traced.origins.map((o) => [...o, 'from'] as const), ...traced.destinations.map((o) => [...o, 'to'] as const)];
+        const ends = [
+          ...traced.origins.map((o) => [...o, 'from'] as const),
+          ...traced.destinations.map((o) => [...o, 'to'] as const),
+        ];
         const endTop = nearTop(ends.map((e) => e[3]));
         for (const [lon, lat, name, n, end] of ends) {
           features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [lon, lat] },
             properties: {
-              kind: 'end', end, r: 2 + 4 * Math.sqrt(Math.min(1, n / endTop)), sort: n,
+              kind: 'end',
+              end,
+              r: 2 + 4 * Math.sqrt(Math.min(1, n / endTop)),
+              sort: n,
               tip: `${name}: ${fmt(n)} of these people ${end === 'from' ? (n === 1 ? 'starts' : 'start') : n === 1 ? 'is going' : 'are going'} here`,
             },
           });
         }
         if (simWho?.kind === 'link' && at.has(simWho.from) && at.has(simWho.to)) {
           const [from, to] = [at.get(simWho.from)!, at.get(simWho.to)!];
-          features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[from[1], from[2]], [to[1], to[2]]] }, properties: { kind: 'picked' } });
+          features.push({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [from[1], from[2]],
+                [to[1], to[2]],
+              ],
+            },
+            properties: { kind: 'picked' },
+          });
         }
         if (simWho?.kind === 'stop' && at.has(simWho.id)) {
           const stop = at.get(simWho.id)!;
-          features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [stop[1], stop[2]] }, properties: { kind: 'picked' } });
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [stop[1], stop[2]] },
+            properties: { kind: 'picked' },
+          });
         }
       }
     }
@@ -1127,61 +1605,126 @@ export function MapView({ onVehicleCount }: Props) {
         // By stop, a stop where nobody is affected is not drawn: the map is about the change.
         if (quiet && cell === null) continue;
         const share = Math.sqrt(Math.min(1, n / top));
-        const where = name ?? `This ${cell && cell.metres >= 1000 ? `${cell.metres / 1000} km` : `${cell?.metres} m`} square`;
+        const where =
+          name ??
+          `This ${cell && cell.metres >= 1000 ? `${cell.metres / 1000} km` : `${cell?.metres} m`} square`;
         const tip =
           `${where}: ${fmt(n)} ${n === 1 ? 'person' : 'people'} ${end === 'origin' ? (n === 1 ? 'starts' : 'start') : n === 1 ? 'is going' : 'are going'} here` +
-          (people ? ` · on average ${Math.abs(meanLater) < 0.05 ? 'no change' : `${mins(Math.abs(meanLater))} ${meanLater > 0 ? 'later' : 'sooner'}`}` : '') +
-          (later || sooner ? ` · ${fmt(later)} are 5 min or more later, ${fmt(sooner)} sooner` : '') +
+          (people
+            ? ` · on average ${Math.abs(meanLater) < 0.05 ? 'no change' : `${mins(Math.abs(meanLater))} ${meanLater > 0 ? 'later' : 'sooner'}`}`
+            : '') +
+          (later || sooner
+            ? ` · ${fmt(later)} are 5 min or more later, ${fmt(sooner)} sooner`
+            : '') +
           (lost ? ` · ${fmt(lost)} can no longer travel` : '') +
           (gained ? ` · ${fmt(gained)} can now travel` : '');
-        const color = !people ? MIDDLE : few ? (later > sooner ? REDS : BLUES)[0] : minutesColor(meanLater);
+        const color = !people
+          ? MIDDLE
+          : few
+            ? (later > sooner ? REDS : BLUES)[0]
+            : minutesColor(meanLater);
         const properties = { color, lost, sort: n, tip };
         if (cell) {
           const [w, s] = [lon - cell.dLon / 2, lat - cell.dLat / 2];
           const [e, north] = [lon + cell.dLon / 2, lat + cell.dLat / 2];
           features.push({
             type: 'Feature',
-            geometry: { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, north], [w, north], [w, s]]] },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [w, s],
+                  [e, s],
+                  [e, north],
+                  [w, north],
+                  [w, s],
+                ],
+              ],
+            },
             properties: { ...properties, kind: 'cell', opacity: quiet ? 0.12 : 0.3 + 0.5 * share },
           });
         } else {
           features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [lon, lat] },
-            properties: { ...properties, kind: 'place', r: 3 + 13 * share, opacity: quiet ? 0.35 : 0.9 },
+            properties: {
+              ...properties,
+              kind: 'place',
+              r: 3 + 13 * share,
+              opacity: quiet ? 0.35 : 0.9,
+            },
           });
         }
       }
-      if (!features.length && !mapScale.note) mapScale.note = 'Nobody gains or loses time in this part of the day.';
+      if (!features.length && !mapScale.note)
+        mapScale.note = 'Nobody gains or loses time in this part of the day.';
     }
 
     whenLoaded(() => {
       if (!map.getSource('simr')) {
         if (!features.length) return;
-        map.addSource('simr', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-        const zoomed = (property: string): maplibregl.ExpressionSpecification => ['interpolate', ['linear'], ['zoom'], 8, ['*', ['get', property], 0.45], 13, ['get', property]];
+        map.addSource('simr', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+        const zoomed = (property: string): maplibregl.ExpressionSpecification => [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          8,
+          ['*', ['get', property], 0.45],
+          13,
+          ['get', property],
+        ];
         map.addLayer({
-          id: 'simr-cells', type: 'fill', source: 'simr', filter: ['==', ['get', 'kind'], 'cell'],
+          id: 'simr-cells',
+          type: 'fill',
+          source: 'simr',
+          filter: ['==', ['get', 'kind'], 'cell'],
           paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['get', 'opacity'] },
         });
         map.addLayer({
-          id: 'simr-cells-lost', type: 'line', source: 'simr', filter: ['all', ['==', ['get', 'kind'], 'cell'], ['>', ['get', 'lost'], 0]],
+          id: 'simr-cells-lost',
+          type: 'line',
+          source: 'simr',
+          filter: ['all', ['==', ['get', 'kind'], 'cell'], ['>', ['get', 'lost'], 0]],
           paint: { 'line-color': P.paper, 'line-width': 2 },
         });
         map.addLayer({
-          id: 'simr-picked-line', type: 'line', source: 'simr', filter: ['all', ['==', ['get', 'kind'], 'picked'], ['==', ['geometry-type'], 'LineString']],
-          layout: { 'line-cap': 'round' }, paint: { 'line-color': P.paper, 'line-width': 26, 'line-opacity': 0.35 },
+          id: 'simr-picked-line',
+          type: 'line',
+          source: 'simr',
+          filter: [
+            'all',
+            ['==', ['get', 'kind'], 'picked'],
+            ['==', ['geometry-type'], 'LineString'],
+          ],
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': P.paper, 'line-width': 26, 'line-opacity': 0.35 },
         });
         map.addLayer({
-          id: 'simr-flow', type: 'line', source: 'simr', filter: ['==', ['get', 'kind'], 'flow'],
+          id: 'simr-flow',
+          type: 'line',
+          source: 'simr',
+          filter: ['==', ['get', 'kind'], 'flow'],
           layout: { 'line-sort-key': ['get', 'sort'] },
-          paint: { 'line-color': ['get', 'color'], 'line-opacity': ['get', 'opacity'], 'line-width': zoomed('width'), 'line-offset': zoomed('offset') },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-opacity': ['get', 'opacity'],
+            'line-width': zoomed('width'),
+            'line-offset': zoomed('offset'),
+          },
         });
         map.addLayer({
-          id: 'simr-places', type: 'circle', source: 'simr', filter: ['==', ['get', 'kind'], 'place'],
+          id: 'simr-places',
+          type: 'circle',
+          source: 'simr',
+          filter: ['==', ['get', 'kind'], 'place'],
           layout: { 'circle-sort-key': ['get', 'sort'] },
           paint: {
-            'circle-radius': ['get', 'r'], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'],
+            'circle-radius': ['get', 'r'],
+            'circle-color': ['get', 'color'],
+            'circle-opacity': ['get', 'opacity'],
             'circle-stroke-color': ['case', ['>', ['get', 'lost'], 0], P.paper, P.ink],
             'circle-stroke-width': ['case', ['>', ['get', 'lost'], 0], 2.5, 0.6],
           },
@@ -1189,20 +1732,41 @@ export function MapView({ onVehicleCount }: Props) {
       }
       if (!map.getLayer('simr-ends')) {
         map.addLayer({
-          id: 'simr-ends', type: 'circle', source: 'simr', filter: ['==', ['get', 'kind'], 'end'],
+          id: 'simr-ends',
+          type: 'circle',
+          source: 'simr',
+          filter: ['==', ['get', 'kind'], 'end'],
           layout: { 'circle-sort-key': ['get', 'sort'] },
           paint: {
-            'circle-radius': ['get', 'r'], 'circle-opacity': 0.8,
-            'circle-color': ['case', ['==', ['get', 'end'], 'from'], SIDE_COLORS[0], SIDE_COLORS[1]],
-            'circle-stroke-color': P.ink, 'circle-stroke-width': 0.6,
+            'circle-radius': ['get', 'r'],
+            'circle-opacity': 0.8,
+            'circle-color': [
+              'case',
+              ['==', ['get', 'end'], 'from'],
+              SIDE_COLORS[0],
+              SIDE_COLORS[1],
+            ],
+            'circle-stroke-color': P.ink,
+            'circle-stroke-width': 0.6,
           },
         });
         map.addLayer({
-          id: 'simr-picked-stop', type: 'circle', source: 'simr', filter: ['all', ['==', ['get', 'kind'], 'picked'], ['==', ['geometry-type'], 'Point']],
-          paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': P.paper, 'circle-stroke-width': 3 },
+          id: 'simr-picked-stop',
+          type: 'circle',
+          source: 'simr',
+          filter: ['all', ['==', ['get', 'kind'], 'picked'], ['==', ['geometry-type'], 'Point']],
+          paint: {
+            'circle-radius': 15,
+            'circle-color': 'rgba(0,0,0,0)',
+            'circle-stroke-color': P.paper,
+            'circle-stroke-width': 3,
+          },
         });
       }
-      (map.getSource('simr') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
+      (map.getSource('simr') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features,
+      });
     });
     useStore.getState().set({ simMapDrawn: useStore.getState().simMapDrawn + 1 });
   }, [simData, simLayer, simMap.flow, simAlone, simWho, enabledModes, baselineId]);
@@ -1214,7 +1778,11 @@ export function MapView({ onVehicleCount }: Props) {
     const apply = () => {
       for (const mode of MODE_ORDER) {
         if (map.getLayer(`line-${mode}`)) {
-          map.setLayoutProperty(`line-${mode}`, 'visibility', enabledModes[mode] ? 'visible' : 'none');
+          map.setLayoutProperty(
+            `line-${mode}`,
+            'visibility',
+            enabledModes[mode] ? 'visible' : 'none',
+          );
         }
       }
     };
@@ -1226,13 +1794,22 @@ export function MapView({ onVehicleCount }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const gone = (scenarioInfo?.impact ?? []).filter((line) => line.tripsAfter === 0).map((line) => line.routeId);
+    const gone = (scenarioInfo?.impact ?? [])
+      .filter((line) => line.tripsAfter === 0)
+      .map((line) => line.routeId);
     whenLoaded(() => {
       for (const mode of MODE_ORDER) {
         if (!map.getLayer(`line-${mode}`)) continue;
-        map.setFilter(`line-${mode}`, gone.length
-          ? ['all', ['==', ['get', 'mode'], mode], ['!', ['in', ['get', 'route_id'], ['literal', gone]]]]
-          : ['==', ['get', 'mode'], mode]);
+        map.setFilter(
+          `line-${mode}`,
+          gone.length
+            ? [
+                'all',
+                ['==', ['get', 'mode'], mode],
+                ['!', ['in', ['get', 'route_id'], ['literal', gone]]],
+              ]
+            : ['==', ['get', 'mode'], mode],
+        );
       }
     });
   }, [scenarioInfo, baselineId, loadedModes]);
@@ -1243,8 +1820,14 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map) return;
     const apply = () => {
       // A deleted line stays open in its panel, so that it can be undone, but is not drawn.
-      const deleted = (scenarioInfo?.impact ?? []).some((line) => line.routeId === highlightRouteId && line.tripsAfter === 0);
-      const filter: maplibregl.FilterSpecification = ['==', ['get', 'route_id'], deleted ? -1 : (highlightRouteId ?? -1)];
+      const deleted = (scenarioInfo?.impact ?? []).some(
+        (line) => line.routeId === highlightRouteId && line.tripsAfter === 0,
+      );
+      const filter: maplibregl.FilterSpecification = [
+        '==',
+        ['get', 'route_id'],
+        deleted ? -1 : (highlightRouteId ?? -1),
+      ];
       if (map.getLayer('sel-glow')) map.setFilter('sel-glow', filter);
       if (map.getLayer('sel-line')) map.setFilter('sel-line', filter);
     };
@@ -1260,16 +1843,26 @@ export function MapView({ onVehicleCount }: Props) {
     if (!map || !fitBounds) return;
     // What is fitted has to land in the part of the map that no panel covers: right of the left
     // column, and left of the inspector or of the results window when that is open.
-    const results = document.querySelector('.results:not(.small-window)')?.getBoundingClientRect().width ?? 0;
+    const results =
+      document.querySelector('.results:not(.small-window)')?.getBoundingClientRect().width ?? 0;
     const room = map.getContainer().clientWidth;
     // Folded, the results window is a title bar in the corner and hides nothing worth fitting round.
     const folded = !!document.querySelector('.results.small-window');
     const right = results ? results + 30 : folded ? 60 : 480;
     // Clear of the rail on the left, and of the panel folded out of it, when one is.
-    const left = Math.round(document.querySelector('.left-pane:not([hidden])')?.getBoundingClientRect().right ?? document.querySelector('.rail')?.getBoundingClientRect().right ?? 40) + 20;
+    const left =
+      Math.round(
+        document.querySelector('.left-pane:not([hidden])')?.getBoundingClientRect().right ??
+          document.querySelector('.rail')?.getBoundingClientRect().right ??
+          40,
+      ) + 20;
     map.fitBounds(fitBounds, {
-      padding: room - left - right > 200 ? { top: 110, bottom: 150, left, right } : { top: 110, bottom: 150, left: 60, right: 60 },
-      maxZoom: 14, duration: 900,
+      padding:
+        room - left - right > 200
+          ? { top: 110, bottom: 150, left, right }
+          : { top: 110, bottom: 150, left: 60, right: 60 },
+      maxZoom: 14,
+      duration: 900,
     });
   }, [fitBounds]);
 
@@ -1297,9 +1890,18 @@ export function MapView({ onVehicleCount }: Props) {
 
       const layers: ScatterplotLayer[] = [];
       // Vehicles coloured by how full they are in the chosen run, when it was made on the timetable open.
-      const simRun = state.simMap.layer === 'vehicles' && state.simRunId !== null ? state.simRuns.find((r) => r.id === state.simRunId) : undefined;
-      const byLoad = !!simRun && tripLoads.runId === simRun.id && (simRun.kind === 'scenario' ? simRun.scenarioId : null) === state.scenarioId;
-      const fade = state.closing !== null || (state.builder !== null && !!state.builder.reshape) || (state.simRunId !== null && state.simMap.layer !== 'none' && !byLoad);
+      const simRun =
+        state.simMap.layer === 'vehicles' && state.simRunId !== null
+          ? state.simRuns.find((r) => r.id === state.simRunId)
+          : undefined;
+      const byLoad =
+        !!simRun &&
+        tripLoads.runId === simRun.id &&
+        (simRun.kind === 'scenario' ? simRun.scenarioId : null) === state.scenarioId;
+      const fade =
+        state.closing !== null ||
+        (state.builder !== null && !!state.builder.reshape) ||
+        (state.simRunId !== null && state.simMap.layer !== 'none' && !byLoad);
       let total = 0;
       let waiting = 0;
       let ringAt: [number, number] | null = null;

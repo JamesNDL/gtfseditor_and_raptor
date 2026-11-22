@@ -22,11 +22,18 @@ export function EditConfirm() {
   if (!pending) return null;
   return (
     <div className="fleet-backdrop" onClick={() => !going && cancelConfirm()}>
-      <section className="panel edit-confirm" role="alertdialog" aria-label="Add these vehicles?" onClick={(e) => e.stopPropagation()}>
+      <section
+        className="panel edit-confirm"
+        role="alertdialog"
+        aria-label="Add these vehicles?"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2>This adds {pending.added.toLocaleString()} vehicles</h2>
         <p>{pending.message}</p>
         <p className="muted small">What the change does: {pending.summary}</p>
-        <p className="muted small">Nothing has been changed yet. It can also be undone afterwards.</p>
+        <p className="muted small">
+          Nothing has been changed yet. It can also be undone afterwards.
+        </p>
         <div className="edit-confirm-buttons">
           <button className="button confirm-cancel" onClick={cancelConfirm} disabled={going}>
             Cancel

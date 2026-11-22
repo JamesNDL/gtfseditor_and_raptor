@@ -34,7 +34,9 @@ async function save(method: string, url: string, body?: unknown): Promise<string
 /** The vehicle catalogue for the chosen day, refetched after every change. */
 export function useVehicleTypes(enabled = true) {
   const baselineId = useStore((s) => s.baselineId);
-  return useApi<VehicleType[]>(enabled && baselineId !== null ? `/api/vehicle-types?baseline=${baselineId}` : null);
+  return useApi<VehicleType[]>(
+    enabled && baselineId !== null ? `/api/vehicle-types?baseline=${baselineId}` : null,
+  );
 }
 
 /** The catalogue screen: capacities, fleet sizes and how many of each type are in use. */
@@ -45,7 +47,14 @@ export function FleetPanel() {
   const editing = useStore((s) => s.scenarioId !== null);
   const types = useVehicleTypes(open);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ name: '', modeId: 'bus', cars: '', seated: '', standing: '', fleetSize: '' });
+  const [draft, setDraft] = useState({
+    name: '',
+    modeId: 'bus',
+    cars: '',
+    seated: '',
+    standing: '',
+    fleetSize: '',
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -72,15 +81,24 @@ export function FleetPanel() {
 
   return (
     <div className="fleet-backdrop" onClick={() => set({ fleetOpen: false })}>
-      <section className="panel fleet" onClick={(e) => e.stopPropagation()} aria-label="Vehicle catalogue">
+      <section
+        className="panel fleet"
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Vehicle catalogue"
+      >
         <header className="fleet-header">
           <div>
             <h2>Vehicle catalogue</h2>
             <div className="muted small">
-              Capacities and fleet sizes apply everywhere. "In use" counts {editing ? 'this scenario' : 'the published timetable'} for the chosen day.
+              Capacities and fleet sizes apply everywhere. "In use" counts{' '}
+              {editing ? 'this scenario' : 'the published timetable'} for the chosen day.
             </div>
           </div>
-          <button className="icon-button" onClick={() => set({ fleetOpen: false })} aria-label="Close">
+          <button
+            className="icon-button"
+            onClick={() => set({ fleetOpen: false })}
+            aria-label="Close"
+          >
             ✕
           </button>
         </header>
@@ -88,7 +106,8 @@ export function FleetPanel() {
         {error && <p className="error-text small fleet-error">{error}</p>}
         {noLimits && (
           <p className="small fleet-error fleet-limits-note">
-            No fleet sizes are set, so nothing can warn that a scenario needs more vehicles than exist.{' '}
+            No fleet sizes are set, so nothing can warn that a scenario needs more vehicles than
+            exist.{' '}
             <button
               className="button small-button limits-button"
               title="Sets each type's fleet size to the number the published timetable uses on this day. These are the editor's own estimates: correct any you know."
@@ -108,7 +127,10 @@ export function FleetPanel() {
                 <th className="n">Cars</th>
                 <th className="n">Seated</th>
                 <th className="n">Standing</th>
-                <th className="n" title="How many vehicles of this type exist. Leave blank for no limit.">
+                <th
+                  className="n"
+                  title="How many vehicles of this type exist. Leave blank for no limit."
+                >
                   Fleet size
                 </th>
                 <th className="n" title="Vehicles of this type needed on the chosen day">
@@ -137,18 +159,36 @@ export function FleetPanel() {
                     </td>
                     <td className="muted">{t.modeName}</td>
                     <td className="n">
-                      <Cell value={t.cars === null ? '' : String(t.cars)} onCommit={(v) => commit(t.id, { cars: num(v) })} />
+                      <Cell
+                        value={t.cars === null ? '' : String(t.cars)}
+                        onCommit={(v) => commit(t.id, { cars: num(v) })}
+                      />
                     </td>
                     <td className="n">
-                      <Cell value={String(t.seated)} onCommit={(v) => commit(t.id, { seated: num(v) })} />
+                      <Cell
+                        value={String(t.seated)}
+                        onCommit={(v) => commit(t.id, { seated: num(v) })}
+                      />
                     </td>
                     <td className="n">
-                      <Cell value={String(t.standing)} onCommit={(v) => commit(t.id, { standing: num(v) })} />
+                      <Cell
+                        value={String(t.standing)}
+                        onCommit={(v) => commit(t.id, { standing: num(v) })}
+                      />
                     </td>
                     <td className="n">
-                      <Cell value={t.fleetSize === null ? '' : String(t.fleetSize)} placeholder="no limit" onCommit={(v) => commit(t.id, { fleetSize: num(v) })} />
+                      <Cell
+                        value={t.fleetSize === null ? '' : String(t.fleetSize)}
+                        placeholder="no limit"
+                        onCommit={(v) => commit(t.id, { fleetSize: num(v) })}
+                      />
                     </td>
-                    <td className={`n${over ? ' warn-text' : ''}`} title={over ? `${t.vehicles - t.fleetSize!} more than the fleet has` : undefined}>
+                    <td
+                      className={`n${over ? ' warn-text' : ''}`}
+                      title={
+                        over ? `${t.vehicles - t.fleetSize!} more than the fleet has` : undefined
+                      }
+                    >
                       {fmt(t.vehicles)}
                       {over && ' !'}
                     </td>
@@ -173,10 +213,20 @@ export function FleetPanel() {
             <tfoot>
               <tr>
                 <td>
-                  <input className="cell wide" placeholder="Add a vehicle type" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                  <input
+                    className="cell wide"
+                    placeholder="Add a vehicle type"
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  />
                 </td>
                 <td>
-                  <select className="cell" value={draft.modeId} onChange={(e) => setDraft({ ...draft, modeId: e.target.value })} aria-label="Mode">
+                  <select
+                    className="cell"
+                    value={draft.modeId}
+                    onChange={(e) => setDraft({ ...draft, modeId: e.target.value })}
+                    aria-label="Mode"
+                  >
                     {modes.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
@@ -186,7 +236,13 @@ export function FleetPanel() {
                 </td>
                 {(['cars', 'seated', 'standing', 'fleetSize'] as const).map((k) => (
                   <td key={k} className="n">
-                    <input className="cell" inputMode="numeric" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} aria-label={k} />
+                    <input
+                      className="cell"
+                      inputMode="numeric"
+                      value={draft[k]}
+                      onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+                      aria-label={k}
+                    />
                   </td>
                 ))}
                 <td colSpan={3} className="n">
@@ -203,7 +259,15 @@ export function FleetPanel() {
                         fleetSize: num(draft.fleetSize),
                       });
                       setError(problem);
-                      if (!problem) setDraft({ ...draft, name: '', cars: '', seated: '', standing: '', fleetSize: '' });
+                      if (!problem)
+                        setDraft({
+                          ...draft,
+                          name: '',
+                          cars: '',
+                          seated: '',
+                          standing: '',
+                          fleetSize: '',
+                        });
                       refresh();
                     }}
                   >
@@ -215,8 +279,8 @@ export function FleetPanel() {
           </table>
         </div>
         <footer className="muted small fleet-footer">
-          Click a value to change it; press Enter or click away to save. To run a line, a vehicle or a trip with a different type, open it while
-          editing a scenario.
+          Click a value to change it; press Enter or click away to save. To run a line, a vehicle or
+          a trip with a different type, open it while editing a scenario.
         </footer>
       </section>
     </div>
@@ -224,7 +288,17 @@ export function FleetPanel() {
 }
 
 /** A table cell that edits in place and saves on Enter or when focus leaves. */
-function Cell({ value, onCommit, wide, placeholder }: { value: string; onCommit: (value: string) => void; wide?: boolean; placeholder?: string }) {
+function Cell({
+  value,
+  onCommit,
+  wide,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  wide?: boolean;
+  placeholder?: string;
+}) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   return (
@@ -268,7 +342,12 @@ export function VehicleTypePicker({
   return (
     <div className="edit-row">
       <span className="muted small">{label}</span>
-      <select className="day-select picker" value={choice} onChange={(e) => setChoice(e.target.value === '' ? '' : Number(e.target.value))} aria-label={label}>
+      <select
+        className="day-select picker"
+        value={choice}
+        onChange={(e) => setChoice(e.target.value === '' ? '' : Number(e.target.value))}
+        aria-label={label}
+      >
         <option value="">Choose a vehicle type</option>
         {options.map((t) => (
           <option key={t.id} value={t.id}>

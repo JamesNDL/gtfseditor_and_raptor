@@ -9,7 +9,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 /**
  * Where the change in arrival time is cut into groups, in seconds later than the other run. Under
@@ -48,7 +49,9 @@ const RUN_COLUMNS = `id, name, kind, state, archived, bau_run_id, plans_run_id, 
  * a placeholder for now, and a figure for how full a vehicle is means nothing until that changes.
  */
 const capacityOf = (run: RunRow) =>
-  run.capacity_trips === null ? null : { trips: run.capacity_trips, placeholder: run.capacity_placeholders ?? 0 };
+  run.capacity_trips === null
+    ? null
+    : { trips: run.capacity_trips, placeholder: run.capacity_placeholders ?? 0 };
 
 /** The BAU run a run's people come from. Two runs can be compared when this is the same. */
 const rootOf = (run: RunRow) => run.bau_run_id ?? run.plans_run_id ?? run.id;
@@ -99,27 +102,43 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
    * run replays (whether those are a BAU run's or a scenario run's), or the BAU run a scenario run
    * was made against. A plain BAU run has nothing to be set against unless ?vs= names something.
    */
-  async function pair(req: { params: unknown; query: unknown; url: string }, needsJourneys: boolean) {
+  async function pair(
+    req: { params: unknown; query: unknown; url: string },
+    needsJourneys: boolean,
+  ) {
     const id = whole((req.params as { id: string }).id, 'id');
     const query = req.query as Record<string, string | undefined>;
-    const [run] = await sql<RunRow[]>`select ${sql.unsafe(RUN_COLUMNS)} from sim_runs where id = ${id}`;
+    const [run] = await sql<
+      RunRow[]
+    >`select ${sql.unsafe(RUN_COLUMNS)} from sim_runs where id = ${id}`;
     if (!run) throw fail(404, 'Run not found');
     if (run.state !== 'done') throw fail(409, 'The run has not finished');
-    const vsId = query.vs === 'none' ? null
-      : query.vs ? whole(query.vs, 'vs')
-      : run.plans_run_id ?? (run.kind === 'scenario' ? run.bau_run_id : null);
+    const vsId =
+      query.vs === 'none'
+        ? null
+        : query.vs
+          ? whole(query.vs, 'vs')
+          : (run.plans_run_id ?? (run.kind === 'scenario' ? run.bau_run_id : null));
     let vs: RunRow | null = null;
     if (vsId !== null && vsId !== undefined) {
-      [vs] = await sql<RunRow[]>`select ${sql.unsafe(RUN_COLUMNS)} from sim_runs where id = ${vsId}`;
+      [vs] = await sql<
+        RunRow[]
+      >`select ${sql.unsafe(RUN_COLUMNS)} from sim_runs where id = ${vsId}`;
       if (!vs || vs.state !== 'done') {
         if (query.vs) throw fail(404, 'The run to compare with was not found, or has not finished');
         vs = null;
       } else if (vs.id === run.id || rootOf(vs) !== rootOf(run)) {
-        throw fail(400, 'Two runs can be compared only when they were made on the same people: the same BAU run');
+        throw fail(
+          400,
+          'Two runs can be compared only when they were made on the same people: the same BAU run',
+        );
       }
     }
     if (needsJourneys && (run.archived || vs?.archived)) {
-      throw fail(409, `${run.archived ? 'This run' : `"${vs!.name}"`} is archived. Restore it in the library to see figures about people.`);
+      throw fail(
+        409,
+        `${run.archived ? 'This run' : `"${vs!.name}"`} is archived. Restore it in the library to see figures about people.`,
+      );
     }
     const from = query.from ? whole(query.from, 'from') : 0;
     const to = query.to ? whole(query.to, 'to') : 400_000;
@@ -129,7 +148,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
   }
 
   /** The line a route counts under: a part made by a closure counts under the line it was cut from. */
-  const lineOf = (alias: string) => sql`coalesce((${sql(alias)}.extra->>'variantOf')::bigint, ${sql(alias)}.id)`;
+  const lineOf = (alias: string) =>
+    sql`coalesce((${sql(alias)}.extra->>'variantOf')::bigint, ${sql(alias)}.id)`;
 
   /**
    * One row per journey of a run. A journey is usually one row already; with capacity on, a row
@@ -137,7 +157,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
    */
   const perJourney = (run: number, band: Band) => {
     const ok = sql`filter (where status = 'ok')`;
-    const mean = (column: string) => sql`(sum(${sql(column)}::bigint * people) ${ok} / nullif(sum(people) ${ok}, 0))::int`;
+    const mean = (column: string) =>
+      sql`(sum(${sql(column)}::bigint * people) ${ok} / nullif(sum(people) ${ok}, 0))::int`;
     return sql`
       select journey_id, min(start_secs) as start_secs, min(user_id) as user_id, sum(people)::int as people_all,
              case when coalesce(sum(people) ${ok}, 0) > 0 then 'ok'
@@ -241,9 +262,14 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         times: { a: journeyTimes(p.a), b: p.vs ? journeyTimes(p.b) : null },
         // null: the demand set has been removed, so it is not known.
         madeUp: demand ? (demand.made_up as boolean) : null,
-        margin: beaten.people > 0
-          ? { people: beaten.people, beaten: beaten.beaten, meanMinutes: beaten.beaten ? beaten.secs / beaten.beaten / 60 : 0 }
-          : null,
+        margin:
+          beaten.people > 0
+            ? {
+                people: beaten.people,
+                beaten: beaten.beaten,
+                meanMinutes: beaten.beaten ? beaten.secs / beaten.beaten / 60 : 0,
+              }
+            : null,
         capacity: capacityOf(p.run),
       };
       if (!p.vs) return base;
@@ -276,17 +302,44 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
 
       const groups = () => new Array<number>(CHANGE_GROUPS).fill(0);
       const SAME = EDGES.length / 2;
-      const emptyParts = () => ({ people: 0, a: { wait: 0, walk: 0, journey: 0, vehicles: 0 }, b: { wait: 0, walk: 0, journey: 0, vehicles: 0 } });
+      const emptyParts = () => ({
+        people: 0,
+        a: { wait: 0, walk: 0, journey: 0, vehicles: 0 },
+        b: { wait: 0, walk: 0, journey: 0, vehicles: 0 },
+      });
       const total = {
-        compared: 0, groups: groups(), nearbyGroups: groups(), lost: 0, lostGaveUp: 0, lostStranded: 0, gained: 0,
-        soonerSecs: 0, laterSecs: 0, nearby: 0, nearbySecs: 0,
+        compared: 0,
+        groups: groups(),
+        nearbyGroups: groups(),
+        lost: 0,
+        lostGaveUp: 0,
+        lostStranded: 0,
+        gained: 0,
+        soonerSecs: 0,
+        laterSecs: 0,
+        nearby: 0,
+        nearbySecs: 0,
       };
       const gaveUp = { people: 0, secs: 0, atLeast: 0, groups: groups() };
       const parts = { all: emptyParts(), changed: emptyParts() };
-      const byHour = new Map<number, { hour: number; groups: number[]; lost: number; gained: number; nearby: number; gaveUp: number }>();
+      const byHour = new Map<
+        number,
+        {
+          hour: number;
+          groups: number[];
+          lost: number;
+          gained: number;
+          nearby: number;
+          gaveUp: number;
+        }
+      >();
       const hourOf = (h: number) => {
         let hour = byHour.get(h);
-        if (!hour) byHour.set(h, (hour = { hour: h, groups: groups(), lost: 0, gained: 0, nearby: 0, gaveUp: 0 }));
+        if (!hour)
+          byHour.set(
+            h,
+            (hour = { hour: h, groups: groups(), lost: 0, gained: 0, nearby: 0, gaveUp: 0 }),
+          );
         return hour;
       };
       for (const row of gaveUpRows) {
@@ -296,7 +349,12 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         gaveUp.groups[row.grp] += row.people;
         hourOf(row.hour).gaveUp += row.people;
       }
-      const byLength = LENGTH_EDGES.concat(0).map((_, length) => ({ length, people: 0, groups: groups(), laterSecs: 0 }));
+      const byLength = LENGTH_EDGES.concat(0).map((_, length) => ({
+        length,
+        people: 0,
+        groups: groups(),
+        laterSecs: 0,
+      }));
       for (const row of rows) {
         const n = Number(row.people ?? 0);
         const hour = hourOf(row.hour);
@@ -338,15 +396,22 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         const of = (s: { wait: number; walk: number; journey: number; vehicles: number }) => {
           const n = set.people || 1;
           return {
-            waitMinutes: s.wait / n / 60, walkMinutes: s.walk / n / 60, rideMinutes: (s.journey - s.wait - s.walk) / n / 60,
-            journeyMinutes: s.journey / n / 60, vehicles: s.vehicles / n,
+            waitMinutes: s.wait / n / 60,
+            walkMinutes: s.walk / n / 60,
+            rideMinutes: (s.journey - s.wait - s.walk) / n / 60,
+            journeyMinutes: s.journey / n / 60,
+            vehicles: s.vehicles / n,
           };
         };
         return { people: set.people, a: of(set.a), b: of(set.b) };
       };
       const sooner = total.groups.slice(0, SAME).reduce((x, y) => x + y, 0);
       const later = total.groups.slice(SAME + 1).reduce((x, y) => x + y, 0);
-      const figure = (people: number, secs: number) => ({ people, hours: secs / 3600, meanMinutes: people ? secs / people / 60 : 0 });
+      const figure = (people: number, secs: number) => ({
+        people,
+        hours: secs / 3600,
+        meanMinutes: people ? secs / people / 60 : 0,
+      });
       const truly = figure(sooner - total.nearby, total.soonerSecs - total.nearbySecs);
       const hoursLost = (total.laterSecs + gaveUp.secs) / 3600;
       return {
@@ -355,21 +420,38 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         groups: total.groups,
         // Of each group, the people who arrive sooner only by a nearby stop that was already better.
         nearbyGroups: total.nearbyGroups,
-        sooner: { ...figure(sooner, total.soonerSecs), truly, nearby: figure(total.nearby, total.nearbySecs) },
+        sooner: {
+          ...figure(sooner, total.soonerSecs),
+          truly,
+          nearby: figure(total.nearby, total.nearbySecs),
+        },
         later: figure(later, total.laterSecs),
         // Counted by how much later than on the published timetable the journey they turned down
         // would have been. `atLeast` of them are from a run that did not record it and are counted
         // at the limit, so the hours are then a least figure.
-        gaveUp: { ...figure(gaveUp.people, gaveUp.secs), groups: gaveUp.groups, atLeast: gaveUp.atLeast, limitMinutes: limit / 60 },
+        gaveUp: {
+          ...figure(gaveUp.people, gaveUp.secs),
+          groups: gaveUp.groups,
+          atLeast: gaveUp.atLeast,
+          limitMinutes: limit / 60,
+        },
         // The time lost by those who arrive later or gave up, against the time gained by those who
         // truly arrive sooner. The gain that a nearby stop already offered is left out, and so are
         // people with no journey at all, whose loss has no length.
-        net: { hoursLost, hoursGained: truly.hours, hours: hoursLost - truly.hours, atLeast: gaveUp.atLeast > 0 },
+        net: {
+          hoursLost,
+          hoursGained: truly.hours,
+          hours: hoursLost - truly.hours,
+          atLeast: gaveUp.atLeast > 0,
+        },
         lost: { people: total.lost, gaveUp: total.lostGaveUp, stranded: total.lostStranded },
         gained: total.gained,
         parts: { all: averages(parts.all), changed: averages(parts.changed) },
         byHour: [...byHour.values()].sort((x, y) => x.hour - y.hour),
-        byLength: byLength.map((l) => ({ ...l, meanLaterMinutes: l.people ? l.laterSecs / l.people / 60 : 0 })),
+        byLength: byLength.map((l) => ({
+          ...l,
+          meanLaterMinutes: l.people ? l.laterSecs / l.people / 60 : 0,
+        })),
       };
     });
   });
@@ -458,8 +540,10 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         const moved = sql`
           select f.journey_id, f.people from (${riders(from)}) f
           where not exists (select 1 from (${riders(to)}) t where t.journey_id = f.journey_id)`;
-        const [{ riders: all }] = await sql`select coalesce(sum(people), 0)::int as riders from (${riders(from)}) x`;
-        const [{ people }] = await sql`select coalesce(sum(people), 0)::int as people from (${moved}) x`;
+        const [{ riders: all }] =
+          await sql`select coalesce(sum(people), 0)::int as riders from (${riders(from)}) x`;
+        const [{ people }] =
+          await sql`select coalesce(sum(people), 0)::int as people from (${moved}) x`;
         const lines = people
           ? await sql`
               select x.line as id, r.short_name as "shortName", r.long_name as "longName", r.color, sum(x.people)::int as people
@@ -549,7 +633,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
     if (!p.vs) throw fail(400, 'Nothing to compare this run with: name a run with ?vs=');
     const end = p.query.end === 'destination' ? 'destination' : 'origin';
     const cell = p.query.by && p.query.by !== 'stop' ? whole(p.query.by, 'by') : 0;
-    if (cell && (cell < 100 || cell > 20_000)) throw fail(400, 'A square is between 100 m and 20 km across');
+    if (cell && (cell < 100 || cell > 20_000))
+      throw fail(400, 'A square is between 100 m and 20 km across');
     return cached(p.key, async () => {
       // A square of `cell` metres, in degrees. The network is all near 33 degrees south, so one
       // width in degrees of longitude serves the whole of it.
@@ -570,7 +655,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         group by px, py`;
       let names = new Map<number, { name: string; lon: number; lat: number }>();
       if (!cell && rows.length) {
-        const found = await sql`select id, name, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${rows.map((r) => r.px)})`;
+        const found =
+          await sql`select id, name, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${rows.map((r) => r.px)})`;
         names = new Map(found.map((s) => [Number(s.id), { name: s.name, lon: s.lon, lat: s.lat }]));
       }
       return {
@@ -581,17 +667,22 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         // Each place: where, its name if it is a stop, people compared, their average minutes later
         // (negative for sooner), how many are 5 minutes or more later and sooner, and how many can
         // no longer travel or now can.
-        places: rows.map((r) => {
-          const stop = cell ? null : names.get(Number(r.px));
-          return [
-            cell ? (r.px + 0.5) * dLon : (stop?.lon ?? 0),
-            cell ? (r.py + 0.5) * dLat : (stop?.lat ?? 0),
-            stop?.name ?? null,
-            r.people,
-            r.people ? r.later_secs / r.people / 60 : 0,
-            r.later, r.sooner, r.lost, r.gained,
-          ];
-        }).filter((r) => r[0] !== 0),
+        places: rows
+          .map((r) => {
+            const stop = cell ? null : names.get(Number(r.px));
+            return [
+              cell ? (r.px + 0.5) * dLon : (stop?.lon ?? 0),
+              cell ? (r.py + 0.5) * dLat : (stop?.lat ?? 0),
+              stop?.name ?? null,
+              r.people,
+              r.people ? r.later_secs / r.people / 60 : 0,
+              r.later,
+              r.sooner,
+              r.lost,
+              r.gained,
+            ];
+          })
+          .filter((r) => r[0] !== 0),
       };
     });
   });
@@ -618,13 +709,15 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
     return { condition: made[0] };
   }
   async function whoFragment(p: Pair, text: string | undefined): Promise<[ReturnType<typeof sql>]> {
-    const sqlOne = (strings: TemplateStringsArray, ...values: never[]) => [sql(strings, ...values)] as [ReturnType<typeof sql>];
+    const sqlOne = (strings: TemplateStringsArray, ...values: never[]) =>
+      [sql(strings, ...values)] as [ReturnType<typeof sql>];
     const who = text ?? (p.vs ? 'changed' : 'all');
     if (who.startsWith('user:')) return sqlOne`j.user_id = ${who.slice(5)}`;
     const [kind, value = '', side] = who.split(':');
     const run = side === 'b' && p.vs ? p.b : p.a;
     const needsOther = () => {
-      if (!p.vs) throw fail(400, 'Nothing to compare this run with, so nobody arrives sooner or later');
+      if (!p.vs)
+        throw fail(400, 'Nothing to compare this run with, so nobody arrives sooner or later');
     };
     switch (kind) {
       case 'all':
@@ -685,7 +778,7 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
           where l.run_id = ${run} and l.trip_id in (
             select trip_id from sim_trip_loads where run_id = ${run} and stop_id in (${members(from)}))
           order by l.trip_id, l.position`;
-        const ofTrip = new Map<string, typeof calls[number][]>();
+        const ofTrip = new Map<string, (typeof calls)[number][]>();
         for (const call of calls) {
           const key = String(call.trip_id);
           let list = ofTrip.get(key);
@@ -694,7 +787,11 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         }
         const stretchAt = new Map<string, number[]>();
         for (const [trip, list] of ofTrip) {
-          const at = list.flatMap((c, i) => (Number(c.station) === from && i + 1 < list.length && Number(list[i + 1].station) === to ? [i] : []));
+          const at = list.flatMap((c, i) =>
+            Number(c.station) === from && i + 1 < list.length && Number(list[i + 1].station) === to
+              ? [i]
+              : [],
+          );
           if (at.length) stretchAt.set(trip, at);
         }
         const rides = stretchAt.size
@@ -705,11 +802,15 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         const through = new Set<string>();
         for (const ride of rides) {
           const list = ofTrip.get(String(ride.trip_id))!;
-          const boards = list.findIndex((c) => c.stop_id === ride.from_stop_id && c.depart === ride.depart);
+          const boards = list.findIndex(
+            (c) => c.stop_id === ride.from_stop_id && c.depart === ride.depart,
+          );
           if (boards < 0) continue;
           let alights = -1;
-          for (let i = boards + 1; i < list.length && alights < 0; i++) if (list[i].stop_id === ride.to_stop_id && list[i].arrive === ride.arrive) alights = i;
-          if (stretchAt.get(String(ride.trip_id))!.some((i) => i >= boards && i < alights)) through.add(ride.journey_id);
+          for (let i = boards + 1; i < list.length && alights < 0; i++)
+            if (list[i].stop_id === ride.to_stop_id && list[i].arrive === ride.arrive) alights = i;
+          if (stretchAt.get(String(ride.trip_id))!.some((i) => i >= boards && i < alights))
+            through.add(ride.journey_id);
         }
         return sqlOne`j.journey_id = any(${[...through]})`;
       }
@@ -729,11 +830,14 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
     const { condition } = await whoCondition(p, p.query.who);
     return cached(p.key, async () => {
       const chosen = sql`select j.* from (${sideBySide(p.a, p.b, p.band)}) j where ${condition}`;
-      const [{ journeys, people }] = await sql`select count(*)::int as journeys, coalesce(sum(people), 0)::int as people from (${chosen}) c`;
+      const [{ journeys, people }] =
+        await sql`select count(*)::int as journeys, coalesce(sum(people), 0)::int as people from (${chosen}) c`;
       const later = sql`case when both_ok > 0 then later end`;
-      const order = !p.vs ? sql`a_journey desc nulls last`
-        : p.query.order === 'best' ? sql`${later} asc nulls last, (gained > 0) desc`
-        : sql`(lost > 0) desc, ${later} desc nulls last`;
+      const order = !p.vs
+        ? sql`a_journey desc nulls last`
+        : p.query.order === 'best'
+          ? sql`${later} asc nulls last, (gained > 0) desc`
+          : sql`(lost > 0) desc, ${later} desc nulls last`;
       const rows = await sql`
         select journey_id as "journeyId", user_id as "user", people, start_secs as "start",
                a_status as "aStatus", b_status as "bStatus", a_arrive as "aArrive", b_arrive as "bArrive",
@@ -790,14 +894,20 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         select j.journey_id, j.people, coalesce(j.b_origin, j.a_origin) as origin, coalesce(j.b_destination, j.a_destination) as destination
         from (${sideBySide(p.a, p.b, p.band)}) j where ${condition} limit ${TRACE_LIMIT + 1}`;
       if (chosen.length > TRACE_LIMIT) {
-        throw fail(400, `More than ${TRACE_LIMIT.toLocaleString('en-AU')} journeys are too many to follow on the map. Pick a smaller group, or use "Passenger flow" for everyone.`);
+        throw fail(
+          400,
+          `More than ${TRACE_LIMIT.toLocaleString('en-AU')} journeys are too many to follow on the map. Pick a smaller group, or use "Passenger flow" for everyone.`,
+        );
       }
       const journeys = chosen.length;
       const people = chosen.reduce((sum, c) => sum + c.people, 0);
       const journeyIds = chosen.map((c) => c.journey_id as string);
       // Each ride is walked along its trip here, not in the database: the trips these people ride
       // are read once, where a query would look each ride's calls up one ride at a time.
-      const byLink = new Map<string, { from: number; to: number; a: number; b: number; mode: string | null }>();
+      const byLink = new Map<
+        string,
+        { from: number; to: number; a: number; b: number; mode: string | null }
+      >();
       const walk = async (run: number, side: 'a' | 'b') => {
         const rides = await sql`
           select trip_id, from_stop_id, to_stop_id, depart, arrive, people from sim_legs
@@ -809,7 +919,7 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
           from sim_trip_loads l join stops s on s.id = l.stop_id
           left join trips t on t.id = l.trip_id left join routes r on r.id = t.route_id
           where l.run_id = ${run} and l.trip_id = any(${tripIds}) order by l.trip_id, l.position`;
-        const ofTrip = new Map<string, typeof calls[number][]>();
+        const ofTrip = new Map<string, (typeof calls)[number][]>();
         for (const call of calls) {
           const key = String(call.trip_id);
           let list = ofTrip.get(key);
@@ -818,16 +928,20 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         }
         for (const ride of rides) {
           const list = ofTrip.get(String(ride.trip_id)) ?? [];
-          const from = list.findIndex((c) => c.stop_id === ride.from_stop_id && c.depart === ride.depart);
+          const from = list.findIndex(
+            (c) => c.stop_id === ride.from_stop_id && c.depart === ride.depart,
+          );
           if (from < 0) continue;
           let to = -1;
-          for (let i = from + 1; i < list.length && to < 0; i++) if (list[i].stop_id === ride.to_stop_id && list[i].arrive === ride.arrive) to = i;
+          for (let i = from + 1; i < list.length && to < 0; i++)
+            if (list[i].stop_id === ride.to_stop_id && list[i].arrive === ride.arrive) to = i;
           for (let i = from; i < to; i++) {
             const [here, next] = [Number(list[i].station), Number(list[i + 1].station)];
             if (here === next) continue;
             const key = `${here}>${next}`;
             let link = byLink.get(key);
-            if (!link) byLink.set(key, (link = { from: here, to: next, a: 0, b: 0, mode: list[i].mode_id }));
+            if (!link)
+              byLink.set(key, (link = { from: here, to: next, a: 0, b: 0, mode: list[i].mode_id }));
             link[side] += ride.people;
           }
         }
@@ -836,10 +950,15 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
       if (p.vs) await walk(p.b, 'b');
       const links = [...byLink.values()];
       // Where they start and end, a platform counted as its station.
-      const endIds = [...new Set(chosen.flatMap((c) => [c.origin, c.destination]).filter((id) => id !== null))];
+      const endIds = [
+        ...new Set(chosen.flatMap((c) => [c.origin, c.destination]).filter((id) => id !== null)),
+      ];
       const stationOf = new Map(
-        (endIds.length ? await sql`select id, coalesce(parent_id, id) as station from stops where id = any(${endIds})` : [])
-          .map((s) => [String(s.id), Number(s.station)]));
+        (endIds.length
+          ? await sql`select id, coalesce(parent_id, id) as station from stops where id = any(${endIds})`
+          : []
+        ).map((s) => [String(s.id), Number(s.station)]),
+      );
       const ends = (end: 'origin' | 'destination') => {
         const counts = new Map<number, number>();
         for (const c of chosen) {
@@ -850,16 +969,24 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
       };
       const origins = ends('origin');
       const destinations = ends('destination');
-      const ids =[...new Set([...links.flatMap((l) => [l.from, l.to]), ...origins.map((o) => o.id), ...destinations.map((d) => d.id)])];
+      const ids = [
+        ...new Set([
+          ...links.flatMap((l) => [l.from, l.to]),
+          ...origins.map((o) => o.id),
+          ...destinations.map((d) => d.id),
+        ]),
+      ];
       const stops = ids.length
         ? await sql`select id, name, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${ids})`
         : [];
       const at = new Map(stops.map((s) => [Number(s.id), s]));
       const placed = (rows: readonly Record<string, any>[]) =>
-        rows.filter((r) => at.has(Number(r.id))).map((r) => {
-          const stop = at.get(Number(r.id))!;
-          return [stop.lon, stop.lat, stop.name, r.people];
-        });
+        rows
+          .filter((r) => at.has(Number(r.id)))
+          .map((r) => {
+            const stop = at.get(Number(r.id))!;
+            return [stop.lon, stop.lat, stop.name, r.people];
+          });
       return {
         run: p.run.id,
         vs: p.vs?.id ?? null,
@@ -888,7 +1015,8 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         from sim_trip_loads l join trips t on t.id = l.trip_id join routes r on r.id = t.route_id
         where l.run_id in (${p.a}, ${p.b}) and l.depart >= ${p.band[0]} and l.depart < ${p.band[1]}
         group by 1 having sum(l.boardings) > 0 order by 2 desc`;
-      const use = (isA: boolean) => sql`coalesce(sum(x.boardings + x.alightings) filter (where x.is_a = ${isA}), 0)`;
+      const use = (isA: boolean) =>
+        sql`coalesce(sum(x.boardings + x.alightings) filter (where x.is_a = ${isA}), 0)`;
       const stations = await sql`
         select x.stop as id, s.name,
                coalesce(sum(x.boardings) filter (where x.is_a), 0)::int as "aOn",
@@ -905,7 +1033,15 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         group by x.stop, s.name
         order by ${p.vs ? sql`abs(${use(true)} - ${use(false)})` : use(true)} desc, ${use(true)} desc, s.name
         limit 20`;
-      if (archived) return { run: p.run.id, vs: p.vs?.id ?? null, byMode, stations, vehicles: null, stopChange: null };
+      if (archived)
+        return {
+          run: p.run.id,
+          vs: p.vs?.id ?? null,
+          byMode,
+          stations,
+          vehicles: null,
+          stopChange: null,
+        };
 
       const boarded = await sql`
         select run_id, least(boardings, 4) as n, sum(people)::int as people from sim_journeys
@@ -928,18 +1064,31 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
         // was removed, whom the simulator's own "changed stop" flag missed in runs made before
         // 20 Nov 2026.
         const [origin, destination] = [await moved('origin'), await moved('destination')];
-        const [{ compared }] = await sql`select coalesce(sum(both_ok), 0)::int as compared from (${sideBySide(p.a, p.b, p.band)}) j`;
-        const top = [...origin.slice(0, 6).map((m) => ({ ...m, end: 'origin' })), ...destination.slice(0, 6).map((m) => ({ ...m, end: 'destination' }))]
-          .sort((x: any, y: any) => y.people - x.people).slice(0, 8) as Record<string, any>[];
+        const [{ compared }] =
+          await sql`select coalesce(sum(both_ok), 0)::int as compared from (${sideBySide(p.a, p.b, p.band)}) j`;
+        const top = [
+          ...origin.slice(0, 6).map((m) => ({ ...m, end: 'origin' })),
+          ...destination.slice(0, 6).map((m) => ({ ...m, end: 'destination' })),
+        ]
+          .sort((x: any, y: any) => y.people - x.people)
+          .slice(0, 8) as Record<string, any>[];
         const ids = top.flatMap((m) => [m.fromId, m.toId]);
-        const names = new Map((ids.length ? await sql`select id, name from stops where id = any(${ids})` : []).map((s) => [Number(s.id), s.name]));
+        const names = new Map(
+          (ids.length ? await sql`select id, name from stops where id = any(${ids})` : []).map(
+            (s) => [Number(s.id), s.name],
+          ),
+        );
         stopChange = {
           compared,
           origin: origin.reduce((sum, m) => sum + m.people, 0),
           destination: destination.reduce((sum, m) => sum + m.people, 0),
           moves: top.map((m) => ({
-            end: m.end, people: m.people, fromId: Number(m.fromId), toId: Number(m.toId),
-            from: names.get(Number(m.fromId)) ?? '?', to: names.get(Number(m.toId)) ?? '?',
+            end: m.end,
+            people: m.people,
+            fromId: Number(m.fromId),
+            toId: Number(m.toId),
+            from: names.get(Number(m.fromId)) ?? '?',
+            to: names.get(Number(m.toId)) ?? '?',
           })),
         };
       }

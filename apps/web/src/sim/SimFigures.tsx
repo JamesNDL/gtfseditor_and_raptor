@@ -20,12 +20,18 @@ function Caveats({ outOfDate, capacity }: { outOfDate: boolean; capacity: boolea
   return (
     <>
       {outOfDate && (
-        <Tag kind="warn" title="The timetable has been edited, or the router's rules for walks and changes have changed, since this run. Trips that changed have no figures.">
+        <Tag
+          kind="warn"
+          title="The timetable has been edited, or the router's rules for walks and changes have changed, since this run. Trips that changed have no figures."
+        >
           out of date
         </Tag>
       )}
       {capacity && (
-        <Tag kind="warn" title="Vehicle capacities are round-number placeholders, so how full a vehicle is, and who is left behind, are illustrative.">
+        <Tag
+          kind="warn"
+          title="Vehicle capacities are round-number placeholders, so how full a vehicle is, and who is left behind, are illustrative."
+        >
           placeholder capacities
         </Tag>
       )}
@@ -44,7 +50,11 @@ interface RouteFigures {
 }
 
 /** A line's passengers: totals, how full it gets, and passengers against places by hour. */
-export function RoutePassengers({ routeId, places, directions }: {
+export function RoutePassengers({
+  routeId,
+  places,
+  directions,
+}: {
   routeId: number;
   places: HourlyRow[];
   directions: { direction: number; headsign: string | null }[];
@@ -63,22 +73,42 @@ export function RoutePassengers({ routeId, places, directions }: {
   }
   const hours = [...places.map((p) => p.hour), ...f.hourly.map((h) => h.hour)];
   const [h0, h1] = [Math.min(...hours), Math.max(...hours)];
-  const yMax = Math.max(1, ...places.map((p) => p.seated + p.standing), ...f.hourly.map((h) => h.passengers));
+  const yMax = Math.max(
+    1,
+    ...places.map((p) => p.seated + p.standing),
+    ...f.hourly.map((h) => h.passengers),
+  );
   return (
     <section className="sim-figures">
       <h3>
-        Passengers <span className="muted small">in "{run.name}"</span> <Caveats outOfDate={run.outOfDate} capacity />
+        Passengers <span className="muted small">in "{run.name}"</span>{' '}
+        <Caveats outOfDate={run.outOfDate} capacity />
       </h3>
       <div className="tiles">
-        <Tile value={fmt(f.passengers)} label="passengers a day" note="Boardings on this line's trips" />
-        <Tile value={fmt(f.tripsFull)} label="trips full" note={`Of ${fmt(f.trips)} trips with anyone aboard, those at or over 100% of capacity somewhere`} />
+        <Tile
+          value={fmt(f.passengers)}
+          label="passengers a day"
+          note="Boardings on this line's trips"
+        />
+        <Tile
+          value={fmt(f.tripsFull)}
+          label="trips full"
+          note={`Of ${fmt(f.trips)} trips with anyone aboard, those at or over 100% of capacity somewhere`}
+        />
         <Tile value={fmt(f.tripsOver80)} label="trips over 80%" />
-        {f.leftBehind > 0 && <Tile value={fmt(f.leftBehind)} label="left behind" note="Times a passenger could not board a full vehicle of this line" />}
+        {f.leftBehind > 0 && (
+          <Tile
+            value={fmt(f.leftBehind)}
+            label="left behind"
+            note="Times a passenger could not board a full vehicle of this line"
+          />
+        )}
       </div>
       {f.fullest && (
         <p className="muted small">
-          Fullest: {fmt(f.fullest.load)} aboard a vehicle that holds {fmt(f.fullest.capacity)} ({Math.round((100 * f.fullest.load) / f.fullest.capacity)}%),
-          leaving {f.fullest.stop ?? 'a stop'} at {formatSecs(f.fullest.depart)}.
+          Fullest: {fmt(f.fullest.load)} aboard a vehicle that holds {fmt(f.fullest.capacity)} (
+          {Math.round((100 * f.fullest.load) / f.fullest.capacity)}%), leaving{' '}
+          {f.fullest.stop ?? 'a stop'} at {formatSecs(f.fullest.depart)}.
         </p>
       )}
       <div className="chart-legend muted small">
@@ -88,18 +118,33 @@ export function RoutePassengers({ routeId, places, directions }: {
       {directions.map((d) => (
         <figure className="chart" key={d.direction}>
           <figcaption>{d.headsign ? `To ${d.headsign}` : `Direction ${d.direction}`}</figcaption>
-          <div className="station-hours sim-hours" role="img" aria-label="Passengers and places in each hour of the day">
+          <div
+            className="station-hours sim-hours"
+            role="img"
+            aria-label="Passengers and places in each hour of the day"
+          >
             {Array.from({ length: h1 - h0 + 1 }, (_, i) => {
               const hour = h0 + i;
               const row = places.find((p) => p.direction === d.direction && p.hour === hour);
               const room = row ? row.seated + row.standing : 0;
-              const riding = f.hourly.find((h) => h.direction === d.direction && h.hour === hour)?.passengers ?? 0;
+              const riding =
+                f.hourly.find((h) => h.direction === d.direction && h.hour === hour)?.passengers ??
+                0;
               return (
-                <div key={hour} className="station-hour" title={`${String(hour % 24).padStart(2, '0')}:00: ${fmt(riding)} passengers on trips with ${fmt(room)} places`}>
+                <div
+                  key={hour}
+                  className="station-hour"
+                  title={`${String(hour % 24).padStart(2, '0')}:00: ${fmt(riding)} passengers on trips with ${fmt(room)} places`}
+                >
                   <div className="sim-places" style={{ height: `${(room / yMax) * 100}%` }}>
-                    <div className={`station-bar${riding > room && room > 0 ? ' sim-over' : ''}`} style={{ height: `${room ? Math.min(100, (riding / room) * 100) : 0}%` }} />
+                    <div
+                      className={`station-bar${riding > room && room > 0 ? ' sim-over' : ''}`}
+                      style={{ height: `${room ? Math.min(100, (riding / room) * 100) : 0}%` }}
+                    />
                   </div>
-                  <span className="muted">{hour % 3 === 0 ? String(hour % 24).padStart(2, '0') : ''}</span>
+                  <span className="muted">
+                    {hour % 3 === 0 ? String(hour % 24).padStart(2, '0') : ''}
+                  </span>
                 </div>
               );
             })}
@@ -131,7 +176,11 @@ export function TripPassengers({ tripId }: { tripId: number }) {
     return (
       <section className="sim-figures">
         <h3>Passengers</h3>
-        <p className="note">{run.outOfDate ? `This trip has changed since "${run.name}" was run, so it has no figures.` : `Nobody rides this trip in "${run.name}".`}</p>
+        <p className="note">
+          {run.outOfDate
+            ? `This trip has changed since "${run.name}" was run, so it has no figures.`
+            : `Nobody rides this trip in "${run.name}".`}
+        </p>
       </section>
     );
   }
@@ -142,20 +191,31 @@ export function TripPassengers({ tripId }: { tripId: number }) {
   return (
     <section className="sim-figures">
       <h3>
-        Passengers <span className="muted small">in "{run.name}"</span> <Caveats outOfDate={run.outOfDate} capacity />
+        Passengers <span className="muted small">in "{run.name}"</span>{' '}
+        <Caveats outOfDate={run.outOfDate} capacity />
       </h3>
       <div className="tiles">
         <Tile value={fmt(rows.reduce((sum, r) => sum + r.boardings, 0))} label="boardings" />
-        <Tile value={`${fmt(peak)} of ${fmt(capacity)}`} label="most aboard" note={`${Math.round((100 * peak) / Math.max(1, capacity))}% of capacity`} />
+        <Tile
+          value={`${fmt(peak)} of ${fmt(capacity)}`}
+          label="most aboard"
+          note={`${Math.round((100 * peak) / Math.max(1, capacity))}% of capacity`}
+        />
         {left > 0 && <Tile value={fmt(left)} label="left behind" />}
       </div>
       <ol className="sim-loads">
         {rows.map((r) => (
-          <li key={r.position} title={`${fmt(r.load)} aboard on leaving, ${fmt(r.boardings)} on, ${fmt(r.alightings)} off${r.leftBehind ? `, ${fmt(r.leftBehind)} left behind` : ''}`}>
+          <li
+            key={r.position}
+            title={`${fmt(r.load)} aboard on leaving, ${fmt(r.boardings)} on, ${fmt(r.alightings)} off${r.leftBehind ? `, ${fmt(r.leftBehind)} left behind` : ''}`}
+          >
             <span className="sim-load-time muted">{formatSecs(r.depart)}</span>
             <span className="sim-load-stop ellipsis">{r.stop ?? 'a stop'}</span>
             <span className="sim-load-bar">
-              <span className={r.load >= capacity && capacity > 0 ? 'sim-over' : ''} style={{ width: `${(r.load / top) * 100}%` }} />
+              <span
+                className={r.load >= capacity && capacity > 0 ? 'sim-over' : ''}
+                style={{ width: `${(r.load / top) * 100}%` }}
+              />
               <i style={{ left: `${(capacity / top) * 100}%` }} />
             </span>
             <span className="sim-load-n">{fmt(r.load)}</span>
@@ -208,39 +268,60 @@ export function StationPassengers({ stopId }: { stopId: number }) {
   }
   const hours = [...byHour.keys()].sort((a, b) => a - b);
   const peak = Math.max(1, ...[...byHour.values()].map((h) => Math.max(h.on, h.off)));
-  const total = (pick: (q: StopQuarter) => number) => quarters.data!.reduce((sum, q) => sum + pick(q), 0);
+  const total = (pick: (q: StopQuarter) => number) =>
+    quarters.data!.reduce((sum, q) => sum + pick(q), 0);
   const waiting = quarters.data.reduce((best, q) => (q.maxWaiting > best.maxWaiting ? q : best));
   return (
     <section className="sim-figures">
       <h3>
-        Passengers <span className="muted small">in "{run.name}"</span> <Caveats outOfDate={run.outOfDate} capacity={false} />
+        Passengers <span className="muted small">in "{run.name}"</span>{' '}
+        <Caveats outOfDate={run.outOfDate} capacity={false} />
       </h3>
       <div className="tiles">
         <Tile value={fmt(total((q) => q.boardings))} label="boardings" />
         <Tile value={fmt(total((q) => q.alightings))} label="alightings" />
-        <Tile value={fmt(total((q) => q.changes))} label="changes" note="Boardings by passengers who had just left another vehicle" />
+        <Tile
+          value={fmt(total((q) => q.changes))}
+          label="changes"
+          note="Boardings by passengers who had just left another vehicle"
+        />
         <Tile
           value={fmt(waiting.maxWaiting)}
           label={waiting.platforms > 1 ? 'most waiting at one platform' : 'most waiting'}
           note={`At once, around ${formatSecs(waiting.quarterStart)}.${waiting.maxWaitingAtMost > waiting.maxWaiting ? ` Across all its platforms it is between ${fmt(waiting.maxWaiting)} and ${fmt(waiting.maxWaitingAtMost)}: each platform's fullest moment is known, but not whether they fall together.` : ''}`}
         />
-        {total((q) => q.leftBehind) > 0 && <Tile value={fmt(total((q) => q.leftBehind))} label="left behind" />}
+        {total((q) => q.leftBehind) > 0 && (
+          <Tile value={fmt(total((q) => q.leftBehind))} label="left behind" />
+        )}
       </div>
       <div className="chart-legend muted small">
         <span className="legend-swatch legend-after" /> getting on
         <span className="legend-swatch sim-legend-off" /> getting off
       </div>
-      <div className="station-hours sim-hours" role="img" aria-label="Boardings and alightings in each hour of the day">
+      <div
+        className="station-hours sim-hours"
+        role="img"
+        aria-label="Boardings and alightings in each hour of the day"
+      >
         {Array.from({ length: hours[hours.length - 1] - hours[0] + 1 }, (_, i) => {
           const hour = hours[0] + i;
           const row = byHour.get(hour) ?? { on: 0, off: 0 };
           return (
-            <div key={hour} className="station-hour sim-pair" title={`${String(hour % 24).padStart(2, '0')}:00: ${fmt(row.on)} on, ${fmt(row.off)} off`}>
+            <div
+              key={hour}
+              className="station-hour sim-pair"
+              title={`${String(hour % 24).padStart(2, '0')}:00: ${fmt(row.on)} on, ${fmt(row.off)} off`}
+            >
               <div className="sim-pair-bars">
                 <div className="station-bar" style={{ height: `${(row.on / peak) * 100}%` }} />
-                <div className="station-bar sim-off" style={{ height: `${(row.off / peak) * 100}%` }} />
+                <div
+                  className="station-bar sim-off"
+                  style={{ height: `${(row.off / peak) * 100}%` }}
+                />
               </div>
-              <span className="muted">{hour % 3 === 0 ? String(hour % 24).padStart(2, '0') : ''}</span>
+              <span className="muted">
+                {hour % 3 === 0 ? String(hour % 24).padStart(2, '0') : ''}
+              </span>
             </div>
           );
         })}

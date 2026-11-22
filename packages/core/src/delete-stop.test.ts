@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { choosePlatform, removeCalls, type PlatformOption, type RemovalCall } from './delete-stop.ts';
+import {
+  choosePlatform,
+  removeCalls,
+  type PlatformOption,
+  type RemovalCall,
+} from './delete-stop.ts';
 
-const call = (seq: number, arr: number, dep = arr, flags: { gone?: boolean; passing?: boolean } = {}): RemovalCall => ({
+const call = (
+  seq: number,
+  arr: number,
+  dep = arr,
+  flags: { gone?: boolean; passing?: boolean } = {},
+): RemovalCall => ({
   seq,
   arr,
   dep,
@@ -38,10 +48,14 @@ describe('removeCalls', () => {
   });
 
   it('uses the time published non-stop trips take when there is one', () => {
-    const out = removeCalls(trip([3]), (from, to, current) => {
-      expect([from, to, current]).toEqual([2, 4, 1230]);
-      return 1100;
-    }, 45);
+    const out = removeCalls(
+      trip([3]),
+      (from, to, current) => {
+        expect([from, to, current]).toEqual([2, 4, 1230]);
+        return 1100;
+      },
+      45,
+    );
     expect(out.savingSecs).toBe(130);
     expect(out.estimated).toBe(false);
   });
@@ -63,7 +77,14 @@ describe('removeCalls', () => {
     const none = removeCalls(trip([3]), nothingLearned, 45, () => 2000);
     expect(none.savingSecs).toBe(0);
     expect(none.kept![2]).toEqual({ seq: 4, arr: 1860, dep: 1890 });
-    expect(removeCalls(trip([3]), () => 1100, 45, () => 1200).savingSecs).toBe(130);
+    expect(
+      removeCalls(
+        trip([3]),
+        () => 1100,
+        45,
+        () => 1200,
+      ).savingSecs,
+    ).toBe(130);
   });
 
   it('cuts a trip short at its first stop and keeps the other times', () => {
@@ -73,7 +94,11 @@ describe('removeCalls', () => {
     expect(out.savingSecs).toBe(0);
     // It now starts at the second stop when it used to leave it.
     expect(out.kept![0]).toEqual({ seq: 2, arr: 630, dep: 630 });
-    expect(out.kept!.slice(1)).toEqual([{ seq: 3, arr: 1230, dep: 1260 }, { seq: 4, arr: 1860, dep: 1890 }, { seq: 5, arr: 2490, dep: 2490 }]);
+    expect(out.kept!.slice(1)).toEqual([
+      { seq: 3, arr: 1230, dep: 1260 },
+      { seq: 4, arr: 1860, dep: 1890 },
+      { seq: 5, arr: 2490, dep: 2490 },
+    ]);
   });
 
   it('cuts a trip short at its last stop', () => {
@@ -91,7 +116,9 @@ describe('removeCalls', () => {
   });
 
   it('removes a trip left with fewer than two stops', () => {
-    expect(removeCalls([call(1, 0, 0, { gone: true }), call(2, 600)], nothingLearned, 45).kept).toBeNull();
+    expect(
+      removeCalls([call(1, 0, 0, { gone: true }), call(2, 600)], nothingLearned, 45).kept,
+    ).toBeNull();
     expect(removeCalls(trip([1, 2, 3, 4]), nothingLearned, 45).kept).toBeNull();
   });
 
@@ -101,11 +128,22 @@ describe('removeCalls', () => {
     const out = removeCalls(calls, () => 1, 45);
     expect(out.savingSecs).toBe(0);
     expect(out.skipped).toBe(0);
-    expect(out.kept!.map((c) => [c.seq, c.arr, c.dep])).toEqual([[1, 0, 0], [2, 600, 630], [4, 1860, 1890], [5, 2490, 2490]]);
+    expect(out.kept!.map((c) => [c.seq, c.arr, c.dep])).toEqual([
+      [1, 0, 0],
+      [2, 600, 630],
+      [4, 1860, 1890],
+      [5, 2490, 2490],
+    ]);
   });
 
   it('keeps other pass-throughs in order between the neighbours', () => {
-    const calls = [call(1, 0), call(2, 300, 300, { passing: true }), call(3, 600, 660, { gone: true }), call(4, 900, 900, { passing: true }), call(5, 1200)];
+    const calls = [
+      call(1, 0),
+      call(2, 300, 300, { passing: true }),
+      call(3, 600, 660, { gone: true }),
+      call(4, 900, 900, { passing: true }),
+      call(5, 1200),
+    ];
     const out = removeCalls(calls, nothingLearned, 45);
     expect(out.kept!.map((c) => c.seq)).toEqual([1, 2, 4, 5]);
     expect(out.savingSecs).toBe(105);
@@ -114,7 +152,12 @@ describe('removeCalls', () => {
   });
 
   it('does not leave a trip starting with a pass-through', () => {
-    const calls = [call(1, 0, 0, { gone: true }), call(2, 300, 300, { passing: true }), call(3, 600, 630), call(4, 1200)];
+    const calls = [
+      call(1, 0, 0, { gone: true }),
+      call(2, 300, 300, { passing: true }),
+      call(3, 600, 630),
+      call(4, 1200),
+    ];
     const out = removeCalls(calls, nothingLearned, 45);
     expect(out.kept!.map((c) => c.seq)).toEqual([3, 4]);
     expect(out.kept![0]).toEqual({ seq: 3, arr: 630, dep: 630 });
@@ -123,8 +166,16 @@ describe('removeCalls', () => {
   it('never makes any trip of many shapes run out of order or longer', () => {
     // Every way of deleting stops from a seven-stop trip.
     for (let mask = 1; mask < 1 << 7; mask++) {
-      const calls = Array.from({ length: 7 }, (_, i) => call(i + 1, i * 400, i * 400 + (i === 0 || i === 6 ? 0 : 20), { gone: (mask & (1 << i)) !== 0 }));
-      const out = removeCalls(calls, (_f, _t, current) => (mask % 3 === 0 ? current - 37 : null), 20);
+      const calls = Array.from({ length: 7 }, (_, i) =>
+        call(i + 1, i * 400, i * 400 + (i === 0 || i === 6 ? 0 : 20), {
+          gone: (mask & (1 << i)) !== 0,
+        }),
+      );
+      const out = removeCalls(
+        calls,
+        (_f, _t, current) => (mask % 3 === 0 ? current - 37 : null),
+        20,
+      );
       if (!out.kept) continue;
       expect(inOrder(out.kept)).toBe(true);
       for (const k of out.kept) {
@@ -134,7 +185,9 @@ describe('removeCalls', () => {
       }
       // Between any two stops it keeps, the trip takes at least half as long as before.
       for (let i = 1; i < out.kept.length; i++) {
-        const was = calls.find((c) => c.seq === out.kept![i].seq)!.arr - calls.find((c) => c.seq === out.kept![i - 1].seq)!.dep;
+        const was =
+          calls.find((c) => c.seq === out.kept![i].seq)!.arr -
+          calls.find((c) => c.seq === out.kept![i - 1].seq)!.dep;
         expect(out.kept[i].arr - out.kept[i - 1].dep).toBeGreaterThanOrEqual(Math.round(was * 0.5));
       }
     }
@@ -142,7 +195,11 @@ describe('removeCalls', () => {
 });
 
 describe('choosePlatform', () => {
-  const option = (id: number, uses: number, busy: [number, number, number][] = []): PlatformOption => ({
+  const option = (
+    id: number,
+    uses: number,
+    busy: [number, number, number][] = [],
+  ): PlatformOption => ({
     id,
     uses,
     busy: busy.map(([from, to, trip]) => ({ from, to, trips: [trip] })),
@@ -150,13 +207,28 @@ describe('choosePlatform', () => {
   const at = { arr: 1000, dep: 1060, tripId: 7 };
 
   it('prefers a free platform the line already uses', () => {
-    expect(choosePlatform([option(1, 0), option(2, 3), option(3, 5, [[1000, 1100, 9]])], at)).toEqual({ id: 2, free: true, usual: true });
+    expect(
+      choosePlatform([option(1, 0), option(2, 3), option(3, 5, [[1000, 1100, 9]])], at),
+    ).toEqual({ id: 2, free: true, usual: true });
   });
   it('takes a free platform the line does not use before a busy one it does', () => {
-    expect(choosePlatform([option(1, 4, [[900, 1010, 9]]), option(2, 0)], at)).toEqual({ id: 2, free: true, usual: false });
+    expect(choosePlatform([option(1, 4, [[900, 1010, 9]]), option(2, 0)], at)).toEqual({
+      id: 2,
+      free: true,
+      usual: false,
+    });
   });
   it('takes the least busy when none is free, and says so', () => {
-    const pick = choosePlatform([option(1, 2, [[990, 1010, 8], [1050, 1070, 9]]), option(2, 2, [[1000, 1100, 9]])], at);
+    const pick = choosePlatform(
+      [
+        option(1, 2, [
+          [990, 1010, 8],
+          [1050, 1070, 9],
+        ]),
+        option(2, 2, [[1000, 1100, 9]]),
+      ],
+      at,
+    );
     expect(pick).toEqual({ id: 2, free: false, usual: true });
   });
   it('counts a minute either side as taken', () => {

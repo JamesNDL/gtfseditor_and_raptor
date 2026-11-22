@@ -55,7 +55,9 @@ function samePlace(a: number | null, b: number | null, stops: Map<number, WaitSt
  * starts before this one ends, or when the wait is longer than MAX_DRAWN_WAIT_SECS.
  */
 export function vehicleWaits(trips: WaitTrip[], stops: Map<number, WaitStop>): Int32Array {
-  const sorted = [...trips].sort((a, b) => a.vehicleDayId - b.vehicleDayId || a.startSecs - b.startSecs || a.id - b.id);
+  const sorted = [...trips].sort(
+    (a, b) => a.vehicleDayId - b.vehicleDayId || a.startSecs - b.startSecs || a.id - b.id,
+  );
   const pairs: number[] = [];
   for (let k = 0; k + 1 < sorted.length; k++) {
     const trip = sorted[k];
@@ -81,7 +83,12 @@ export type VehicleState = typeof VEHICLE_GONE | typeof VEHICLE_RUNNING | typeof
  * has no wait to draw. The wait stops the instant the next trip starts, so the vehicle is never
  * drawn twice.
  */
-export function vehicleState(tripStart: number, tripEnd: number, holdUntil: number, secs: number): VehicleState {
+export function vehicleState(
+  tripStart: number,
+  tripEnd: number,
+  holdUntil: number,
+  secs: number,
+): VehicleState {
   if (secs < tripStart) return VEHICLE_GONE;
   if (secs <= tripEnd) return VEHICLE_RUNNING;
   return secs < holdUntil ? VEHICLE_WAITING : VEHICLE_GONE;
@@ -101,5 +108,7 @@ export function vehiclePosition(
 ): VehicleState {
   const state = vehicleState(pack.tripStart[i], pack.tripEnd[i], holdUntil, secs);
   if (state === VEHICLE_GONE) return state;
-  return tripPosition(pack, i, state === VEHICLE_WAITING ? pack.tripEnd[i] : secs, out, outIndex) ? state : VEHICLE_GONE;
+  return tripPosition(pack, i, state === VEHICLE_WAITING ? pack.tripEnd[i] : secs, out, outIndex)
+    ? state
+    : VEHICLE_GONE;
 }

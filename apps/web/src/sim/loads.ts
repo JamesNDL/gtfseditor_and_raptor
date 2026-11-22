@@ -12,7 +12,11 @@ interface TripLoad {
   steps: number[];
 }
 
-export const tripLoads: { runId: number | null; byTrip: Map<number, TripLoad>; error: string | null } = { runId: null, byTrip: new Map(), error: null };
+export const tripLoads: {
+  runId: number | null;
+  byTrip: Map<number, TripLoad>;
+  error: string | null;
+} = { runId: null, byTrip: new Map(), error: null };
 
 let loading: { runId: number; done: Promise<void> } | null = null;
 
@@ -59,7 +63,10 @@ export function stepAt(tripId: number, secs: number): number {
 /** The colour of a step, as a hex string; empty is a quiet grey. */
 export const EMPTY_COLOR = '#5b6470';
 export const stepColor = (step: number) => (step <= 0 ? EMPTY_COLOR : FULL_STEPS[step - 1].color);
-export const stepLabel = (step: number) => (step <= 0 ? 'empty' : `${FULL_STEPS[step - 1].label} full`.replace('under half full', 'under half full'));
+export const stepLabel = (step: number) =>
+  step <= 0
+    ? 'empty'
+    : `${FULL_STEPS[step - 1].label} full`.replace('under half full', 'under half full');
 
 /** A trip's fullest moment in words, or null when it carries nobody. */
 export function peakText(tripId: number): string | null {
@@ -78,7 +85,11 @@ export function useTripColours(): number | null {
   const on = useStore((s) => s.simTripColours);
   const scenarioId = useStore((s) => s.scenarioId);
   const run = useStore((s) => s.simRuns.find((r) => r.id === s.simRunId));
-  const fits = on && !!run && run.state === 'done' && (run.kind === 'scenario' ? run.scenarioId : null) === scenarioId;
+  const fits =
+    on &&
+    !!run &&
+    run.state === 'done' &&
+    (run.kind === 'scenario' ? run.scenarioId : null) === scenarioId;
   const runId = fits ? run.id : null;
   const [ready, setReady] = useState<number | null>(tripLoads.runId);
   useEffect(() => {

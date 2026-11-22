@@ -30,8 +30,8 @@ export function VehicleDayPanel({ vehicleDayId }: { vehicleDayId: number }) {
         {d.isNew
           ? 'This vehicle was added by the scenario to run its new trips. It is not in the published timetable.'
           : d.source === 'run_number'
-          ? "This vehicle's day comes from the run number in the feed's trip IDs."
-          : "This vehicle's day is inferred: trips were chained where one ends near where the next begins. It is an estimate, not the operator's roster."}
+            ? "This vehicle's day comes from the run number in the feed's trip IDs."
+            : "This vehicle's day is inferred: trips were chained where one ends near where the next begins. It is an estimate, not the operator's roster."}
       </p>
 
       <div className="tiles">
@@ -57,7 +57,14 @@ export function VehicleDayPanel({ vehicleDayId }: { vehicleDayId: number }) {
         </div>
       )}
 
-      {editing && <VehicleTypePicker scope="vehicleDay" id={d.id} modeId={d.modeId} label="Run this vehicle as" />}
+      {editing && (
+        <VehicleTypePicker
+          scope="vehicleDay"
+          id={d.id}
+          modeId={d.modeId}
+          label="Run this vehicle as"
+        />
+      )}
 
       <section>
         <h3>The day, in order</h3>
@@ -72,7 +79,8 @@ export function VehicleDayPanel({ vehicleDayId }: { vehicleDayId: number }) {
                       <span>Passengers stay aboard · {duration(t.startSecs - prev.endSecs)}</span>
                     ) : prev.lastStationId !== t.firstStationId ? (
                       <span className="warn-text">
-                        Empty run needed: {shortStop(prev.lastStop)} to {shortStop(t.firstStop)} · {duration(t.startSecs - prev.endSecs)}
+                        Empty run needed: {shortStop(prev.lastStop)} to {shortStop(t.firstStop)} ·{' '}
+                        {duration(t.startSecs - prev.endSecs)}
                       </span>
                     ) : (
                       <span>Waits {duration(t.startSecs - prev.endSecs)}</span>

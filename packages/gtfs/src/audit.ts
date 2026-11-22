@@ -23,7 +23,9 @@ const SECS = (col: string) =>
 let date = process.argv[2];
 if (!date) {
   const [row] = await query(`select min(start_date) d from calendar`);
-  const d = new Date(`${String(row.d).slice(0, 4)}-${String(row.d).slice(4, 6)}-${String(row.d).slice(6, 8)}T00:00:00Z`);
+  const d = new Date(
+    `${String(row.d).slice(0, 4)}-${String(row.d).slice(4, 6)}-${String(row.d).slice(6, 8)}T00:00:00Z`,
+  );
   while (d.getUTCDay() !== 2) d.setUTCDate(d.getUTCDate() + 1);
   date = d.toISOString().slice(0, 10).replaceAll('-', '');
 }

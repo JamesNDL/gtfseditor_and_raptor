@@ -38,7 +38,10 @@ function versionId(lastModified: string): string {
 }
 
 async function exists(p: string): Promise<boolean> {
-  return stat(p).then(() => true, () => false);
+  return stat(p).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function readManifest(file: string): Promise<Manifest> {
@@ -67,7 +70,9 @@ export async function ensureFeed(options: EnsureFeedOptions): Promise<FeedVersio
   } catch (err) {
     // Offline or TfNSW down: fall back to whatever we already have.
     if (latestCached && (await exists(latestCached.dir))) {
-      log(`Could not check TfNSW for a newer feed (${(err as Error).message}); using cached ${latestCached.id}`);
+      log(
+        `Could not check TfNSW for a newer feed (${(err as Error).message}); using cached ${latestCached.id}`,
+      );
       return latestCached;
     }
     throw err;
@@ -90,7 +95,8 @@ export async function ensureFeed(options: EnsureFeedOptions): Promise<FeedVersio
   } else {
     log(`Downloading feed published ${lastModified} ...`);
     const res = await fetch(FEED_URL, { headers });
-    if (!res.ok || !res.body) throw new Error(`Feed download failed: TfNSW responded ${res.status}`);
+    if (!res.ok || !res.body)
+      throw new Error(`Feed download failed: TfNSW responded ${res.status}`);
     await pipeline(Readable.fromWeb(res.body as any), createWriteStream(partPath));
     await rename(partPath, zipPath);
   }

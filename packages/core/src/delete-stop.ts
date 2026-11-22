@@ -52,7 +52,14 @@ export function removeCalls(
   penaltySecs: number,
   floorSecs?: (fromSeq: number, toSeq: number) => number,
 ): CallRemoval {
-  const none: CallRemoval = { kept: null, cutStart: false, cutEnd: false, skipped: 0, savingSecs: 0, estimated: false };
+  const none: CallRemoval = {
+    kept: null,
+    cutStart: false,
+    cutEnd: false,
+    skipped: 0,
+    savingSecs: 0,
+    estimated: false,
+  };
   // A trip cannot begin or end by running through somewhere, so pass-throughs left at either end go too.
   let first = 0;
   let last = calls.length - 1;
@@ -83,7 +90,8 @@ export function removeCalls(
       const seen = learned(a.seq, c.seq, current);
       if (seen !== null && seen < current) target = Math.round(seen);
       else {
-        target = current - lost.reduce((sum, b) => sum + (b.dep - b.arr), 0) - penaltySecs * lost.length;
+        target =
+          current - lost.reduce((sum, b) => sum + (b.dep - b.arr), 0) - penaltySecs * lost.length;
         if (floorSecs) target = Math.max(target, Math.ceil(floorSecs(a.seq, c.seq)));
         estimated = true;
       }
@@ -131,17 +139,25 @@ export interface PlatformPick {
  * the fewest other trips there at that time, and among equals the one the line uses most.
  * Options are given in platform order, which settles what is left. Null when there is no other platform.
  */
-export function choosePlatform(options: PlatformOption[], call: { arr: number; dep: number; tripId: number }, marginSecs = 60): PlatformPick | null {
+export function choosePlatform(
+  options: PlatformOption[],
+  call: { arr: number; dep: number; tripId: number },
+  marginSecs = 60,
+): PlatformPick | null {
   const from = call.arr - marginSecs;
   const to = call.dep + marginSecs;
   let best: { option: PlatformOption; clashes: number } | null = null;
   for (const option of options) {
-    const clashes = option.busy.filter((b) => b.from < to && b.to > from && !b.trips.includes(call.tripId)).length;
+    const clashes = option.busy.filter(
+      (b) => b.from < to && b.to > from && !b.trips.includes(call.tripId),
+    ).length;
     const better =
       !best ||
       // Free and already used by the line beats everything; otherwise fewest clashes, then most used.
-      Number(clashes === 0 && option.uses > 0) > Number(best.clashes === 0 && best.option.uses > 0) ||
-      (Number(clashes === 0 && option.uses > 0) === Number(best.clashes === 0 && best.option.uses > 0) &&
+      Number(clashes === 0 && option.uses > 0) >
+        Number(best.clashes === 0 && best.option.uses > 0) ||
+      (Number(clashes === 0 && option.uses > 0) ===
+        Number(best.clashes === 0 && best.option.uses > 0) &&
         (clashes < best.clashes || (clashes === best.clashes && option.uses > best.option.uses)));
     if (better) best = { option, clashes };
   }

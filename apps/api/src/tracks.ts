@@ -57,7 +57,8 @@ async function build(sql: Sql, baselineId: number, modeId: string): Promise<Netw
     if (!coords || coords.length < 2) continue;
     const key = `${r.a}>${r.b}`;
     const seen = best.get(key);
-    if (!seen || metres < seen.metres) best.set(key, { a: Number(r.a), b: Number(r.b), coords, metres });
+    if (!seen || metres < seen.metres)
+      best.set(key, { a: Number(r.a), b: Number(r.b), coords, metres });
   }
   const network: Network = new Map();
   const add = (from: number, link: Link) => {
@@ -68,7 +69,8 @@ async function build(sql: Sql, baselineId: number, modeId: string): Promise<Netw
   for (const link of best.values()) {
     add(link.a, { to: link.b, coords: link.coords, metres: link.metres });
     // Track and water can be used both ways, even where the timetable only runs one way.
-    if (!best.has(`${link.b}>${link.a}`)) add(link.b, { to: link.a, coords: [...link.coords].reverse(), metres: link.metres });
+    if (!best.has(`${link.b}>${link.a}`))
+      add(link.b, { to: link.a, coords: [...link.coords].reverse(), metres: link.metres });
   }
   return network;
 }
@@ -139,7 +141,12 @@ export interface TrackPath {
 }
 
 /** The path through a list of stations: along the published network where it joins them, straight elsewhere. */
-export async function trackPath(sql: Sql, baselineId: number, modeId: string, stops: TrackStop[]): Promise<TrackPath> {
+export async function trackPath(
+  sql: Sql,
+  baselineId: number,
+  modeId: string,
+  stops: TrackStop[],
+): Promise<TrackPath> {
   const net = await network(sql, baselineId, modeId);
   const coords: Coord[] = [];
   const at: number[] = [];
@@ -161,6 +168,11 @@ export async function trackPath(sql: Sql, baselineId: number, modeId: string, st
 }
 
 /** Whether any published service of this mode runs through a station. */
-export async function onNetwork(sql: Sql, baselineId: number, modeId: string, stationId: number): Promise<boolean> {
+export async function onNetwork(
+  sql: Sql,
+  baselineId: number,
+  modeId: string,
+  stationId: number,
+): Promise<boolean> {
   return (await network(sql, baselineId, modeId)).has(stationId);
 }

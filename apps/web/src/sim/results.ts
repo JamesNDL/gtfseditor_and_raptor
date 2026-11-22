@@ -11,7 +11,19 @@ export type ResultsTab = 'overview' | 'time' | 'lines' | 'patterns' | 'people';
  * or a stop.
  */
 export type Who =
-  | { kind: 'changed' | 'later' | 'sooner' | 'soonerTruly' | 'soonerNearby' | 'lost' | 'gaveUp' | 'noJourney' | 'gained' | 'all' }
+  | {
+      kind:
+        | 'changed'
+        | 'later'
+        | 'sooner'
+        | 'soonerTruly'
+        | 'soonerNearby'
+        | 'lost'
+        | 'gaveUp'
+        | 'noJourney'
+        | 'gained'
+        | 'all';
+    }
   | { kind: 'group'; group: number }
   | { kind: 'line'; id: number; name: string }
   | { kind: 'link'; from: number; to: number; name: string }
@@ -19,7 +31,8 @@ export type Who =
   | { kind: 'user'; id: string };
 
 /** Whether a set is of people who use something, which they may do in one run and not the other. */
-export const whoHasSide = (who: Who) => who.kind === 'line' || who.kind === 'link' || who.kind === 'stop';
+export const whoHasSide = (who: Who) =>
+  who.kind === 'line' || who.kind === 'link' || who.kind === 'stop';
 
 /** The set as the API takes it. `side` says in which run they use it: this one (a) or the other (b). */
 export function whoParam(who: Who, side: 'a' | 'b'): string {
@@ -104,7 +117,12 @@ export interface SimMapState {
 }
 
 /** The address of one of a run's results, with the comparison and part of the day chosen. */
-export function resultsUrl(runId: number, what: string, state: Pick<SimResultsState, 'vs' | 'band'>, more: Record<string, string> = {}) {
+export function resultsUrl(
+  runId: number,
+  what: string,
+  state: Pick<SimResultsState, 'vs' | 'band'>,
+  more: Record<string, string> = {},
+) {
   const params = new URLSearchParams(more);
   if (state.vs !== null) params.set('vs', String(state.vs));
   if (state.band !== null) {
@@ -126,7 +144,8 @@ export interface Fetched<T> {
 export async function fetchResults<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as { message?: string }).message ?? `Request failed (${res.status})`);
+  if (!res.ok)
+    throw new Error((json as { message?: string }).message ?? `Request failed (${res.status})`);
   return json as T;
 }
 
@@ -139,7 +158,8 @@ export function useResults<T>(url: string | null): Fetched<T> {
     fetchResults<T>(url, controller.signal).then(
       (data) => setState({ data, error: null, loading: false }),
       (err) => {
-        if (!controller.signal.aborted) setState({ data: null, error: String(err.message ?? err), loading: false });
+        if (!controller.signal.aborted)
+          setState({ data: null, error: String(err.message ?? err), loading: false });
       },
     );
     return () => controller.abort();
@@ -174,10 +194,11 @@ export type Capacities = { trips: number; placeholder: number } | null;
 
 /** What to say wherever a figure rests on vehicle capacities; nothing when they are real. */
 export const placeholderNote = (capacity: Capacities | undefined): string | null =>
-  !capacity || capacity.placeholder === 0 ? null
-  : capacity.placeholder >= capacity.trips
-    ? 'Every vehicle capacity is a round-number placeholder, so how full a vehicle is, and who is left behind, are illustrative.'
-    : `${capacity.placeholder.toLocaleString('en-AU')} of ${capacity.trips.toLocaleString('en-AU')} trips have a placeholder or assumed capacity, so how full they are is illustrative.`;
+  !capacity || capacity.placeholder === 0
+    ? null
+    : capacity.placeholder >= capacity.trips
+      ? 'Every vehicle capacity is a round-number placeholder, so how full a vehicle is, and who is left behind, are illustrative.'
+      : `${capacity.placeholder.toLocaleString('en-AU')} of ${capacity.trips.toLocaleString('en-AU')} trips have a placeholder or assumed capacity, so how full they are is illustrative.`;
 
 export interface Overview {
   run: { id: number; name: string; kind: string };
@@ -210,8 +231,18 @@ export interface Overview {
   net?: { hoursLost: number; hoursGained: number; hours: number; atLeast: boolean };
   lost?: { people: number; gaveUp: number; stranded: number };
   gained?: number;
-  parts?: { all: { people: number; a: Parts; b: Parts }; changed: { people: number; a: Parts; b: Parts } };
-  byHour?: { hour: number; groups: number[]; lost: number; gained: number; nearby: number; gaveUp: number }[];
+  parts?: {
+    all: { people: number; a: Parts; b: Parts };
+    changed: { people: number; a: Parts; b: Parts };
+  };
+  byHour?: {
+    hour: number;
+    groups: number[];
+    lost: number;
+    gained: number;
+    nearby: number;
+    gaveUp: number;
+  }[];
   byLength?: { length: number; people: number; groups: number[]; meanLaterMinutes: number }[];
 }
 
@@ -246,14 +277,28 @@ export interface Shift {
   riders: number;
   /** Those of them who do not ride it in the second. */
   people: number;
-  lines: { id: number; shortName: string | null; longName: string | null; color: string | null; people: number }[];
+  lines: {
+    id: number;
+    shortName: string | null;
+    longName: string | null;
+    color: string | null;
+    people: number;
+  }[];
   notTravelling: number;
 }
 
 export interface LineDetail {
   line: number;
   hourly: { isA: boolean; hour: number; boardings: number }[];
-  stops: { id: number; name: string; aOn: number; aOff: number; bOn: number; bOff: number; at: number }[];
+  stops: {
+    id: number;
+    name: string;
+    aOn: number;
+    aOff: number;
+    bOn: number;
+    bOff: number;
+    at: number;
+  }[];
   went: Shift | null;
   cameFrom: Shift | null;
 }
@@ -298,10 +343,26 @@ export interface Patterns {
     compared: number;
     origin: number;
     destination: number;
-    moves: { end: 'origin' | 'destination'; from: string; to: string; fromId: number; toId: number; people: number }[];
+    moves: {
+      end: 'origin' | 'destination';
+      from: string;
+      to: string;
+      fromId: number;
+      toId: number;
+      people: number;
+    }[];
   } | null;
   /** Stations and stops by passengers on and off, and changing there. */
-  stations: { id: number; name: string; aOn: number; aOff: number; aChanges: number; bOn: number; bOff: number; bChanges: number }[];
+  stations: {
+    id: number;
+    name: string;
+    aOn: number;
+    aOff: number;
+    aChanges: number;
+    bOn: number;
+    bOff: number;
+    bChanges: number;
+  }[];
 }
 
 export interface PersonRow {
@@ -345,8 +406,28 @@ export const REDS = ['#f3b3aa', '#e98477', '#d9564a', '#b5352b'];
 export const MIDDLE = '#7d8794';
 
 /** The nine groups of change in arrival time, soonest first. */
-export const GROUP_LABELS = ['30 min or more sooner', '15 to 30 min sooner', '5 to 15 min sooner', '1 to 5 min sooner', 'The same, within a minute', '1 to 5 min later', '5 to 15 min later', '15 to 30 min later', '30 min or more later'];
-export const GROUP_COLORS = [BLUES[3], BLUES[2], BLUES[1], BLUES[0], MIDDLE, REDS[0], REDS[1], REDS[2], REDS[3]];
+export const GROUP_LABELS = [
+  '30 min or more sooner',
+  '15 to 30 min sooner',
+  '5 to 15 min sooner',
+  '1 to 5 min sooner',
+  'The same, within a minute',
+  '1 to 5 min later',
+  '5 to 15 min later',
+  '15 to 30 min later',
+  '30 min or more later',
+];
+export const GROUP_COLORS = [
+  BLUES[3],
+  BLUES[2],
+  BLUES[1],
+  BLUES[0],
+  MIDDLE,
+  REDS[0],
+  REDS[1],
+  REDS[2],
+  REDS[3],
+];
 export const SAME_GROUP = 4;
 
 /** A colour for a value between -1 and 1: red below nothing, blue above, grey near it. */
@@ -374,6 +455,9 @@ export const FULL_STEPS = [
 ];
 export const fullColor = (share: number) => FULL_STEPS.find((s) => share < s.upTo)!.color;
 
-export const lineName = (line: { shortName: string | null; longName: string | null }) => line.shortName ?? line.longName ?? '?';
-export const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('en-AU')}`;
-export const mins = (n: number) => `${n.toLocaleString('en-AU', { maximumFractionDigits: Math.abs(n) < 10 ? 1 : 0 })} min`;
+export const lineName = (line: { shortName: string | null; longName: string | null }) =>
+  line.shortName ?? line.longName ?? '?';
+export const signed = (n: number) =>
+  `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('en-AU')}`;
+export const mins = (n: number) =>
+  `${n.toLocaleString('en-AU', { maximumFractionDigits: Math.abs(n) < 10 ? 1 : 0 })} min`;

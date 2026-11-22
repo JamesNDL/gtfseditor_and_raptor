@@ -15,7 +15,8 @@ import { stopDeleted } from './stops.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Packs live under <repo>/data/packs regardless of where the server is started from.
-const PACKS_ROOT = process.env.PACKS_DIR ?? path.resolve(import.meta.dirname, '../../../data/packs');
+const PACKS_ROOT =
+  process.env.PACKS_DIR ?? path.resolve(import.meta.dirname, '../../../data/packs');
 
 const sql = connect();
 await migrate(sql);
@@ -25,10 +26,12 @@ await app.register(compress, { threshold: 1024 });
 
 const int = (value: unknown): number => {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 0) throw Object.assign(new Error('Expected a whole number'), { statusCode: 400 });
+  if (!Number.isInteger(n) || n < 0)
+    throw Object.assign(new Error('Expected a whole number'), { statusCode: 400 });
   return n;
 };
-const notFound = (what: string) => Object.assign(new Error(`${what} not found`), { statusCode: 404 });
+const notFound = (what: string) =>
+  Object.assign(new Error(`${what} not found`), { statusCode: 404 });
 
 // ---------------------------------------------------------------------------
 // Baselines, modes, routes
@@ -47,7 +50,9 @@ app.get('/api/baselines', async () => {
     serviceDate: b.service_date,
     feedId: b.feed_id,
     stats: b.stats,
-    tripsByMode: Object.fromEntries(modeCounts.filter((m) => m.baseline_id === b.id).map((m) => [m.mode_id, m.trips])),
+    tripsByMode: Object.fromEntries(
+      modeCounts.filter((m) => m.baseline_id === b.id).map((m) => [m.mode_id, m.trips]),
+    ),
   }));
 });
 
@@ -105,16 +110,25 @@ app.get('/api/baselines/:b/waits', async (req, reply) => {
   if (sc) {
     const [removed, own] = await Promise.all([
       sql`select trip_id from scenario_removed where scenario_id = ${sc.id} and edit_seq <= ${sc.head}`,
-      read(sql`t.scenario_id = ${sc.id} and t.created_edit <= ${sc.head} and (t.removed_edit is null or t.removed_edit > ${sc.head})`),
+      read(
+        sql`t.scenario_id = ${sc.id} and t.created_edit <= ${sc.head} and (t.removed_edit is null or t.removed_edit > ${sc.head})`,
+      ),
     ]);
     const gone = new Set(removed.map((r) => r.trip_id as number));
     trips = [...trips.filter((t) => !gone.has(t.id)), ...own];
   }
-  const ends = [...new Set(trips.flatMap((t) => [t.firstStopId, t.lastStopId]).filter((id) => id !== null))];
+  const ends = [
+    ...new Set(trips.flatMap((t) => [t.firstStopId, t.lastStopId]).filter((id) => id !== null)),
+  ];
   const stopRows = ends.length
     ? await sql`select id, parent_id, ST_X(geom) as lon, ST_Y(geom) as lat from stops where id = any(${ends})`
     : [];
-  const stops = new Map(stopRows.map((s) => [s.id as number, { parentId: s.parent_id as number | null, lon: s.lon as number, lat: s.lat as number }]));
+  const stops = new Map(
+    stopRows.map((s) => [
+      s.id as number,
+      { parentId: s.parent_id as number | null, lon: s.lon as number, lat: s.lat as number },
+    ]),
+  );
   const pairs = vehicleWaits(trips, stops);
   reply.header('content-type', 'application/octet-stream');
   // The published timetable never changes; a scenario does with every edit.
@@ -129,7 +143,15 @@ const tileCache = new Map<string, Buffer>();
 const TILE_CACHE_MAX = 3000;
 
 // The lowest zoom at which each mode's lines and stops are drawn.
-const LINE_MIN_ZOOM: Record<string, number> = { train: 0, metro: 0, light_rail: 0, ferry: 0, coach: 7, bus: 10, school_bus: 12 };
+const LINE_MIN_ZOOM: Record<string, number> = {
+  train: 0,
+  metro: 0,
+  light_rail: 0,
+  ferry: 0,
+  coach: 7,
+  bus: 10,
+  school_bus: 12,
+};
 
 app.get('/api/baselines/:b/tiles/:z/:x/:y', async (req, reply) => {
   const p = req.params as Record<string, string>;
@@ -257,7 +279,16 @@ app.get('/api/routes/:id', async (req) => {
     before = { ...counts, hourly: hourlyBefore };
   }
 
-  return { ...route, ...summary, hourly, directions, vehicleTypes, patterns, before, mainDepartures };
+  return {
+    ...route,
+    ...summary,
+    hourly,
+    directions,
+    vehicleTypes,
+    patterns,
+    before,
+    mainDepartures,
+  };
 });
 
 app.get('/api/routes/:id/trips', async (req) => {
@@ -348,7 +379,9 @@ app.get('/api/vehicle-days/:id', async (req) => {
     left join vehicle_types v on v.id = coalesce(vd.vehicle_type_id, mdv.vehicle_type_id)
     where vd.id = ${id}`;
   if (!day) throw notFound('Vehicle day');
-  const trips = await tripSummary(sql`t.vehicle_day_id = ${id} and ${vis} order by t.start_secs, t.id`);
+  const trips = await tripSummary(
+    sql`t.vehicle_day_id = ${id} and ${vis} order by t.start_secs, t.id`,
+  );
   const stayAboard = await sql`
     select a.id as "fromTripId", b.id as "toTripId" from stay_aboard_links l
     join trips a on coalesce(a.origin_trip_id, a.id) = l.from_trip_id
@@ -456,7 +489,8 @@ app.get('/api/stations/:id/platforms', async (req) => {
       -- A platform the scenario has deleted has no row in the chart.
       and not ${stopDeleted(sql, 'c', sc)}`;
   const stopIds = platforms.map((p) => p.id);
-  if (!stopIds.length) return { station, platforms: [], routes: [], calls: [], layovers: [], conflicts: [] };
+  if (!stopIds.length)
+    return { station, platforms: [], routes: [], calls: [], layovers: [], conflicts: [] };
 
   const calls = await sql`
     select st.trip_id as "tripId", st.seq, st.stop_id as "stopId", st.arr, st.dep,
@@ -520,7 +554,13 @@ app.get('/api/stations/:id/summary', async (req) => {
   const deletion = (stopId: number) => {
     const g = goneBy.get(stopId);
     // Only the scenario's latest change can be taken back on its own.
-    return g ? { seq: g.edit_seq as number, summary: String(g.summary ?? ''), latest: g.edit_seq === sc!.head } : null;
+    return g
+      ? {
+          seq: g.edit_seq as number,
+          summary: String(g.summary ?? ''),
+          latest: g.edit_seq === sc!.head,
+        }
+      : null;
   };
   const platformRows = await sql`
     select c.id, c.name, c.platform_code as "platformCode",
@@ -529,7 +569,11 @@ app.get('/api/stations/:id/summary', async (req) => {
     from stops c
     where (c.parent_id = ${station.id} or c.id = ${station.id}) and c.location_type = 0
     order by length(c.platform_code), c.platform_code, c.id`;
-  const platforms = platformRows.map((p) => ({ ...p, calls: p.calls as number, deleted: deletion(p.id) }));
+  const platforms = platformRows.map((p) => ({
+    ...p,
+    calls: p.calls as number,
+    deleted: deletion(p.id),
+  }));
   const used = platforms.filter((p) => p.calls > 0 || p.deleted || platforms.length <= 12);
   const stopIds = platforms.map((p) => p.id);
   const lines = stopIds.length
@@ -552,7 +596,14 @@ app.get('/api/stations/:id/summary', async (req) => {
         where st.stop_id = any(${stopIds}) and not (st.pickup_type = 1 and st.drop_off_type = 1) and ${vis}
         group by 1 order by 1`
     : [];
-  return { ...station, deleted: deletion(station.id), platforms: used, lines, hourly, calls: platforms.reduce((sum, p) => sum + p.calls, 0) };
+  return {
+    ...station,
+    deleted: deletion(station.id),
+    platforms: used,
+    lines,
+    hourly,
+    calls: platforms.reduce((sum, p) => sum + p.calls, 0),
+  };
 });
 
 // Every vehicle that runs at least one trip on a line, with its whole day.
@@ -603,7 +654,9 @@ app.get('/api/routes/:id/vehicles', async (req) => {
           trips: own,
         };
       })
-      .sort((a, b) => Number(b.isNew) - Number(a.isNew) || a.startSecs - b.startSecs || a.id - b.id),
+      .sort(
+        (a, b) => Number(b.isNew) - Number(a.isNew) || a.startSecs - b.startSecs || a.id - b.id,
+      ),
     stayAboard: stayAboard.map((l) => [l.from, l.to]),
   };
 });

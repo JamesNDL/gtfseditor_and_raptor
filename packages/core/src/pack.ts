@@ -68,10 +68,17 @@ export function encodePack(meta: PackMeta, arrays: PackArrays): Uint8Array {
   // Offsets depend on the header length, which depends on the offsets; reserve fixed-width numbers.
   const build = (offsets: number[]): PackHeader => ({
     meta,
-    arrays: names.map((name, i) => ({ name, type: ARRAY_TYPES[name], offset: offsets[i], length: arrays[name].length })),
+    arrays: names.map((name, i) => ({
+      name,
+      type: ARRAY_TYPES[name],
+      offset: offsets[i],
+      length: arrays[name].length,
+    })),
   });
   const encoder = new TextEncoder();
-  const headerRoom = align8(encoder.encode(JSON.stringify(build(names.map(() => 4_000_000_000)))).length + 4);
+  const headerRoom = align8(
+    encoder.encode(JSON.stringify(build(names.map(() => 4_000_000_000)))).length + 4,
+  );
   const offsets: number[] = [];
   let cursor = headerRoom;
   for (const name of names) {
@@ -95,7 +102,9 @@ export interface Pack extends PackArrays {
 
 export function decodePack(buffer: ArrayBuffer): Pack {
   const headerLength = new DataView(buffer).getUint32(0, true);
-  const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, headerLength))) as PackHeader;
+  const header = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(buffer, 4, headerLength)),
+  ) as PackHeader;
   if (header.meta.version !== 1) throw new Error(`Unsupported pack version ${header.meta.version}`);
   const pack: Record<string, unknown> = { meta: header.meta };
   for (const a of header.arrays) pack[a.name] = new CTORS[a.type](buffer, a.offset, a.length);
@@ -106,7 +115,13 @@ export function decodePack(buffer: ArrayBuffer): Pack {
  * Where trip `i` is at `secs`, written as [lon, lat] degrees into `out` at `outIndex`.
  * Returns false if the trip is not running at that time.
  */
-export function tripPosition(pack: Pack, i: number, secs: number, out: Float64Array | Float32Array, outIndex: number): boolean {
+export function tripPosition(
+  pack: Pack,
+  i: number,
+  secs: number,
+  out: Float64Array | Float32Array,
+  outIndex: number,
+): boolean {
   if (secs < pack.tripStart[i] || secs > pack.tripEnd[i]) return false;
   const s0 = pack.tripStOffset[i];
   const s1 = pack.tripStOffset[i + 1];

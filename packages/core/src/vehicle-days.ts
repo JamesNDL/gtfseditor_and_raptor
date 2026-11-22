@@ -56,7 +56,8 @@ const M_PER_DEG_LON_EQUATOR = 111_320;
 
 export function distanceM(lon1: number, lat1: number, lon2: number, lat2: number): number {
   const dy = (lat2 - lat1) * M_PER_DEG_LAT;
-  const dx = (lon2 - lon1) * M_PER_DEG_LON_EQUATOR * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
+  const dx =
+    (lon2 - lon1) * M_PER_DEG_LON_EQUATOR * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
   return Math.hypot(dx, dy);
 }
 
@@ -69,7 +70,11 @@ function byStart(a: ChainTrip, b: ChainTrip): number {
   return a.startSecs - b.startSecs || a.endSecs - b.endSecs || a.id - b.id;
 }
 
-function toVehicleDay(source: VehicleDay['source'], trips: ChainTrip[], rules: Record<RuleSet, ChainRules>): VehicleDay {
+function toVehicleDay(
+  source: VehicleDay['source'],
+  trips: ChainTrip[],
+  rules: Record<RuleSet, ChainRules>,
+): VehicleDay {
   let gapCount = 0;
   for (let i = 1; i < trips.length; i++) {
     const prev = trips[i - 1];
@@ -130,7 +135,8 @@ function chainPartition(trips: ChainTrip[], rules: Record<RuleSet, ChainRules>):
               continue;
             }
             if (last.endSecs + r.minLayoverSecs > trip.startSecs) continue;
-            if (distanceM(last.lastLon, last.lastLat, trip.firstLon, trip.firstLat) > r.radiusM) continue;
+            if (distanceM(last.lastLon, last.lastLat, trip.firstLon, trip.firstLat) > r.radiusM)
+              continue;
             // First in, first out: take the vehicle that has been waiting longest.
             if (last.endSecs < bestFree) {
               bestFree = last.endSecs;
@@ -174,9 +180,11 @@ export function buildVehicleDays(
     list.push(trip);
   }
 
-  for (const list of runs.values()) result.push(toVehicleDay('run_number', list.sort(byStart), rules));
+  for (const list of runs.values())
+    result.push(toVehicleDay('run_number', list.sort(byStart), rules));
   for (const list of partitions.values()) {
-    for (const vehicle of chainPartition(list, rules)) result.push(toVehicleDay('inferred', vehicle.trips, rules));
+    for (const vehicle of chainPartition(list, rules))
+      result.push(toVehicleDay('inferred', vehicle.trips, rules));
   }
   return result.sort((a, b) => a.startSecs - b.startSecs);
 }

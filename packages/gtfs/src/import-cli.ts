@@ -35,7 +35,9 @@ try {
     await importVehicleDays(sql, baseline.id, log);
     await buildPacks(sql, baseline.id, log);
     const stats = await finishBaseline(sql, baseline.id);
-    log(`Baseline ${baseline.id} ready: ${baseline.label} in ${((Date.now() - started) / 1000).toFixed(0)}s`);
+    log(
+      `Baseline ${baseline.id} ready: ${baseline.label} in ${((Date.now() - started) / 1000).toFixed(0)}s`,
+    );
     log(JSON.stringify(stats, null, 2));
   }
 } finally {

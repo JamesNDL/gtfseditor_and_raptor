@@ -229,11 +229,13 @@ export function useApi<T>(url: string | null): ApiState<T> {
     const sameThing = shown.current === key;
     shown.current = key;
     setState((prev) => ({ data: sameThing ? prev.data : null, error: null, loading: true }));
-    const full = scenarioId === null ? url : `${url}${url.includes('?') ? '&' : '?'}s=${scenarioId}`;
+    const full =
+      scenarioId === null ? url : `${url}${url.includes('?') ? '&' : '?'}s=${scenarioId}`;
     getJson<T>(full, controller.signal).then(
       (data) => setState({ data, error: null, loading: false }),
       (err) => {
-        if (!controller.signal.aborted) setState({ data: null, error: String(err.message ?? err), loading: false });
+        if (!controller.signal.aborted)
+          setState({ data: null, error: String(err.message ?? err), loading: false });
       },
     );
     return () => controller.abort();

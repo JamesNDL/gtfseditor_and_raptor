@@ -7,9 +7,21 @@ import { fmt } from '../inspector/parts.tsx';
 import { selectScenario } from '../scenario.ts';
 import { useStore } from '../store.ts';
 import { Rename } from './SimLibrary.tsx';
-import { OUT_OF_DATE, areaText, isActive, madeBy, progressText, refreshRuns, send, walkText, type SimJourney, type SimRun } from './simApi.ts';
+import {
+  OUT_OF_DATE,
+  areaText,
+  isActive,
+  madeBy,
+  progressText,
+  refreshRuns,
+  send,
+  walkText,
+  type SimJourney,
+  type SimRun,
+} from './simApi.ts';
 
-const minutes = (n: number) => `${n.toLocaleString('en-AU', { maximumFractionDigits: n < 10 ? 1 : 0 })} min`;
+const minutes = (n: number) =>
+  `${n.toLocaleString('en-AU', { maximumFractionDigits: n < 10 ? 1 : 0 })} min`;
 
 export function SimPanel() {
   const baselineId = useStore((s) => s.baselineId);
@@ -32,8 +44,11 @@ export function SimPanel() {
       refreshRuns()
         .then((now) => {
           // A run that has just finished becomes the one on show, if it was started from here.
-          const finished = now.find((r) => r.state === 'done' && before.some((b) => b.id === r.id && isActive(b)));
-          if (finished && follow.has(finished.id)) useStore.getState().set({ simRunId: finished.id });
+          const finished = now.find(
+            (r) => r.state === 'done' && before.some((b) => b.id === r.id && isActive(b)),
+          );
+          if (finished && follow.has(finished.id))
+            useStore.getState().set({ simRunId: finished.id });
         })
         .catch(() => {});
     }, 1500);
@@ -48,13 +63,26 @@ export function SimPanel() {
   return (
     <div className={`panel sim-panel${open || chosen || going.length ? ' open' : ''}`}>
       <div className="sim-head">
-        <button className="sim-title" onClick={() => setOpen(!open)} aria-expanded={open || !!chosen} title="Send a file of journeys through the timetable and see where the passengers go">
+        <button
+          className="sim-title"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open || !!chosen}
+          title="Send a file of journeys through the timetable and see where the passengers go"
+        >
           Simulation
         </button>
-        <button className="button small-button" onClick={() => set({ simScreen: 'wizard' })} title="Set up and start a simulation">
+        <button
+          className="button small-button"
+          onClick={() => set({ simScreen: 'wizard' })}
+          title="Set up and start a simulation"
+        >
           New simulation
         </button>
-        <button className="button small-button" onClick={() => set({ simScreen: 'library' })} title="Every run, by folder or by date">
+        <button
+          className="button small-button"
+          onClick={() => set({ simScreen: 'library' })}
+          title="Every run, by folder or by date"
+        >
           Library
         </button>
       </div>
@@ -68,14 +96,22 @@ export function SimPanel() {
                 <div className="muted small">{progressText(run)}</div>
                 {run.state === 'running' && run.progress.total ? (
                   <div className="sim-progress">
-                    <span style={{ width: `${Math.min(100, (100 * (run.progress.done ?? 0)) / run.progress.total)}%` }} />
+                    <span
+                      style={{
+                        width: `${Math.min(100, (100 * (run.progress.done ?? 0)) / run.progress.total)}%`,
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>
               <button
                 className="button small-button"
                 title="Stop this run. Nothing of it is kept."
-                onClick={() => send('DELETE', `/api/sim-runs/${run.id}`).then(refreshRuns, (e) => setError(e.message))}
+                onClick={() =>
+                  send('DELETE', `/api/sim-runs/${run.id}`).then(refreshRuns, (e) =>
+                    setError(e.message),
+                  )
+                }
               >
                 Stop
               </button>
@@ -105,17 +141,29 @@ export function SimPanel() {
           </select>
           {chosen && <RunTools run={chosen} onError={setError} />}
           {error && <p className="error-text small">{error}</p>}
-          {runs.filter((r) => r.state === 'failed' || r.state === 'stopped').map((r) => (
-            <div key={r.id} className="sim-going">
-              <div className="grow">
-                <div className="ellipsis">{r.name}</div>
-                <div className={`small ${r.state === 'failed' ? 'error-text' : 'muted'}`}>{r.state === 'failed' ? `Failed: ${r.error}` : 'Stopped'}</div>
+          {runs
+            .filter((r) => r.state === 'failed' || r.state === 'stopped')
+            .map((r) => (
+              <div key={r.id} className="sim-going">
+                <div className="grow">
+                  <div className="ellipsis">{r.name}</div>
+                  <div className={`small ${r.state === 'failed' ? 'error-text' : 'muted'}`}>
+                    {r.state === 'failed' ? `Failed: ${r.error}` : 'Stopped'}
+                  </div>
+                </div>
+                <button
+                  className="button small-button"
+                  title="Take this run off the list"
+                  onClick={() =>
+                    send('DELETE', `/api/sim-runs/${r.id}?force=true`).then(refreshRuns, (e) =>
+                      setError(e.message),
+                    )
+                  }
+                >
+                  Remove
+                </button>
               </div>
-              <button className="button small-button" title="Take this run off the list" onClick={() => send('DELETE', `/api/sim-runs/${r.id}?force=true`).then(refreshRuns, (e) => setError(e.message))}>
-                Remove
-              </button>
-            </div>
-          ))}
+            ))}
           {chosen && <Summary run={chosen} onError={setError} />}
         </div>
       )}
@@ -128,29 +176,55 @@ function RunTools({ run, onError }: { run: SimRun; onError: (message: string | n
   const set = useStore((s) => s.set);
   const [removing, setRemoving] = useState(false);
   const dependents = run.scenarioRuns + run.capacityRuns;
-  const done = (work: Promise<unknown>) => work.then(() => (onError(null), refreshRuns()), (e: Error) => onError(e.message));
+  const done = (work: Promise<unknown>) =>
+    work.then(
+      () => (onError(null), refreshRuns()),
+      (e: Error) => onError(e.message),
+    );
   return (
     <div className="sim-run-actions">
       <button
         className="button small-button on"
         title="Who gains and who loses, line by line, and on the map"
-        onClick={() => set({ simResults: { ...useStore.getState().simResults, open: true, small: false } })}
+        onClick={() =>
+          set({ simResults: { ...useStore.getState().simResults, open: true, small: false } })
+        }
       >
         Results
       </button>
-      <Rename value={run.name} label="Rename" onDone={(name) => done(send('PATCH', `/api/sim-runs/${run.id}`, { name }))} />
+      <Rename
+        value={run.name}
+        label="Rename"
+        onDone={(name) => done(send('PATCH', `/api/sim-runs/${run.id}`, { name }))}
+      />
       {!removing ? (
-        <button className="button small-button" onClick={() => setRemoving(true)} title="Remove this run and its results">
+        <button
+          className="button small-button"
+          onClick={() => setRemoving(true)}
+          title="Remove this run and its results"
+        >
           Remove
         </button>
       ) : (
         <>
           <button
             className="button small-button danger"
-            title={dependents ? 'Runs made from this one stay, but lose what they are compared with' : 'Its results and files are deleted'}
-            onClick={() => void done(send('DELETE', `/api/sim-runs/${run.id}${dependents ? '?force=true' : ''}`).then(() => set({ simRunId: null, simPerson: null })))}
+            title={
+              dependents
+                ? 'Runs made from this one stay, but lose what they are compared with'
+                : 'Its results and files are deleted'
+            }
+            onClick={() =>
+              void done(
+                send('DELETE', `/api/sim-runs/${run.id}${dependents ? '?force=true' : ''}`).then(
+                  () => set({ simRunId: null, simPerson: null }),
+                ),
+              )
+            }
           >
-            {dependents ? `Remove, though ${dependents} run${dependents === 1 ? ' depends' : 's depend'} on it` : 'Remove for good'}
+            {dependents
+              ? `Remove, though ${dependents} run${dependents === 1 ? ' depends' : 's depend'} on it`
+              : 'Remove for good'}
           </button>
           <button className="button small-button" onClick={() => setRemoving(false)}>
             Keep
@@ -187,7 +261,9 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
   return (
     <div className="sim-summary">
       <div className="muted small">
-        {run.kind === 'bau' ? 'Published timetable (BAU)' : `${run.scenarioName ?? 'A removed scenario'}, against "${run.bauRunName ?? 'a removed BAU run'}"`}
+        {run.kind === 'bau'
+          ? 'Published timetable (BAU)'
+          : `${run.scenarioName ?? 'A removed scenario'}, against "${run.bauRunName ?? 'a removed BAU run'}"`}
         {' · '}
         {run.area ? (run.area.name ?? 'a box') : 'whole network'}
         {run.capacity ? ' · capacity on' : ''}
@@ -195,12 +271,22 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
       </div>
       {run.area && <div className="muted small">{areaText(run.area)}.</div>}
       {run.madeUp && (
-        <p className="warn-text small">Made-up journeys: these people were generated, not observed. The figures show how the simulator behaves, not how real travel would change.</p>
+        <p className="warn-text small">
+          Made-up journeys: these people were generated, not observed. The figures show how the
+          simulator behaves, not how real travel would change.
+        </p>
       )}
-      {run.outOfDate && <p className="warn-text small">{OUT_OF_DATE} Figures are not shown on trips that changed.</p>}
+      {run.outOfDate && (
+        <p className="warn-text small">
+          {OUT_OF_DATE} Figures are not shown on trips that changed.
+        </p>
+      )}
       {onScenario !== scenarioId && (
         <p className="small">
-          <span className="muted">Its figures show on lines, trips and stations when {run.kind === 'bau' ? 'the published timetable' : 'that scenario'} is open. </span>
+          <span className="muted">
+            Its figures show on lines, trips and stations when{' '}
+            {run.kind === 'bau' ? 'the published timetable' : 'that scenario'} is open.{' '}
+          </span>
           {(run.kind === 'bau' || run.scenarioId !== null) && (
             <button className="link small" onClick={() => void selectScenario(onScenario)}>
               Open it
@@ -214,11 +300,23 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
         <>
           <div className="scenario-stats sim-stats">
             <Stat value={fmt(s.people.ok)} label="travel" />
-            <Stat value={fmt(s.people.noJourney)} label="no journey" warn={s.people.noJourney > 0} />
-            {run.kind === 'scenario' && <Stat value={fmt(s.people.gaveUp)} label="gave up" warn={s.people.gaveUp > 0} />}
-            {run.capacity && <Stat value={fmt(s.people.stranded)} label="stranded" warn={s.people.stranded > 0} />}
+            <Stat
+              value={fmt(s.people.noJourney)}
+              label="no journey"
+              warn={s.people.noJourney > 0}
+            />
+            {run.kind === 'scenario' && (
+              <Stat value={fmt(s.people.gaveUp)} label="gave up" warn={s.people.gaveUp > 0} />
+            )}
+            {run.capacity && (
+              <Stat value={fmt(s.people.stranded)} label="stranded" warn={s.people.stranded > 0} />
+            )}
           </div>
-          <Line label="People in the run" value={fmt(s.demand.people)} title={`${fmt(s.demand.rows)} journeys by ${fmt(s.demand.users)} users`} />
+          <Line
+            label="People in the run"
+            value={fmt(s.demand.people)}
+            title={`${fmt(s.demand.rows)} journeys by ${fmt(s.demand.users)} users`}
+          />
           {s.demand.leftOutWhollyOutsideArea + s.demand.leftOutOneEndInsideArea > 0 && (
             <Line
               label="Left out by the area"
@@ -226,8 +324,14 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
               title="Journeys with one end inside the area are not simulated, so a local change looks smaller than it is"
             />
           )}
-          <Line label="Journey time" value={`${minutes(s.journeys.medianMinutes)} median, ${minutes(s.journeys.percentile90Minutes)} for 9 in 10`} />
-          <Line label="On average" value={`${minutes(s.journeys.meanWaitMinutes)} waiting, ${minutes(s.journeys.meanWalkMinutes)} walking, ${s.journeys.meanRides.toFixed(1)} rides`} />
+          <Line
+            label="Journey time"
+            value={`${minutes(s.journeys.medianMinutes)} median, ${minutes(s.journeys.percentile90Minutes)} for 9 in 10`}
+          />
+          <Line
+            label="On average"
+            value={`${minutes(s.journeys.meanWaitMinutes)} waiting, ${minutes(s.journeys.meanWalkMinutes)} walking, ${s.journeys.meanRides.toFixed(1)} rides`}
+          />
 
           {s.againstBau && (
             <div className="scenario-section">
@@ -237,10 +341,16 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
                 value={`${fmt(s.againstBau.sooner)}${s.againstBau.sooner ? `, by ${minutes(s.againstBau.meanMinutesSooner)}` : ''}`}
                 title="This counts everyone who arrives sooner, including people who only moved to a nearby stop that was already quicker on the published timetable. The results window counts those apart."
               />
-              <Line label="Arrive later" value={`${fmt(s.againstBau.later)}${s.againstBau.later ? `, by ${minutes(s.againstBau.meanMinutesLater)}` : ''}`} />
+              <Line
+                label="Arrive later"
+                value={`${fmt(s.againstBau.later)}${s.againstBau.later ? `, by ${minutes(s.againstBau.meanMinutesLater)}` : ''}`}
+              />
               <Line label="Within a minute" value={fmt(s.againstBau.within1Minute)} />
               {s.againstBau.noLongerAbleToTravel + s.againstBau.newlyAbleToTravel > 0 && (
-                <Line label="Can no longer travel / now can" value={`${fmt(s.againstBau.noLongerAbleToTravel)} / ${fmt(s.againstBau.newlyAbleToTravel)}`} />
+                <Line
+                  label="Can no longer travel / now can"
+                  value={`${fmt(s.againstBau.noLongerAbleToTravel)} / ${fmt(s.againstBau.newlyAbleToTravel)}`}
+                />
               )}
               <Line
                 label="Changed stop"
@@ -259,19 +369,32 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
             />
             {s.plannedLoads.furthestOver.slice(0, 3).map((t) => (
               <div key={t.trip} className="muted small">
-                {t.line}: {fmt(t.plannedLoad)} for {fmt(t.limit)} places, from {t.firstOverAt.slice(0, 5)}
+                {t.line}: {fmt(t.plannedLoad)} for {fmt(t.limit)} places, from{' '}
+                {t.firstOverAt.slice(0, 5)}
               </div>
             ))}
             {s.capacityResults && (
               <>
-                <Line label="Left behind at least once" value={`${fmt(s.capacityResults.peopleLeftBehindAtLeastOnce)} (${s.capacityResults.shareLeftBehindPercent.toFixed(1)}%)`} />
+                <Line
+                  label="Left behind at least once"
+                  value={`${fmt(s.capacityResults.peopleLeftBehindAtLeastOnce)} (${s.capacityResults.shareLeftBehindPercent.toFixed(1)}%)`}
+                />
                 <Line label="Times left behind" value={fmt(s.capacityResults.timesLeftBehind)} />
                 {s.capacityResults.fullestLines.length > 0 && (
-                  <div className="muted small">Fullest lines: {s.capacityResults.fullestLines.map((l) => `${l.line} ${Math.round(l.peakPercent)}%`).join(', ')}</div>
+                  <div className="muted small">
+                    Fullest lines:{' '}
+                    {s.capacityResults.fullestLines
+                      .map((l) => `${l.line} ${Math.round(l.peakPercent)}%`)
+                      .join(', ')}
+                  </div>
                 )}
                 {s.capacityResults.stopsLeavingMostBehind.length > 0 && (
                   <div className="muted small">
-                    Most left behind at: {s.capacityResults.stopsLeavingMostBehind.slice(0, 5).map((p) => `${p.name} (${fmt(p.leftBehind)})`).join('; ')}
+                    Most left behind at:{' '}
+                    {s.capacityResults.stopsLeavingMostBehind
+                      .slice(0, 5)
+                      .map((p) => `${p.name} (${fmt(p.leftBehind)})`)
+                      .join('; ')}
                   </div>
                 )}
               </>
@@ -281,7 +404,10 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
                 className="button small-button"
                 title="Puts the same plans on the vehicles again, this time leaving behind whoever does not fit. No planning is repeated."
                 onClick={() =>
-                  send<SimRun>('POST', '/api/sim-runs', { fromRunId: run.id, madeBy: madeBy.get() || undefined }).then(
+                  send<SimRun>('POST', '/api/sim-runs', {
+                    fromRunId: run.id,
+                    madeBy: madeBy.get() || undefined,
+                  }).then(
                     (made) => {
                       follow.add(made.id);
                       onError(null);
@@ -296,8 +422,10 @@ function Summary({ run, onError }: { run: SimRun; onError: (message: string | nu
             )}
             {s.capacities.placeholderOrAssumed > 0 && (
               <p className="warn-text small">
-                {s.capacities.placeholderOrAssumed === s.capacities.trips ? 'Every' : fmt(s.capacities.placeholderOrAssumed)} vehicle capacity is a placeholder, so
-                crowding figures are illustrative.
+                {s.capacities.placeholderOrAssumed === s.capacities.trips
+                  ? 'Every'
+                  : fmt(s.capacities.placeholderOrAssumed)}{' '}
+                vehicle capacity is a placeholder, so crowding figures are illustrative.
               </p>
             )}
           </div>
@@ -327,7 +455,12 @@ function Stat({ value, label, warn }: { value: string; label: string; warn?: boo
   );
 }
 
-const STATUS: Record<SimJourney['status'], string> = { ok: '', noJourney: 'no journey', gaveUp: 'gave up', stranded: 'stranded' };
+const STATUS: Record<SimJourney['status'], string> = {
+  ok: '',
+  noJourney: 'no journey',
+  gaveUp: 'gave up',
+  stranded: 'stranded',
+};
 
 /** One person by their id: their journeys listed, and drawn on the map leg by leg. */
 function Person({ run }: { run: SimRun }) {
@@ -340,17 +473,35 @@ function Person({ run }: { run: SimRun }) {
     if (!id) return;
     setNote(null);
     try {
-      const journeys = await getJson<SimJourney[]>(`/api/sim-runs/${run.id}/journeys?user=${encodeURIComponent(id)}`);
+      const journeys = await getJson<SimJourney[]>(
+        `/api/sim-runs/${run.id}/journeys?user=${encodeURIComponent(id)}`,
+      );
       set({ simPerson: journeys.length ? { user: id, journeys } : null });
       if (!journeys.length) return setNote(`Nobody called ${id} travels in this run.`);
-      const points = journeys.flatMap((j) => j.legs.flatMap((l) => [[l.fromLon, l.fromLat], [l.toLon, l.toLat]])).filter((p) => p[0] !== null) as number[][];
+      const points = journeys
+        .flatMap((j) =>
+          j.legs.flatMap((l) => [
+            [l.fromLon, l.fromLat],
+            [l.toLon, l.toLat],
+          ]),
+        )
+        .filter((p) => p[0] !== null) as number[][];
       if (points.length) {
         set({
-          fitBounds: [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))],
+          fitBounds: [
+            Math.min(...points.map((p) => p[0])),
+            Math.min(...points.map((p) => p[1])),
+            Math.max(...points.map((p) => p[0])),
+            Math.max(...points.map((p) => p[1])),
+          ],
         });
       }
     } catch (err) {
-      setNote(run.archived ? 'This run is archived. Restore it in the library to look people up.' : String((err as Error).message));
+      setNote(
+        run.archived
+          ? 'This run is archived. Restore it in the library to look people up.'
+          : String((err as Error).message),
+      );
     }
   };
   return (
@@ -363,12 +514,23 @@ function Person({ run }: { run: SimRun }) {
           void look();
         }}
       >
-        <input className="day-select grow" placeholder="user_id" value={user} onChange={(e) => setUser(e.target.value)} aria-label="User id to look up" />
+        <input
+          className="day-select grow"
+          placeholder="user_id"
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          aria-label="User id to look up"
+        />
         <button className="button small-button" type="submit">
           Find
         </button>
         {person && (
-          <button className="button small-button" type="button" onClick={() => set({ simPerson: null })} title="Take their journeys off the map">
+          <button
+            className="button small-button"
+            type="button"
+            onClick={() => set({ simPerson: null })}
+            title="Take their journeys off the map"
+          >
             Clear
           </button>
         )}
@@ -384,19 +546,36 @@ function Person({ run }: { run: SimRun }) {
                 {STATUS[j.status] && <span className="warn-text"> · {STATUS[j.status]}</span>}
                 {j.people > 1 && <span className="muted"> · {fmt(j.people)} people</span>}
                 {j.laterSecs !== null && Math.abs(j.laterSecs) >= 60 && (
-                  <span className="muted"> · {Math.abs(Math.round(j.laterSecs / 60))} min {j.laterSecs > 0 ? 'later' : 'sooner'}</span>
+                  <span className="muted">
+                    {' '}
+                    · {Math.abs(Math.round(j.laterSecs / 60))} min{' '}
+                    {j.laterSecs > 0 ? 'later' : 'sooner'}
+                  </span>
                 )}
               </div>
               {j.status === 'noJourney' && <div className="muted small">{j.noJourneyReason}</div>}
               {j.legs.map((l) => (
                 <div key={l.leg} className="muted small ellipsis">
                   {formatSecs(l.depart).slice(0, 5)}{' '}
-                  {l.kind === 'ride' ? `${l.stayAboard ? 'stays aboard ' : ''}${l.routeName ?? 'a vehicle'} from ${l.fromStop ?? '?'} to ${l.toStop ?? '?'}` : `walks ${walkText(l.metres)}${l.toStop ? ` to ${l.toStop}` : ''}`}
+                  {l.kind === 'ride'
+                    ? `${l.stayAboard ? 'stays aboard ' : ''}${l.routeName ?? 'a vehicle'} from ${l.fromStop ?? '?'} to ${l.toStop ?? '?'}`
+                    : `walks ${walkText(l.metres)}${l.toStop ? ` to ${l.toStop}` : ''}`}
                 </div>
               ))}
-              {j.leftBehind > 0 && <div className="warn-text small">Left behind {j.leftBehind} time{j.leftBehind === 1 ? '' : 's'} by a full vehicle</div>}
+              {j.leftBehind > 0 && (
+                <div className="warn-text small">
+                  Left behind {j.leftBehind} time{j.leftBehind === 1 ? '' : 's'} by a full vehicle
+                </div>
+              )}
               {(j.originChanged || j.destinationChanged) && (
-                <div className="muted small">Used another stop{j.changeReason === 'gone' ? ': theirs has no service' : j.changeReason === 'better' ? ': it is better by enough' : ''}</div>
+                <div className="muted small">
+                  Used another stop
+                  {j.changeReason === 'gone'
+                    ? ': theirs has no service'
+                    : j.changeReason === 'better'
+                      ? ': it is better by enough'
+                      : ''}
+                </div>
               )}
             </li>
           ))}

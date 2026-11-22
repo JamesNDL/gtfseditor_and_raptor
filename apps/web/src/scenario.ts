@@ -1,7 +1,13 @@
 // Client side of scenarios: choosing one, sending edits, and keeping every view in step afterwards.
 import { getJson, type RouteListItem } from './api.ts';
 import { useStore } from './store.ts';
-import { applyRemovedTrips, applyWaits, loadScenarioVehicles, loadWaits, vehicleData } from './vehicles.ts';
+import {
+  applyRemovedTrips,
+  applyWaits,
+  loadScenarioVehicles,
+  loadWaits,
+  vehicleData,
+} from './vehicles.ts';
 
 export interface ScenarioSummary {
   id: number;
@@ -83,7 +89,8 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as { message?: string }).message ?? `${url} responded ${res.status}`);
+  if (!res.ok)
+    throw new Error((json as { message?: string }).message ?? `${url} responded ${res.status}`);
   return json as T;
 }
 
@@ -96,7 +103,9 @@ export async function loadScenarios(baselineId: number) {
 export async function refreshScenario() {
   const { scenarioId, baselineId, set } = useStore.getState();
   if (baselineId === null) return;
-  const list = await getJson<RouteListItem[]>(`/api/baselines/${baselineId}/routes${scenarioId === null ? '' : `?s=${scenarioId}`}`);
+  const list = await getJson<RouteListItem[]>(
+    `/api/baselines/${baselineId}/routes${scenarioId === null ? '' : `?s=${scenarioId}`}`,
+  );
   const routes = new Map(list.map((r) => [r.id, r]));
   set({ routes });
   // Which vehicle waits where between trips changes with the scenario. Not waited for: the map
@@ -125,7 +134,8 @@ export async function selectScenario(id: number | null) {
   // Trip ids differ between a scenario and the baseline, so an open trip cannot carry across.
   const current = state.history[state.history.length - 1];
   if (current?.kind === 'trip' || current?.kind === 'vehicleDay') {
-    if (state.highlightRouteId !== null) state.open({ kind: 'route', id: state.highlightRouteId }, { replace: true });
+    if (state.highlightRouteId !== null)
+      state.open({ kind: 'route', id: state.highlightRouteId }, { replace: true });
     else state.close();
   }
   state.set({ scenarioId: id, scenarioInfo: null, editError: null });
@@ -159,7 +169,14 @@ export interface EditResponse {
   focusTripId?: number;
   routeId?: number;
   /** Stops the edit added, the one to use first. */
-  stops?: { id: number; name: string; lon: number; lat: number; parentId: number | null; isStation: boolean }[];
+  stops?: {
+    id: number;
+    name: string;
+    lon: number;
+    lat: number;
+    parentId: number | null;
+    isStation: boolean;
+  }[];
 }
 
 /** Sends one edit. Returns the result if it was applied, or null. Failures land in the store as `editError`. */
@@ -172,14 +189,17 @@ export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null
   try {
     // The first change to the published timetable starts a scenario for it automatically.
     if (useStore.getState().scenarioId === null) {
-      const created = await send<ScenarioSummary>('POST', '/api/scenarios', { baselineId: state.baselineId });
+      const created = await send<ScenarioSummary>('POST', '/api/scenarios', {
+        baselineId: state.baselineId,
+      });
       await loadScenarios(state.baselineId);
       useStore.getState().set({ scenarioId: created.id });
     }
     const scenarioId = useStore.getState().scenarioId!;
     // Sent unconfirmed first. A change that would add many vehicles comes back described, not
     // applied; the user is asked (EditConfirm), and only a yes sends it again to be applied.
-    type Answer = EditResponse | { needsConfirm: { added: number; message: string; summary: string } };
+    type Answer =
+      EditResponse | { needsConfirm: { added: number; message: string; summary: string } };
     const url = `/api/scenarios/${scenarioId}/edits`;
     let answer = await send<Answer>('POST', url, { ...edit, confirm: edit.confirm === true });
     if ('needsConfirm' in answer) {
@@ -196,10 +216,15 @@ export async function applyEdit(edit: ScenarioEdit): Promise<EditResponse | null
     const remap = (id: number) => result.idMap[String(id)] ?? id;
     const current = now.history[now.history.length - 1];
     let history = now.history.map((h) => (h.kind === 'trip' ? { ...h, id: remap(h.id) } : h));
-    if (edit.kind === 'delete' && current?.kind === 'trip' && (edit.tripIds as number[]).includes(current.id)) {
+    if (
+      edit.kind === 'delete' &&
+      current?.kind === 'trip' &&
+      (edit.tripIds as number[]).includes(current.id)
+    ) {
       history = now.highlightRouteId !== null ? [{ kind: 'route', id: now.highlightRouteId }] : [];
     }
-    if (edit.kind === 'duplicate' && result.focusTripId) history = [...history.slice(0, -1), { kind: 'trip', id: result.focusTripId }];
+    if (edit.kind === 'duplicate' && result.focusTripId)
+      history = [...history.slice(0, -1), { kind: 'trip', id: result.focusTripId }];
     const last = history[history.length - 1];
     now.set({ history, highlightTripId: last?.kind === 'trip' ? last.id : null });
     await refreshScenario();
@@ -225,7 +250,8 @@ async function step(direction: 'undo' | 'redo') {
     const now = useStore.getState();
     const current = now.history[now.history.length - 1];
     if (current?.kind === 'trip') {
-      if (now.highlightRouteId !== null) now.open({ kind: 'route', id: now.highlightRouteId }, { replace: true });
+      if (now.highlightRouteId !== null)
+        now.open({ kind: 'route', id: now.highlightRouteId }, { replace: true });
       else now.close();
     }
     await refreshScenario();
@@ -252,9 +278,12 @@ export async function fixAll(): Promise<void> {
     if (!(await applyEdit(next.fixes[0].edit))) return;
   }
   // It stops after a set number so that it cannot run away. Say so, rather than look finished.
-  const left = useStore.getState().scenarioInfo?.conflicts.filter((c) => c.fixes.length > 0).length ?? 0;
+  const left =
+    useStore.getState().scenarioInfo?.conflicts.filter((c) => c.fixes.length > 0).length ?? 0;
   if (left > 0) {
-    useStore.getState().set({ editError: `"Fix all" stops after ${FIX_ALL_LIMIT} fixes, and ${left} clash${left === 1 ? ' is' : 'es are'} left that it can fix. Press it again to carry on.` });
+    useStore.getState().set({
+      editError: `"Fix all" stops after ${FIX_ALL_LIMIT} fixes, and ${left} clash${left === 1 ? ' is' : 'es are'} left that it can fix. Press it again to carry on.`,
+    });
   }
 }
 

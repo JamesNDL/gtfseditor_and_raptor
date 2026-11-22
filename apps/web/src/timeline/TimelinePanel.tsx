@@ -30,7 +30,9 @@ export function TimelinePanel() {
   const set = useStore((s) => s.set);
 
   const needsRoute = timeline.tab !== 'platforms';
-  const route = useApi<RouteDetail>(timeline.open && needsRoute && timeline.routeId ? `/api/routes/${timeline.routeId}` : null);
+  const route = useApi<RouteDetail>(
+    timeline.open && needsRoute && timeline.routeId ? `/api/routes/${timeline.routeId}` : null,
+  );
   // Reported by the platform view once its data arrives, so the station is fetched only once.
   const [stationName, setStationName] = useState('');
 
@@ -48,9 +50,14 @@ export function TimelinePanel() {
 
   const r = route.data;
   // Longest stopping pattern first: it makes the most complete station axis.
-  const patterns = r ? [...r.patterns].sort((a, b) => b.stopCount - a.stopCount || b.tripCount - a.tripCount) : [];
+  const patterns = r
+    ? [...r.patterns].sort((a, b) => b.stopCount - a.stopCount || b.tripCount - a.tripCount)
+    : [];
   // A remembered pattern may be gone: reshaping a line replaces its stop patterns.
-  const patternId = (patterns.some((p) => p.id === timeline.patternId) ? timeline.patternId : null) ?? patterns[0]?.id ?? null;
+  const patternId =
+    (patterns.some((p) => p.id === timeline.patternId) ? timeline.patternId : null) ??
+    patterns[0]?.id ??
+    null;
   const others = timeline.showOthers ?? (r ? RAIL_MODES.has(r.modeId) : false);
 
   const aroundNow = (hours: number) => {
@@ -61,13 +68,19 @@ export function TimelinePanel() {
   // What can be dragged comes first: it is the part that cannot be guessed.
   const hint = [
     timeline.tab === 'stringline' && 'Drag a trip sideways to retime it',
-    timeline.tab === 'vehicles' && 'Drag a trip sideways to retime it, up or down to change its vehicle',
-    timeline.tab === 'platforms' && 'Drag a call sideways to retime its trip, up or down to change its platform',
+    timeline.tab === 'vehicles' &&
+      'Drag a trip sideways to retime it, up or down to change its vehicle',
+    timeline.tab === 'platforms' &&
+      'Drag a call sideways to retime its trip, up or down to change its platform',
     'scroll to zoom time · drag elsewhere to pan · click a trip to inspect it · click empty space to move the clock',
     editing && timeline.tab === 'stringline' && 'white core = changed · dashed grey = where it was',
-    editing && timeline.tab === 'vehicles' && 'blue name = vehicle added · white edge = changed trip',
-    timeline.tab === 'vehicles' && 'bright link = passengers stay aboard · dashed amber = empty run needed',
-    timeline.tab === 'platforms' && 'faint band = vehicle waiting between trips · red box = overlap already in the feed',
+    editing &&
+      timeline.tab === 'vehicles' &&
+      'blue name = vehicle added · white edge = changed trip',
+    timeline.tab === 'vehicles' &&
+      'bright link = passengers stay aboard · dashed amber = empty run needed',
+    timeline.tab === 'platforms' &&
+      'faint band = vehicle waiting between trips · red box = overlap already in the feed',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -77,7 +90,11 @@ export function TimelinePanel() {
       <header className="timeline-header">
         <div className="tabs timeline-tabs">
           {TABS.map((t) => (
-            <button key={t.id} className={timeline.tab === t.id ? 'on' : ''} onClick={() => openTimeline({ tab: t.id })}>
+            <button
+              key={t.id}
+              className={timeline.tab === t.id ? 'on' : ''}
+              onClick={() => openTimeline({ tab: t.id })}
+            >
               {t.label}
             </button>
           ))}
@@ -90,7 +107,9 @@ export function TimelinePanel() {
               <span className="ellipsis">{r.longName}</span>
             </>
           )}
-          {timeline.tab === 'platforms' && timeline.stationId !== null && <strong className="ellipsis">{stationName}</strong>}
+          {timeline.tab === 'platforms' && timeline.stationId !== null && (
+            <strong className="ellipsis">{stationName}</strong>
+          )}
         </div>
 
         {timeline.tab === 'stringline' && r && patterns.length > 0 && (
@@ -104,44 +123,85 @@ export function TimelinePanel() {
             >
               {patterns.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {shortStop(p.firstStop)} → {shortStop(p.lastStop)} · {p.stopCount} stops · {p.tripCount} trips
+                  {shortStop(p.firstStop)} → {shortStop(p.lastStop)} · {p.stopCount} stops ·{' '}
+                  {p.tripCount} trips
                 </option>
               ))}
             </select>
-            <label className="timeline-check" title="Show trips of other lines that call at three or more of these stations">
-              <input type="checkbox" checked={others} onChange={(e) => openTimeline({ showOthers: e.target.checked })} />
+            <label
+              className="timeline-check"
+              title="Show trips of other lines that call at three or more of these stations"
+            >
+              <input
+                type="checkbox"
+                checked={others}
+                onChange={(e) => openTimeline({ showOthers: e.target.checked })}
+              />
               Other lines
             </label>
           </>
         )}
 
         {simRun && (
-          <label className="timeline-check" title={`Colour each trip by how full it is in "${simRun.name}": passengers aboard as a share of its places`}>
-            <input type="checkbox" checked={tripColours} onChange={(e) => set({ simTripColours: e.target.checked })} />
+          <label
+            className="timeline-check"
+            title={`Colour each trip by how full it is in "${simRun.name}": passengers aboard as a share of its places`}
+          >
+            <input
+              type="checkbox"
+              checked={tripColours}
+              onChange={(e) => set({ simTripColours: e.target.checked })}
+            />
             How full
             {tripColours && (
-              <span className="map-key-swatches" title={`Grey is empty, then ${FULL_STEPS.map((step) => step.label).join(', ')}`}>
+              <span
+                className="map-key-swatches"
+                title={`Grey is empty, then ${FULL_STEPS.map((step) => step.label).join(', ')}`}
+              >
                 {[EMPTY_COLOR, ...FULL_STEPS.map((step) => step.color)].map((color) => (
                   <i key={color} style={{ background: color }} />
                 ))}
               </span>
             )}
-            {tripColours && simRun.capacities && placeholderNote({ trips: simRun.capacities.trips, placeholder: simRun.capacities.placeholderOrAssumed }) && (
-              <span className="tag tag-warn" title={placeholderNote({ trips: simRun.capacities.trips, placeholder: simRun.capacities.placeholderOrAssumed })!}>
-                placeholder capacities
-              </span>
-            )}
+            {tripColours &&
+              simRun.capacities &&
+              placeholderNote({
+                trips: simRun.capacities.trips,
+                placeholder: simRun.capacities.placeholderOrAssumed,
+              }) && (
+                <span
+                  className="tag tag-warn"
+                  title={placeholderNote({
+                    trips: simRun.capacities.trips,
+                    placeholder: simRun.capacities.placeholderOrAssumed,
+                  })!}
+                >
+                  placeholder capacities
+                </span>
+              )}
           </label>
         )}
 
         <div className="timeline-window">
-          <button className="button small-button" onClick={() => aroundNow(2)} title="Show two hours around the clock">
+          <button
+            className="button small-button"
+            onClick={() => aroundNow(2)}
+            title="Show two hours around the clock"
+          >
             2 h
           </button>
-          <button className="button small-button" onClick={() => aroundNow(6)} title="Show six hours around the clock">
+          <button
+            className="button small-button"
+            onClick={() => aroundNow(6)}
+            title="Show six hours around the clock"
+          >
             6 h
           </button>
-          <button className="button small-button" onClick={() => setView(3 * 3600, Math.min(clock.maxSecs, 27 * 3600))} title="Show the whole day">
+          <button
+            className="button small-button"
+            onClick={() => setView(3 * 3600, Math.min(clock.maxSecs, 27 * 3600))}
+            title="Show the whole day"
+          >
             Day
           </button>
           <button className="icon-button" onClick={closeTimeline} aria-label="Close timeline">
@@ -155,11 +215,21 @@ export function TimelinePanel() {
           (patternId !== null ? (
             <StringlineView key={`${patternId}-${others}`} patternId={patternId} others={others} />
           ) : (
-            <Empty text={timeline.routeId ? 'Loading ...' : 'Open a line first: click one on the map or use the search box.'} />
+            <Empty
+              text={
+                timeline.routeId
+                  ? 'Loading ...'
+                  : 'Open a line first: click one on the map or use the search box.'
+              }
+            />
           ))}
         {timeline.tab === 'platforms' &&
           (timeline.stationId !== null ? (
-            <PlatformView key={timeline.stationId} stationId={timeline.stationId} onStationName={setStationName} />
+            <PlatformView
+              key={timeline.stationId}
+              stationId={timeline.stationId}
+              onStationName={setStationName}
+            />
           ) : (
             <Empty text="Click a station on the map, or a stop in a trip's stop list, to see its platforms." />
           ))}

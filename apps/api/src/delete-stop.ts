@@ -10,13 +10,19 @@
 // Nothing is re-routed: every trip keeps its path and its vehicle. The deleted stops are rows in
 // `scenario_removed_stops`; the trips are changed in the same edit, so nothing in the scenario
 // still calls at a deleted stop. What needs no database is in packages/core/src/delete-stop.ts.
-import { choosePlatform, removeCalls, type PlatformOption, type RemovalCall } from '@gtfs-editor/core';
+import {
+  choosePlatform,
+  removeCalls,
+  type PlatformOption,
+  type RemovalCall,
+} from '@gtfs-editor/core';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { scenarioOf, visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 export interface DeleteStopDeps {
   cloneTrips: (
@@ -25,7 +31,13 @@ export interface DeleteStopDeps {
     seq: number,
     tripIds: number[],
     delta: number,
-    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean; tag?: string },
+    options: {
+      pinnedIds?: number[];
+      replace: boolean;
+      keepVehicle: boolean;
+      stopTimes?: boolean;
+      tag?: string;
+    },
   ) => Promise<Record<number, number>>;
   removeTrips: (tx: Sql, sc: Scenario, seq: number, tripIds: number[]) => Promise<void>;
   skipPenalty: Record<string, number>;
@@ -48,19 +60,23 @@ const TOP_SPEED: Record<string, number> = { road: 25, rail: 45, ferry: 15 };
 const RAIL_MODES = ['train', 'metro', 'light_rail', 'ferry'];
 
 const tidy = (name: string) => name.replace(/,.*$/, '').replace(/ Station$/, '');
-const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString('en-AU')} ${n === 1 ? one : many}`;
+const count = (n: number, one: string, many = `${one}s`) =>
+  `${n.toLocaleString('en-AU')} ${n === 1 ? one : many}`;
 const minutes = (secs: number) => {
-  if (Math.abs(secs) < 60) return `${Math.round(Math.abs(secs))} second${Math.round(Math.abs(secs)) === 1 ? '' : 's'}`;
+  if (Math.abs(secs) < 60)
+    return `${Math.round(Math.abs(secs))} second${Math.round(Math.abs(secs)) === 1 ? '' : 's'}`;
   const m = Math.round(Math.abs(secs) / 6) / 10;
   return `${Number.isInteger(m) ? m : m.toFixed(1)} min`;
 };
-const metres = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+const metres = (m: number) =>
+  m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`;
 const median = (values: number[]) => {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor((sorted.length - 1) / 2)];
 };
-const platformLabel = (name: string, code: string | null) => (code ? `platform ${code}` : name.replace(/^.*, /, ''));
+const platformLabel = (name: string, code: string | null) =>
+  code ? `platform ${code}` : name.replace(/^.*, /, '');
 
 interface PlannedTrip {
   id: number;
@@ -126,7 +142,15 @@ export interface DeleteStopPlan {
   lines: LineEffect[];
   /** Where moved calls go: platform label to how many. */
   movedTo: { label: string; calls: number }[];
-  totals: { trips: number; noLongerCall: number; cutShort: number; removed: number; moved: number; movedBusy: number; movedUnusual: number };
+  totals: {
+    trips: number;
+    noLongerCall: number;
+    cutShort: number;
+    removed: number;
+    moved: number;
+    movedBusy: number;
+    movedUnusual: number;
+  };
   vehicles: { noTripsLeft: number; turnShort: number };
   /** Trips whose stay-aboard group changes, and the group each ends in: null for none, a number for a new group. */
   blocks: Map<number, { block: string; part: number | null }>;
@@ -136,19 +160,33 @@ export interface DeleteStopPlan {
 }
 
 /** Works out everything a deletion would do, without changing anything. */
-export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteStopBody, deps: DeleteStopDeps): Promise<DeleteStopPlan> {
-  const asked = [...new Set((body.stopIds ?? (body.stopId !== undefined ? [body.stopId] : [])).map(Number))];
-  if (!asked.length || asked.some((id) => !Number.isInteger(id))) throw fail(400, 'Say which stop to delete');
-  if (asked.length > 40) throw fail(400, 'Delete one station, or the platforms of one station, at a time');
+export async function planDeleteStop(
+  tx: Sql,
+  sc: Scenario | null,
+  body: DeleteStopBody,
+  deps: DeleteStopDeps,
+): Promise<DeleteStopPlan> {
+  const asked = [
+    ...new Set((body.stopIds ?? (body.stopId !== undefined ? [body.stopId] : [])).map(Number)),
+  ];
+  if (!asked.length || asked.some((id) => !Number.isInteger(id)))
+    throw fail(400, 'Say which stop to delete');
+  if (asked.length > 40)
+    throw fail(400, 'Delete one station, or the platforms of one station, at a time');
   const targets = await tx`
     select s.id, s.name, s.location_type, s.parent_id, s.platform_code, s.baseline_id
     from stops s where s.id = any(${asked}) and ${stopVisible(tx, 's', sc)}`;
-  if (targets.length !== asked.length) throw fail(404, 'That stop is not in this timetable. It may already have been deleted.');
+  if (targets.length !== asked.length)
+    throw fail(404, 'That stop is not in this timetable. It may already have been deleted.');
   const baselineId = targets[0].baseline_id as number;
   if (sc && sc.baselineId !== baselineId) throw fail(400, 'That stop belongs to a different day');
-  const stationIds = new Set(targets.map((t) => (t.location_type === 1 ? t.id : (t.parent_id ?? t.id))));
-  if (stationIds.size > 1) throw fail(400, 'Delete one station, or the platforms of one station, at a time');
-  if (targets.some((t) => t.location_type !== 0 && t.location_type !== 1)) throw fail(400, 'Only a station, a stop or a platform can be deleted');
+  const stationIds = new Set(
+    targets.map((t) => (t.location_type === 1 ? t.id : (t.parent_id ?? t.id))),
+  );
+  if (stationIds.size > 1)
+    throw fail(400, 'Delete one station, or the platforms of one station, at a time');
+  if (targets.some((t) => t.location_type !== 0 && t.location_type !== 1))
+    throw fail(400, 'Only a station, a stop or a platform can be deleted');
   const stationId = [...stationIds][0] as number;
 
   // Everything at the station: the station itself and whatever sits under it.
@@ -171,15 +209,21 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
   const rail = family.some((s) => (s.mode_ids as string[]).some((m) => RAIL_MODES.includes(m)));
   // Away from the railway a 'station' is only what the feed groups stops under, often the two stops
   // either side of a road, so one of them is called a stop, not a platform.
-  const what: DeleteStopPlan['what'] = !whole ? (rail ? 'platform' : 'stop') : platforms.length > 1 || (rail && station.location_type === 1) ? 'station' : 'stop';
+  const what: DeleteStopPlan['what'] = !whole
+    ? rail
+      ? 'platform'
+      : 'stop'
+    : platforms.length > 1 || (rail && station.location_type === 1)
+      ? 'station'
+      : 'stop';
   const label =
     what === 'platform'
       ? `${goingPlatforms.length === 1 ? platformLabel(goingPlatforms[0].name, goingPlatforms[0].platform_code) : `${goingPlatforms.length} platforms`} at ${station.name}`
       : !whole && goingPlatforms.length > 1
         ? `${goingPlatforms.length} stops at ${station.name}`
-      : what === 'station'
-        ? String(station.name)
-        : String(goingPlatforms[0]?.name ?? station.name);
+        : what === 'station'
+          ? String(station.name)
+          : String(goingPlatforms[0]?.name ?? station.name);
 
   // Every trip that has a row at one of those stops, with all its calls.
   const tripRows = await tx`
@@ -195,12 +239,28 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
         from stop_times st join stops s on s.id = st.stop_id
         where st.trip_id = any(${tripIds}) order by st.trip_id, st.seq`
     : [];
-  type Call = { seq: number; stopId: number; arr: number; dep: number; passing: boolean; station: number; dist: number | null };
+  type Call = {
+    seq: number;
+    stopId: number;
+    arr: number;
+    dep: number;
+    passing: boolean;
+    station: number;
+    dist: number | null;
+  };
   const callsOf = new Map<number, Call[]>();
   for (const c of callRows) {
     let list = callsOf.get(c.trip_id);
     if (!list) callsOf.set(c.trip_id, (list = []));
-    list.push({ seq: c.seq, stopId: c.stop_id, arr: c.arr, dep: c.dep, passing: c.passing, station: c.station, dist: c.dist });
+    list.push({
+      seq: c.seq,
+      stopId: c.stop_id,
+      arr: c.arr,
+      dep: c.dep,
+      passing: c.passing,
+      station: c.station,
+      dist: c.dist,
+    });
   }
   /**
    * The least time a trip may take between two of its stops when the saving is an estimate, so that
@@ -240,7 +300,8 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
     const there = await tx`
       select so.stop_id, so.trip_id, so.arr, so.dep from stop_times so join trips t on t.id = so.trip_id
       where so.stop_id = any(${optionIds}) and not (so.pickup_type = 1 and so.drop_off_type = 1) and ${visible(tx, 't', sc)}`;
-    for (const c of there) busy.get(c.stop_id)!.push({ from: c.arr, to: c.dep, trips: [c.trip_id] });
+    for (const c of there)
+      busy.get(c.stop_id)!.push({ from: c.arr, to: c.dep, trips: [c.trip_id] });
     // A vehicle that ends a trip at a platform and starts its next from the same one holds it in between.
     const waits = await tx`
       select a.last_stop_id as stop_id, a.id as a, b.id as b, a.end_secs as "from", b.start_secs as "to"
@@ -255,7 +316,12 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
       where p.route_id = any(${routeIds}) and p.stop_ids @> array[c.id] group by 1, 2`;
     const uses = new Map(usesRows.map((u) => [`${u.route_id}|${u.id}`, u.uses as number]));
     const toMove = tripRows
-      .flatMap((t) => callsOf.get(t.id)!.filter((c) => removedSet.has(c.stopId) && !c.passing).map((c) => ({ t, c })))
+      .flatMap((t) =>
+        callsOf
+          .get(t.id)!
+          .filter((c) => removedSet.has(c.stopId) && !c.passing)
+          .map((c) => ({ t, c })),
+      )
       .sort((x, y) => x.c.arr - y.c.arr || x.t.id - y.t.id);
     for (const { t, c } of toMove) {
       // Buses and coaches are not moved: the other stops under a bus stop's station are usually the
@@ -264,7 +330,11 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
       // Only platforms of the trip's own kind: a train does not move to a bus stand.
       const options = staying
         .filter((p) => p.added || (p.mode_ids as string[]).includes(t.mode_id))
-        .map((p) => ({ id: p.id as number, uses: uses.get(`${t.route_id}|${p.id}`) ?? 0, busy: busy.get(p.id)! }));
+        .map((p) => ({
+          id: p.id as number,
+          uses: uses.get(`${t.route_id}|${p.id}`) ?? 0,
+          busy: busy.get(p.id)!,
+        }));
       const pick = choosePlatform(options, { arr: c.arr, dep: c.dep, tripId: t.id });
       if (!pick) continue; // nowhere to move to: the call goes, as for a deleted stop
       moveOf.set(`${t.id}|${c.seq}`, { stopId: pick.id, free: pick.free, usual: pick.usual });
@@ -276,14 +346,25 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
   // Each trip without the deleted stop. A first pass finds which pairs of neighbouring stations
   // need a non-stop time from the published timetable, so that they can be asked for together.
   const removalCalls = (tripId: number): RemovalCall[] =>
-    callsOf.get(tripId)!.map((c) => ({ seq: c.seq, arr: c.arr, dep: c.dep, passing: c.passing, gone: removedSet.has(c.stopId) && !moveOf.has(`${tripId}|${c.seq}`) }));
-  const stationAt = (tripId: number, seq: number) => callsOf.get(tripId)!.find((c) => c.seq === seq)!.station;
+    callsOf.get(tripId)!.map((c) => ({
+      seq: c.seq,
+      arr: c.arr,
+      dep: c.dep,
+      passing: c.passing,
+      gone: removedSet.has(c.stopId) && !moveOf.has(`${tripId}|${c.seq}`),
+    }));
+  const stationAt = (tripId: number, seq: number) =>
+    callsOf.get(tripId)!.find((c) => c.seq === seq)!.station;
   const pairs = new Set<string>();
   for (const t of tripRows) {
-    removeCalls(removalCalls(t.id), (from, to) => {
-      pairs.add(`${stationAt(t.id, from)}|${stationAt(t.id, to)}`);
-      return null;
-    }, 0);
+    removeCalls(
+      removalCalls(t.id),
+      (from, to) => {
+        pairs.add(`${stationAt(t.id, from)}|${stationAt(t.id, to)}`);
+        return null;
+      },
+      0,
+    );
   }
   const learned = new Map<string, { secs: number; metres: number | null }>();
   if (pairs.size) {
@@ -306,7 +387,11 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
              percentile_cont(0.5) within group (order by (next_dist - dist)::float8) as metres
       from runs where station = any(${fromStations}) and next_station = any(${toStations}) group by 1, 2`;
     for (const row of seen) {
-      if (row.n >= 3) learned.set(`${row.station}|${row.next_station}`, { secs: Number(row.median), metres: row.metres === null ? null : Number(row.metres) });
+      if (row.n >= 3)
+        learned.set(`${row.station}|${row.next_station}`, {
+          secs: Number(row.median),
+          metres: row.metres === null ? null : Number(row.metres),
+        });
     }
   }
 
@@ -321,19 +406,48 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
         // re-routed). Their time is only believed when their path is the same length as this trip's.
         const a = calls.find((c) => c.seq === from)!.dist;
         const b = calls.find((c) => c.seq === to)!.dist;
-        if (a !== null && b !== null && seen.metres !== null && Math.abs(b - a - seen.metres) > Math.max(100, 0.1 * (b - a))) return null;
+        if (
+          a !== null &&
+          b !== null &&
+          seen.metres !== null &&
+          Math.abs(b - a - seen.metres) > Math.max(100, 0.1 * (b - a))
+        )
+          return null;
         return seen.secs;
       },
       deps.skipPenalty[t.rule_set] ?? 20,
       floorFor(t.id, t.rule_set),
     );
-    const moves = calls.filter((c) => moveOf.has(`${t.id}|${c.seq}`)).map((c) => ({ seq: c.seq, ...moveOf.get(`${t.id}|${c.seq}`)! }));
+    const moves = calls
+      .filter((c) => moveOf.has(`${t.id}|${c.seq}`))
+      .map((c) => ({ seq: c.seq, ...moveOf.get(`${t.id}|${c.seq}`)! }));
     const base = {
-      id: t.id as number, routeId: t.route_id as number, patternId: t.pattern_id as number | null, vehicleDayId: t.vehicle_day_id as number | null,
-      blockId: t.feed_block_id as string | null, cutStart: out.cutStart, cutEnd: out.cutEnd, skipped: out.skipped, savingSecs: out.savingSecs,
+      id: t.id as number,
+      routeId: t.route_id as number,
+      patternId: t.pattern_id as number | null,
+      vehicleDayId: t.vehicle_day_id as number | null,
+      blockId: t.feed_block_id as string | null,
+      cutStart: out.cutStart,
+      cutEnd: out.cutEnd,
+      skipped: out.skipped,
+      savingSecs: out.savingSecs,
       estimated: out.estimated,
     };
-    if (!out.kept) return { ...base, removed: true, cutStart: false, cutEnd: false, skipped: 0, savingSecs: 0, estimated: false, shorterSecs: 0, moves: [], dropSeqs: [], changes: [], stopIds: [] };
+    if (!out.kept)
+      return {
+        ...base,
+        removed: true,
+        cutStart: false,
+        cutEnd: false,
+        skipped: 0,
+        savingSecs: 0,
+        estimated: false,
+        shorterSecs: 0,
+        moves: [],
+        dropSeqs: [],
+        changes: [],
+        stopIds: [],
+      };
     const keptSeqs = new Set(out.kept.map((k) => k.seq));
     const bySeq = new Map(calls.map((c) => [c.seq, c]));
     const stopAt = (seq: number) => moveOf.get(`${t.id}|${seq}`)?.stopId ?? bySeq.get(seq)!.stopId;
@@ -349,7 +463,7 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
       removed: false,
       // Only moves on calls the trip still makes count.
       moves: moves.filter((m) => keptSeqs.has(m.seq)),
-      shorterSecs: (t.end_secs - t.start_secs) - (last.arr - out.kept[0].dep),
+      shorterSecs: t.end_secs - t.start_secs - (last.arr - out.kept[0].dep),
       dropSeqs: calls.filter((c) => !keptSeqs.has(c.seq)).map((c) => c.seq),
       changes,
       stopIds: out.kept.map((k) => stopAt(k.seq)),
@@ -364,7 +478,13 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
                (select count(*)::int from trips t where t.route_id = r.id and ${visible(tx, 't', sc)}) as trips
         from routes r join modes m on m.id = r.mode_id where r.id = any(${routeIds}) order by m.sort, r.short_name`
     : [];
-  const losing = [...new Set(trips.filter((t) => t.removed || t.cutStart || t.cutEnd || t.skipped > 0).map((t) => t.routeId))];
+  const losing = [
+    ...new Set(
+      trips
+        .filter((t) => t.removed || t.cutStart || t.cutEnd || t.skipped > 0)
+        .map((t) => t.routeId),
+    ),
+  ];
   const nearestRows = losing.length
     ? await tx`
         select distinct on (p.route_id) p.route_id, s.name,
@@ -374,7 +494,12 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
           and exists (select 1 from trips t where t.pattern_id = p.id and ${visible(tx, 't', sc)})
         order by p.route_id, metres`
     : [];
-  const nearest = new Map(nearestRows.map((n) => [n.route_id as number, { name: String(n.name), metres: Number(n.metres) }]));
+  const nearest = new Map(
+    nearestRows.map((n) => [
+      n.route_id as number,
+      { name: String(n.name), metres: Number(n.metres) },
+    ]),
+  );
   const lines: LineEffect[] = routeRows.map((r) => {
     const own = trips.filter((t) => t.routeId === r.id);
     const skipping = own.filter((t) => !t.removed && t.skipped > 0 && !t.cutStart && !t.cutEnd);
@@ -395,7 +520,14 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
       nearest: losing.includes(r.id) ? (nearest.get(r.id) ?? null) : null,
     };
   });
-  lines.sort((a, b) => b.noLongerCall + b.cutShort + b.removed + b.moved - (a.noLongerCall + a.cutShort + a.removed + a.moved));
+  lines.sort(
+    (a, b) =>
+      b.noLongerCall +
+      b.cutShort +
+      b.removed +
+      b.moved -
+      (a.noLongerCall + a.cutShort + a.removed + a.moved),
+  );
 
   const allMoves = trips.flatMap((t) => t.moves);
   const totals = {
@@ -411,21 +543,35 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
   // Vehicles stay on their trips. Removing a trip can leave a vehicle with nothing to do, and a trip
   // cut short leaves its vehicle starting or ending somewhere new.
   const removedIds = trips.filter((t) => t.removed).map((t) => t.id);
-  const removedDays = [...new Set(trips.filter((t) => t.removed && t.vehicleDayId !== null).map((t) => t.vehicleDayId!))];
+  const removedDays = [
+    ...new Set(
+      trips.filter((t) => t.removed && t.vehicleDayId !== null).map((t) => t.vehicleDayId!),
+    ),
+  ];
   const [{ n: noTripsLeft }] = removedDays.length
     ? await tx`
         select count(*)::int as n from (
           select t.vehicle_day_id from trips t where t.vehicle_day_id = any(${removedDays}) and ${visible(tx, 't', sc)}
           group by 1 having bool_and(t.id = any(${removedIds}))) x`
     : [{ n: 0 }];
-  const turnShort = new Set(trips.filter((t) => !t.removed && (t.cutStart || t.cutEnd) && t.vehicleDayId !== null).map((t) => t.vehicleDayId)).size;
+  const turnShort = new Set(
+    trips
+      .filter((t) => !t.removed && (t.cutStart || t.cutEnd) && t.vehicleDayId !== null)
+      .map((t) => t.vehicleDayId),
+  ).size;
 
   // Stay-aboard groups (block_id in GTFS): passengers can stay on from one trip to the next where
   // the two meet. A trip cut short no longer meets its neighbour there, so the group is split at
   // that point; the first part keeps its name, and a part of one trip has none.
   const blocks = new Map<number, { block: string; part: number | null }>();
   let linksEnded = 0;
-  const cutBlocks = [...new Set(trips.filter((t) => t.blockId && (t.removed || t.cutStart || t.cutEnd)).map((t) => t.blockId!))];
+  const cutBlocks = [
+    ...new Set(
+      trips
+        .filter((t) => t.blockId && (t.removed || t.cutStart || t.cutEnd))
+        .map((t) => t.blockId!),
+    ),
+  ];
   if (cutBlocks.length) {
     const members = await tx`
       select t.id, t.feed_block_id as block from trips t
@@ -437,11 +583,13 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
     const close = () => {
       if (block === null) return;
       let n = 0;
-      parts.filter((p) => p.length).forEach((p, i) => {
-        if (i === 0) return;
-        const part = p.length > 1 ? ++n : null;
-        for (const id of p) blocks.set(id, { block: block!, part });
-      });
+      parts
+        .filter((p) => p.length)
+        .forEach((p, i) => {
+          if (i === 0) return;
+          const part = p.length > 1 ? ++n : null;
+          for (const id of p) blocks.set(id, { block: block!, part });
+        });
     };
     let prev: PlannedTrip | undefined;
     let prevWasRemoved = false;
@@ -457,7 +605,9 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
       }
       const p = planned.get(m.id);
       // The link from the trip before to this one ends when either is removed or no longer reaches the join.
-      const broken = !first && (prevWasRemoved || p?.removed === true || prev?.cutEnd === true || p?.cutStart === true);
+      const broken =
+        !first &&
+        (prevWasRemoved || p?.removed === true || prev?.cutEnd === true || p?.cutStart === true);
       if (broken) linksEnded++;
       first = false;
       if (p?.removed) {
@@ -476,30 +626,48 @@ export async function planDeleteStop(tx: Sql, sc: Scenario | null, body: DeleteS
   // Said once each: two lines can share a name.
   const warned = new Set<string>();
   for (const l of lines) {
-    if (l.removed > 0 && l.tripsLeft === 0) warned.add(`Line ${l.name} is left with no trips at all.`);
-    else if (l.nearest === null && losing.includes(l.routeId)) warned.add(`Line ${l.name} is left with no other stop.`);
+    if (l.removed > 0 && l.tripsLeft === 0)
+      warned.add(`Line ${l.name} is left with no trips at all.`);
+    else if (l.nearest === null && losing.includes(l.routeId))
+      warned.add(`Line ${l.name} is left with no other stop.`);
     else if (l.nearest && l.nearest.metres > AREA_M) {
-      warned.add(`This is line ${l.name}'s only stop in the area: its nearest other stop is ${tidy(l.nearest.name)}, ${metres(l.nearest.metres)} away.`);
+      warned.add(
+        `This is line ${l.name}'s only stop in the area: its nearest other stop is ${tidy(l.nearest.name)}, ${metres(l.nearest.metres)} away.`,
+      );
     }
   }
   const warnings = [...warned];
 
   const plan: DeleteStopPlan = {
-    baselineId, what, rail, label, stationId, removedStopIds,
+    baselineId,
+    what,
+    rail,
+    label,
+    stationId,
+    removedStopIds,
     // Only the ones something can call at: the feed also lists car parks and taxi ranks under a station.
     platforms: (goingPlatforms.some((p) => p.added || (p.mode_ids as string[]).length > 0)
       ? goingPlatforms.filter((p) => p.added || (p.mode_ids as string[]).length > 0)
       : goingPlatforms
     ).map((p) => String(p.name)),
-    placeWord: goingPlatforms.every((p) => p.platform_code || (p.mode_ids as string[]).length === 0) ? 'platforms' : goingPlatforms.some((p) => p.platform_code) ? 'platforms and stops' : 'stops',
-    trips, lines,
-    movedTo: [...movedTo.entries()].map(([id, calls]) => {
-      const p = staying.find((s) => s.id === id)!;
-      return { label: platformLabel(p.name, p.platform_code), calls };
-    }).sort((a, b) => b.calls - a.calls),
+    placeWord: goingPlatforms.every((p) => p.platform_code || (p.mode_ids as string[]).length === 0)
+      ? 'platforms'
+      : goingPlatforms.some((p) => p.platform_code)
+        ? 'platforms and stops'
+        : 'stops',
+    trips,
+    lines,
+    movedTo: [...movedTo.entries()]
+      .map(([id, calls]) => {
+        const p = staying.find((s) => s.id === id)!;
+        return { label: platformLabel(p.name, p.platform_code), calls };
+      })
+      .sort((a, b) => b.calls - a.calls),
     totals,
     vehicles: { noTripsLeft, turnShort },
-    blocks, linksEnded, warnings,
+    blocks,
+    linksEnded,
+    warnings,
     summary: '',
   };
   plan.summary = describePlan(plan);
@@ -511,23 +679,42 @@ function describePlan(plan: DeleteStopPlan): string {
   const t = plan.totals;
   const parts: string[] = [];
   if (t.moved) {
-    const where = plan.movedTo.map((m) => `${m.calls.toLocaleString('en-AU')} to ${m.label}`).join(', ');
-    parts.push(`${count(t.moved, 'call')} moved to another platform there (${where})${t.movedBusy ? `, ${t.movedBusy.toLocaleString('en-AU')} of them onto a platform that is in use within a minute of that time (two trips there at once show as clashes)` : ', none onto a platform in use at that time'}${t.movedUnusual ? `; ${t.movedUnusual.toLocaleString('en-AU')} onto a platform their line does not normally use` : ''}`);
+    const where = plan.movedTo
+      .map((m) => `${m.calls.toLocaleString('en-AU')} to ${m.label}`)
+      .join(', ');
+    parts.push(
+      `${count(t.moved, 'call')} moved to another platform there (${where})${t.movedBusy ? `, ${t.movedBusy.toLocaleString('en-AU')} of them onto a platform that is in use within a minute of that time (two trips there at once show as clashes)` : ', none onto a platform in use at that time'}${t.movedUnusual ? `; ${t.movedUnusual.toLocaleString('en-AU')} onto a platform their line does not normally use` : ''}`,
+    );
   }
   if (t.noLongerCall) {
     const skipping = plan.lines.filter((l) => l.noLongerCall > 0);
     const saving = median(skipping.map((l) => l.savingSecs));
-    parts.push(`${count(t.noLongerCall, 'trip')} on ${count(skipping.length, 'line')} no longer call${t.noLongerCall === 1 ? 's' : ''} there, ${saving > 0 ? `typically ${minutes(saving)} quicker` : 'typically no quicker'}${skipping.some((l) => l.estimated) ? ' (estimated, and never faster past there than they run today)' : ''}`);
+    parts.push(
+      `${count(t.noLongerCall, 'trip')} on ${count(skipping.length, 'line')} no longer call${t.noLongerCall === 1 ? 's' : ''} there, ${saving > 0 ? `typically ${minutes(saving)} quicker` : 'typically no quicker'}${skipping.some((l) => l.estimated) ? ' (estimated, and never faster past there than they run today)' : ''}`,
+    );
   }
-  if (t.cutShort) parts.push(`${count(t.cutShort, 'trip')} that started or ended there ${t.cutShort === 1 ? 'is' : 'are'} cut short to the next or previous stop, at the times ${t.cutShort === 1 ? 'it' : 'they'} already had`);
+  if (t.cutShort)
+    parts.push(
+      `${count(t.cutShort, 'trip')} that started or ended there ${t.cutShort === 1 ? 'is' : 'are'} cut short to the next or previous stop, at the times ${t.cutShort === 1 ? 'it' : 'they'} already had`,
+    );
   if (t.removed) parts.push(`${count(t.removed, 'trip')} removed, left with fewer than two stops`);
   if (!parts.length) parts.push('nothing called there, so no trip changes');
   const tail: string[] = [];
-  if (t.noLongerCall || t.cutShort || t.removed) tail.push('Nothing is re-routed and vehicles stay on their trips');
-  if (plan.vehicles.noTripsLeft) tail.push(`${count(plan.vehicles.noTripsLeft, 'vehicle')} ${plan.vehicles.noTripsLeft === 1 ? 'has' : 'have'} no trips left and ${plan.vehicles.noTripsLeft === 1 ? 'is' : 'are'} no longer needed`);
+  if (t.noLongerCall || t.cutShort || t.removed)
+    tail.push('Nothing is re-routed and vehicles stay on their trips');
+  if (plan.vehicles.noTripsLeft)
+    tail.push(
+      `${count(plan.vehicles.noTripsLeft, 'vehicle')} ${plan.vehicles.noTripsLeft === 1 ? 'has' : 'have'} no trips left and ${plan.vehicles.noTripsLeft === 1 ? 'is' : 'are'} no longer needed`,
+    );
   else if (t.trips) tail.push('the number of vehicles does not change');
-  if (plan.vehicles.turnShort) tail.push(`${count(plan.vehicles.turnShort, 'vehicle')} now ${plan.vehicles.turnShort === 1 ? 'starts or ends' : 'start or end'} a trip short of there`);
-  if (plan.linksEnded) tail.push(`${count(plan.linksEnded, 'stay-aboard link')} ended, because the trips no longer meet there`);
+  if (plan.vehicles.turnShort)
+    tail.push(
+      `${count(plan.vehicles.turnShort, 'vehicle')} now ${plan.vehicles.turnShort === 1 ? 'starts or ends' : 'start or end'} a trip short of there`,
+    );
+  if (plan.linksEnded)
+    tail.push(
+      `${count(plan.linksEnded, 'stay-aboard link')} ended, because the trips no longer meet there`,
+    );
   const head = `Deleted ${plan.label}${plan.what === 'station' && plan.platforms.length > 1 ? ` and its ${plan.platforms.length} ${plan.placeWord}` : ''}`;
   // The preview lists every warning; the list of changes carries the first few.
   const more = plan.warnings.length - 3;
@@ -539,7 +726,13 @@ function describePlan(plan: DeleteStopPlan): string {
 }
 
 /** Deletes a station, a stop or platforms, and changes every trip that called there. One undoable edit. */
-export async function editDeleteStop(tx: Sql, sc: Scenario, seq: number, body: DeleteStopBody, deps: DeleteStopDeps) {
+export async function editDeleteStop(
+  tx: Sql,
+  sc: Scenario,
+  seq: number,
+  body: DeleteStopBody,
+  deps: DeleteStopDeps,
+) {
   const plan = await planDeleteStop(tx, sc, body, deps);
   const clashesBefore = await deps.clashes(tx, sc);
   await tx`
@@ -547,12 +740,20 @@ export async function editDeleteStop(tx: Sql, sc: Scenario, seq: number, body: D
     select ${sc.id}, u.id, ${seq} from unnest(${plan.removedStopIds}::bigint[]) as u(id)
     on conflict (scenario_id, stop_id) do update set edit_seq = excluded.edit_seq`;
 
-  await deps.removeTrips(tx, sc, seq, plan.trips.filter((t) => t.removed).map((t) => t.id));
+  await deps.removeTrips(
+    tx,
+    sc,
+    seq,
+    plan.trips.filter((t) => t.removed).map((t) => t.id),
+  );
   const changed = plan.trips.filter((t) => !t.removed);
   const changedIds = new Set(changed.map((t) => t.id));
   // Trips that only leave a stay-aboard group are copied too, so that the group can be renamed on them.
   const relinked = [...plan.blocks.keys()].filter((id) => !changedIds.has(id));
-  const idMap = await deps.cloneTrips(tx, sc, seq, [...changedIds, ...relinked], 0, { replace: true, keepVehicle: true });
+  const idMap = await deps.cloneTrips(tx, sc, seq, [...changedIds, ...relinked], 0, {
+    replace: true,
+    keepVehicle: true,
+  });
 
   // Stop times: rows at the deleted stop go, and the rows whose time or platform changed are rewritten.
   const drops = changed.flatMap((t) => t.dropSeqs.map((s) => ({ trip: idMap[t.id], seq: s })));
@@ -583,16 +784,29 @@ export async function editDeleteStop(tx: Sql, sc: Scenario, seq: number, body: D
 
   // Each changed trip gets a stop pattern without the deleted stop, shared by the trips that now
   // call at the same stops. A trip that ends somewhere new is signed for where it now ends.
-  const groups = new Map<string, { patternId: number; stopIds: number[]; cutEnd: boolean; trips: number[] }>();
+  const groups = new Map<
+    string,
+    { patternId: number; stopIds: number[]; cutEnd: boolean; trips: number[] }
+  >();
   for (const t of changed) {
     if (t.patternId === null) continue;
     const key = `${t.patternId}|${t.stopIds.join(',')}`;
     let g = groups.get(key);
-    if (!g) groups.set(key, (g = { patternId: t.patternId, stopIds: t.stopIds, cutEnd: t.cutEnd, trips: [] }));
+    if (!g)
+      groups.set(
+        key,
+        (g = { patternId: t.patternId, stopIds: t.stopIds, cutEnd: t.cutEnd, trips: [] }),
+      );
     g.trips.push(idMap[t.id]);
   }
-  const lastStops = [...new Set(changed.filter((t) => t.cutEnd).map((t) => t.stopIds[t.stopIds.length - 1]))];
-  const names = new Map((lastStops.length ? await tx`select id, name from stops where id = any(${lastStops})` : []).map((s) => [s.id as number, tidy(String(s.name))]));
+  const lastStops = [
+    ...new Set(changed.filter((t) => t.cutEnd).map((t) => t.stopIds[t.stopIds.length - 1])),
+  ];
+  const names = new Map(
+    (lastStops.length ? await tx`select id, name from stops where id = any(${lastStops})` : []).map(
+      (s) => [s.id as number, tidy(String(s.name))],
+    ),
+  );
   let n = 0;
   for (const g of groups.values()) {
     const headsign = g.cutEnd ? (names.get(g.stopIds[g.stopIds.length - 1]) ?? null) : null;
@@ -620,7 +834,8 @@ export async function editDeleteStop(tx: Sql, sc: Scenario, seq: number, body: D
     if (!list) renamed.set(key, (list = []));
     list.push(idMap[id]);
   }
-  for (const [block, ids] of renamed) await tx`update trips set feed_block_id = ${block === '' ? null : block} where id = any(${ids})`;
+  for (const [block, ids] of renamed)
+    await tx`update trips set feed_block_id = ${block === '' ? null : block} where id = any(${ids})`;
 
   // Trips that move can land on top of others, here or further along the line. The list of clashes
   // shows each one; the summary says how many there are now, so that none arrives unannounced.
@@ -637,7 +852,11 @@ export async function editDeleteStop(tx: Sql, sc: Scenario, seq: number, body: D
 export function deleteStopRoutes(
   app: FastifyInstance,
   sql: Sql,
-  ctx: { loadScenario: (id: number) => Promise<Scenario>; idParam: (req: never) => number; deps: DeleteStopDeps },
+  ctx: {
+    loadScenario: (id: number) => Promise<Scenario>;
+    idParam: (req: never) => number;
+    deps: DeleteStopDeps;
+  },
 ) {
   /** What deleting a stop would do, with ?s= for a scenario. Changes nothing. */
   app.post('/api/delete-stop-preview', async (req) => {

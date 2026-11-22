@@ -6,7 +6,8 @@ import type { Sql } from '@gtfs-editor/gtfs/db';
 import { nearestRoad } from './roads.ts';
 import type { Scenario } from './scenarios.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 const ROAD_MODES = new Set(['bus', 'coach', 'school_bus']);
 
@@ -41,7 +42,10 @@ const STATION_NAMES: Record<string, { suffix: string; platform: string; what: st
 const M_PER_DEG_LAT = 110_540;
 const mPerDegLon = (lat: number) => 111_320 * Math.cos((lat * Math.PI) / 180);
 /** A point moved by so many metres east and north. */
-const offset = (lon: number, lat: number, east: number, north: number): [number, number] => [lon + east / mPerDegLon(lat), lat + north / M_PER_DEG_LAT];
+const offset = (lon: number, lat: number, east: number, north: number): [number, number] => [
+  lon + east / mPerDegLon(lat),
+  lat + north / M_PER_DEG_LAT,
+];
 
 // How far from the middle of the road a stop is placed when the click landed on the road itself.
 const KERB_M = 6;
@@ -52,14 +56,20 @@ const KERB_M = 6;
  * by asking where two nearby points snap to, and the pair is placed either side of it.
  * Returns null when there is no routing server or no road nearby.
  */
-async function acrossRoadPair(lon: number, lat: number): Promise<{ here: [number, number]; there: [number, number] } | null> {
+async function acrossRoadPair(
+  lon: number,
+  lat: number,
+): Promise<{ here: [number, number]; there: [number, number] } | null> {
   const road = await nearestRoad(lon, lat);
   if (!road) return null;
   const off = distanceM(lon, lat, road[0], road[1]);
   if (off > 60) return null;
   if (off >= 3) return { here: [lon, lat], there: [2 * road[0] - lon, 2 * road[1] - lat] };
   let along: [number, number] | null = null;
-  for (const [east, north] of [[20, 0], [0, 20]]) {
+  for (const [east, north] of [
+    [20, 0],
+    [0, 20],
+  ]) {
     const probe = await nearestRoad(...offset(road[0], road[1], east, north));
     if (!probe) continue;
     const dx = (probe[0] - road[0]) * mPerDegLon(lat);
@@ -69,7 +79,10 @@ async function acrossRoadPair(lon: number, lat: number): Promise<{ here: [number
   if (!along) return null;
   const length = Math.hypot(...along);
   const side: [number, number] = [(-along[1] / length) * KERB_M, (along[0] / length) * KERB_M];
-  return { here: offset(road[0], road[1], side[0], side[1]), there: offset(road[0], road[1], -side[0], -side[1]) };
+  return {
+    here: offset(road[0], road[1], side[0], side[1]),
+    there: offset(road[0], road[1], -side[0], -side[1]),
+  };
 }
 
 export interface AddStopBody {
@@ -98,7 +111,8 @@ export async function editAddStop(tx: Sql, sc: Scenario, seq: number, body: AddS
   if (!name) throw fail(400, 'Give the stop a name');
   const lon = Number(body.lon);
   const lat = Number(body.lat);
-  if (!(lon > 140 && lon < 160 && lat > -38 && lat < -28)) throw fail(400, 'That place is outside New South Wales');
+  if (!(lon > 140 && lon < 160 && lat > -38 && lat < -28))
+    throw fail(400, 'That place is outside New South Wales');
   const [mode] = await tx`select id, name from modes where id = ${String(body.modeId)}`;
   if (!mode) throw fail(400, 'Choose a mode');
 
@@ -116,7 +130,15 @@ export async function editAddStop(tx: Sql, sc: Scenario, seq: number, body: AddS
       values (${sc.baselineId}, ${gtfsId}, ${row.name}, ${row.locationType}, ${row.parent?.gtfsId ?? null}, ${row.parent?.id ?? null},
               ${row.platformCode ?? null}, ${[mode.id]}::text[], ST_SetSRID(ST_MakePoint(${row.at[0]}, ${row.at[1]}), 4326), ${sc.id}, ${seq})
       returning id`;
-    return { id: made.id, name: row.name, lon: row.at[0], lat: row.at[1], parentId: row.parent?.id ?? null, isStation: row.locationType === 1, gtfsId };
+    return {
+      id: made.id,
+      name: row.name,
+      lon: row.at[0],
+      lat: row.at[1],
+      parentId: row.parent?.id ?? null,
+      isStation: row.locationType === 1,
+      gtfsId,
+    };
   };
 
   if (ROAD_MODES.has(mode.id)) {
@@ -124,19 +146,31 @@ export async function editAddStop(tx: Sql, sc: Scenario, seq: number, body: AddS
     const here = await insert({ n: 1, name, at: pair?.here ?? [lon, lat], locationType: 0 });
     let note = '';
     if (pair) {
-      const there = await insert({ n: 2, name: `${name} (opposite)`, at: pair.there, locationType: 0 });
+      const there = await insert({
+        n: 2,
+        name: `${name} (opposite)`,
+        at: pair.there,
+        locationType: 0,
+      });
       await tx`update stops set partner_id = ${there.id} where id = ${here.id}`;
       await tx`update stops set partner_id = ${here.id} where id = ${there.id}`;
       note = `, with a stop across the road ${Math.round(distanceM(here.lon, here.lat, there.lon, there.lat))} m away for the way back`;
     } else if (body.pair !== false) {
-      note = '; no road was found close by, so there is no stop across the road and lines will use this one both ways';
+      note =
+        '; no road was found close by, so there is no stop across the road and lines will use this one both ways';
     }
-    return { summary: `New ${String(mode.name).toLowerCase()} stop ${name}${note}`, idMap: {}, stops: [here] };
+    return {
+      summary: `New ${String(mode.name).toLowerCase()} stop ${name}${note}`,
+      idMap: {},
+      stops: [here],
+    };
   }
 
   const naming = STATION_NAMES[mode.id] ?? STATION_NAMES.train;
   const count = Math.max(1, Math.min(8, Math.round(Number(body.platforms ?? 2)) || 2));
-  const stationName = name.toLowerCase().endsWith(naming.suffix.trim().toLowerCase()) ? name : `${name}${naming.suffix}`;
+  const stationName = name.toLowerCase().endsWith(naming.suffix.trim().toLowerCase())
+    ? name
+    : `${name}${naming.suffix}`;
   const station = await insert({ n: 0, name: stationName, at: [lon, lat], locationType: 1 });
   for (let i = 0; i < count; i++) {
     // Platforms sit a few metres apart so that they can be told apart on the map.

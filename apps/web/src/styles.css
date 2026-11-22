@@ -18,7 +18,12 @@
   --playhead: #fff;
   --radius: 14px;
   color-scheme: dark;
-  font-family: Inter, 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family:
+    Inter,
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 14px;
   line-height: 1.4;
 }
@@ -2128,7 +2133,9 @@ select.cell {
 /* The line the pointer is on, in the closure's list or on the map. */
 .closure-lines li.focus {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  box-shadow: -8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent), 8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow:
+    -8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent),
+    8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .closure-only {

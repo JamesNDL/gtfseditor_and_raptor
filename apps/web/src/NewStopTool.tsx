@@ -33,9 +33,16 @@ export function NewStopTool() {
         <>
           <p className="note">
             {busy ? 'Adding it ...' : `Now click the map where ${placing.name} should be.`}
-            {road && placing.pair && !busy && ' Click on the road, or on the side of it this stop is on.'}
+            {road &&
+              placing.pair &&
+              !busy &&
+              ' Click on the road, or on the side of it this stop is on.'}
           </p>
-          <button className="button small-button" disabled={busy} onClick={() => set({ placing: null })}>
+          <button
+            className="button small-button"
+            disabled={busy}
+            onClick={() => set({ placing: null })}
+          >
             Cancel
           </button>
         </>
@@ -55,7 +62,11 @@ export function NewStopTool() {
             {!road && (
               <label>
                 <span>Platforms</span>
-                <select className="day-select" value={platforms} onChange={(e) => setPlatforms(Number(e.target.value))}>
+                <select
+                  className="day-select"
+                  value={platforms}
+                  onChange={(e) => setPlatforms(Number(e.target.value))}
+                >
                   {[1, 2, 3, 4].map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -66,7 +77,10 @@ export function NewStopTool() {
             )}
           </div>
           {road && (
-            <label className="timeline-check" title="The way back then uses the stop on the other side of the road">
+            <label
+              className="timeline-check"
+              title="The way back then uses the stop on the other side of the road"
+            >
               <input type="checkbox" checked={pair} onChange={(e) => setPair(e.target.checked)} />
               Also add the stop across the road
             </label>

@@ -7,7 +7,8 @@ import { scenarioOf, visible, type Scenario } from './scenarios.ts';
 import { stopDeleted, stopVisible } from './stops.ts';
 import { stopDwell } from './timings.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 interface Described {
   label: string;
@@ -28,16 +29,29 @@ export interface ScheduleDeps {
     seq: number,
     tripIds: number[],
     delta: number,
-    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean; tag?: string },
+    options: {
+      pinnedIds?: number[];
+      replace: boolean;
+      keepVehicle: boolean;
+      stopTimes?: boolean;
+      tag?: string;
+    },
   ) => Promise<Record<number, number>>;
-  assignVehicles: (tx: Sql, sc: Scenario, seq: number, tripIds: number[], forceNew?: boolean | 'fresh') => Promise<{ reused: number; added: number }>;
+  assignVehicles: (
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    tripIds: number[],
+    forceNew?: boolean | 'fresh',
+  ) => Promise<{ reused: number; added: number }>;
   describe: (tx: Sql, tripId: number) => Promise<Described>;
   fleetNote: (fleet: { reused: number; added: number }) => string;
   skipPenalty: Record<string, number>;
   newLine: Record<string, { dwell: number }>;
 }
 
-const platformName = (name: string, code: string | null) => (code ? `platform ${code}` : name.replace(/^.*, /, ''));
+const platformName = (name: string, code: string | null) =>
+  code ? `platform ${code}` : name.replace(/^.*, /, '');
 const stationName = (name: string) => name.replace(/, Platform.*$/, '').replace(/ Station.*$/, '');
 
 export interface PlatformChoice {
@@ -55,7 +69,12 @@ export interface PlatformChoice {
  * The platforms a trip could use for one of its calls: the others at the same station, with whether
  * each is free for the time the trip is there (a minute either side) and whether the line already uses it.
  */
-export async function platformChoices(tx: Sql, sc: Scenario | null, tripId: number, stopSeq: number): Promise<PlatformChoice[]> {
+export async function platformChoices(
+  tx: Sql,
+  sc: Scenario | null,
+  tripId: number,
+  stopSeq: number,
+): Promise<PlatformChoice[]> {
   const [call] = await tx`
     select st.stop_id, st.arr, st.dep, s.parent_id, t.route_id, t.vehicle_day_id, r.mode_id
     from stop_times st join stops s on s.id = st.stop_id join trips t on t.id = st.trip_id join routes r on r.id = t.route_id
@@ -106,7 +125,12 @@ export function scheduleEdits(deps: ScheduleDeps) {
    * another train. Each such call is moved to a free platform at the same station that the line
    * already uses, where there is one. Returns how many calls were moved.
    */
-  async function settlePlatforms(tx: Sql, sc: Scenario, seq: number, tripIds: number[]): Promise<number> {
+  async function settlePlatforms(
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    tripIds: number[],
+  ): Promise<number> {
     if (!tripIds.length) return 0;
     const now = { ...sc, head: seq };
     const clashes = await tx`
@@ -133,14 +157,22 @@ export function scheduleEdits(deps: ScheduleDeps) {
     return moved;
   }
 
-  const platformNote = (moved: number) => (moved ? `; ${moved} call${moved === 1 ? '' : 's'} moved to a free platform` : '');
+  const platformNote = (moved: number) =>
+    moved ? `; ${moved} call${moved === 1 ? '' : 's'} moved to a free platform` : '';
 
   /** Moves one call of a trip to another platform at the same station. */
-  async function editSetPlatform(tx: Sql, sc: Scenario, seq: number, body: { tripId: number; stopSeq: number; stopId: number }) {
+  async function editSetPlatform(
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    body: { tripId: number; stopSeq: number; stopId: number },
+  ) {
     const tripId = Number(body.tripId);
     const stopSeq = Number(body.stopSeq);
     const t = await describe(tx, tripId);
-    const choice = (await platformChoices(tx, sc, tripId, stopSeq)).find((c) => c.id === Number(body.stopId));
+    const choice = (await platformChoices(tx, sc, tripId, stopSeq)).find(
+      (c) => c.id === Number(body.stopId),
+    );
     if (!choice) throw fail(400, 'That is not a platform at the same station');
     if (choice.current) throw fail(400, 'The trip already uses that platform');
     const idMap = await cloneTrips(tx, sc, seq, [tripId], 0, { replace: true, keepVehicle: true });
@@ -159,17 +191,27 @@ export function scheduleEdits(deps: ScheduleDeps) {
    */
   async function editReplan(tx: Sql, sc: Scenario, seq: number, body: { routeId: number }) {
     const routeId = Number(body.routeId);
-    const [route] = await tx`select coalesce(short_name, long_name) as name from routes where id = ${routeId}`;
+    const [route] =
+      await tx`select coalesce(short_name, long_name) as name from routes where id = ${routeId}`;
     if (!route) throw fail(404, 'Line not found');
     const vis = visible(tx, 't', sc);
-    const rows = await tx`select t.id, t.vehicle_day_id from trips t where t.route_id = ${routeId} and t.baseline_id = ${sc.baselineId} and ${vis}`;
+    const rows =
+      await tx`select t.id, t.vehicle_day_id from trips t where t.route_id = ${routeId} and t.baseline_id = ${sc.baselineId} and ${vis}`;
     if (!rows.length) throw fail(400, 'This line has no trips');
     const days = [...new Set(rows.map((r) => r.vehicle_day_id).filter((d) => d !== null))];
     const [{ shared }] = await tx`
       select count(distinct t.vehicle_day_id)::int as shared from trips t
       where t.vehicle_day_id = any(${days}) and t.route_id <> ${routeId} and ${vis}`;
-    const [{ n: networkBefore }] = await tx`select count(distinct t.vehicle_day_id)::int as n from trips t where t.baseline_id = ${sc.baselineId} and ${vis}`;
-    const idMap = await cloneTrips(tx, sc, seq, rows.map((r) => r.id), 0, { replace: true, keepVehicle: false });
+    const [{ n: networkBefore }] =
+      await tx`select count(distinct t.vehicle_day_id)::int as n from trips t where t.baseline_id = ${sc.baselineId} and ${vis}`;
+    const idMap = await cloneTrips(
+      tx,
+      sc,
+      seq,
+      rows.map((r) => r.id),
+      0,
+      { replace: true, keepVehicle: false },
+    );
     const fleet = await assignVehicles(tx, sc, seq, Object.values(idMap), 'fresh');
     // The line's own figure can fall while the network's rises: a vehicle that also runs other
     // lines keeps those trips, and now counts on its own. So the network's change is said too.
@@ -183,7 +225,12 @@ export function scheduleEdits(deps: ScheduleDeps) {
   }
 
   /** Puts a trip on a chosen vehicle, or on a new one. Whether the vehicle can make it is left to the clash check. */
-  async function editMoveToVehicle(tx: Sql, sc: Scenario, seq: number, body: { tripId: number; vehicleDayId: number }) {
+  async function editMoveToVehicle(
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    body: { tripId: number; vehicleDayId: number },
+  ) {
     const tripId = Number(body.tripId);
     const dayId = Number(body.vehicleDayId);
     const t = await describe(tx, tripId);
@@ -192,7 +239,8 @@ export function scheduleEdits(deps: ScheduleDeps) {
       where vd.id = ${dayId} and t.id = ${tripId} and vd.baseline_id = ${sc.baselineId}
         and (vd.scenario_id is null or (vd.scenario_id = ${sc.id} and vd.created_edit <= ${sc.head}))`;
     if (!day) throw fail(404, 'Vehicle not found');
-    if (day.mode_id !== day.trip_mode) throw fail(400, 'That vehicle is a different kind from the one this trip needs');
+    if (day.mode_id !== day.trip_mode)
+      throw fail(400, 'That vehicle is a different kind from the one this trip needs');
     if (t.vehicle_day_id === dayId) throw fail(400, 'The trip is already on that vehicle');
     const idMap = await cloneTrips(tx, sc, seq, [tripId], 0, { replace: true, keepVehicle: false });
     await tx`update trips set vehicle_day_id = ${dayId} where id = ${idMap[tripId]}`;
@@ -200,10 +248,16 @@ export function scheduleEdits(deps: ScheduleDeps) {
   }
 
   /** Adds a trip to a line at a given time: a copy of the trip nearest in time in that direction. */
-  async function editAddTrip(tx: Sql, sc: Scenario, seq: number, body: { routeId: number; direction?: number; startSecs: number; patternId?: number }) {
+  async function editAddTrip(
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    body: { routeId: number; direction?: number; startSecs: number; patternId?: number },
+  ) {
     const routeId = Number(body.routeId);
     const start = Math.round(Number(body.startSecs));
-    if (!Number.isFinite(start) || start < 0 || start > 36 * 3600) throw fail(400, 'Bad departure time');
+    if (!Number.isFinite(start) || start < 0 || start > 36 * 3600)
+      throw fail(400, 'Bad departure time');
     const direction = Number(body.direction ?? 0);
     // The stop pattern asked for, otherwise the most-used one in that direction. A line whose trips have
     // all been deleted falls back to the published ones, so a trip can be made from nothing.
@@ -216,8 +270,11 @@ export function scheduleEdits(deps: ScheduleDeps) {
       return row?.pattern_id as number | undefined;
     };
     const published = tx`t.scenario_id is null`;
-    const pattern = body.patternId ? Number(body.patternId) : ((await mostUsed(visible(tx, 't', sc))) ?? (await mostUsed(published)));
-    if (!pattern) throw fail(400, 'This line has no trip in that direction to model the new one on');
+    const pattern = body.patternId
+      ? Number(body.patternId)
+      : ((await mostUsed(visible(tx, 't', sc))) ?? (await mostUsed(published)));
+    if (!pattern)
+      throw fail(400, 'This line has no trip in that direction to model the new one on');
     const nearest = async (vis: unknown) => {
       const [row] = await tx`
         select t.id, t.start_secs from trips t
@@ -226,16 +283,25 @@ export function scheduleEdits(deps: ScheduleDeps) {
       return row;
     };
     const template = (await nearest(visible(tx, 't', sc))) ?? (await nearest(published));
-    if (!template) throw fail(400, 'This line has no trip in that direction to model the new one on');
+    if (!template)
+      throw fail(400, 'This line has no trip in that direction to model the new one on');
     const t = await describe(tx, template.id);
-    const idMap = await cloneTrips(tx, sc, seq, [template.id], start - template.start_secs, { pinnedIds: [template.id], replace: false, keepVehicle: false });
+    const idMap = await cloneTrips(tx, sc, seq, [template.id], start - template.start_secs, {
+      pinnedIds: [template.id],
+      replace: false,
+      keepVehicle: false,
+    });
     const newId = idMap[template.id];
     // A line whose trips were all deleted is copied from the published ones, which may still call at
     // a stop this scenario has deleted. Such a trip is not made: nothing may call at a deleted stop.
     const [atDeleted] = await tx`
       select s.name from stop_times st join stops s on s.id = st.stop_id
       where st.trip_id = ${newId} and ${stopDeleted(tx, 's', sc)} limit 1`;
-    if (atDeleted) throw fail(400, `The trip this would be copied from calls at ${atDeleted.name}, which this scenario has deleted`);
+    if (atDeleted)
+      throw fail(
+        400,
+        `The trip this would be copied from calls at ${atDeleted.name}, which this scenario has deleted`,
+      );
     const fleet = await assignVehicles(tx, sc, seq, [newId]);
     const moved = await settlePlatforms(tx, sc, seq, [newId]);
     return {
@@ -250,7 +316,12 @@ export function scheduleEdits(deps: ScheduleDeps) {
    * beside its path that is not in its stop pattern. The path does not change; later stops are that
    * much later.
    */
-  async function editAddCall(tx: Sql, sc: Scenario, seq: number, body: { tripId: number; stopId: number }) {
+  async function editAddCall(
+    tx: Sql,
+    sc: Scenario,
+    seq: number,
+    body: { tripId: number; stopId: number },
+  ) {
     const tripId = Number(body.tripId);
     const stopId = Number(body.stopId);
     const t = await describe(tx, tripId);
@@ -261,14 +332,27 @@ export function scheduleEdits(deps: ScheduleDeps) {
       select s.id, s.name, r.mode_id from stops s, trips t join routes r on r.id = t.route_id
       where s.id = ${stopId} and t.id = ${tripId} and s.baseline_id = ${sc.baselineId} and s.location_type = 0 and ${stopVisible(tx, 's', sc)}`;
     if (!stop) throw fail(404, 'Stop not found: choose a stop or a platform, not a whole station');
-    const dwell = Math.max(await stopDwell(tx, sc.baselineId, stop.mode_id, stopId, deps.newLine[stop.mode_id]?.dwell ?? 20), 0);
+    const dwell = Math.max(
+      await stopDwell(
+        tx,
+        sc.baselineId,
+        stop.mode_id,
+        stopId,
+        deps.newLine[stop.mode_id]?.dwell ?? 20,
+      ),
+      0,
+    );
     const penalty = deps.skipPenalty[t.rule_set] ?? 20;
     const cost = dwell + penalty;
     const name = String(stop.name).replace(/, Platform.*$/, '');
     const existing = calls.find((c) => c.stop_id === stopId);
     if (existing && !existing.passing) throw fail(400, 'This trip already stops there');
 
-    const idMap = await cloneTrips(tx, sc, seq, [tripId], 0, { pinnedIds: [tripId], replace: true, keepVehicle: true });
+    const idMap = await cloneTrips(tx, sc, seq, [tripId], 0, {
+      pinnedIds: [tripId],
+      replace: true,
+      keepVehicle: true,
+    });
     const newId = idMap[tripId];
     const half = Math.round(penalty / 2);
     if (existing) {
@@ -285,9 +369,17 @@ export function scheduleEdits(deps: ScheduleDeps) {
         select ST_LineLocatePoint(sh.geom, s.geom) * sh.length_m as along, ST_Distance(sh.geom::geography, s.geom::geography) as off
         from trips t join shapes sh on sh.id = t.shape_id, stops s where t.id = ${tripId} and s.id = ${stopId}`;
       if (!pos) throw fail(400, 'This trip has no path to place the stop on');
-      if (pos.off > 150) throw fail(400, `${name} is ${Math.round(pos.off)} m from this trip's path. To send the line there, use "Change route" on the line.`);
+      if (pos.off > 150)
+        throw fail(
+          400,
+          `${name} is ${Math.round(pos.off)} m from this trip's path. To send the line there, use "Change route" on the line.`,
+        );
       const i = calls.findIndex((c) => c.dist > pos.along);
-      if (i <= 0) throw fail(400, `${name} is beyond the end of this trip. To extend the line, use "Change route" on the line.`);
+      if (i <= 0)
+        throw fail(
+          400,
+          `${name} is beyond the end of this trip. To extend the line, use "Change route" on the line.`,
+        );
       const a = calls[i - 1];
       const b = calls[i];
       const f = b.dist > a.dist ? (pos.along - a.dist) / (b.dist - a.dist) : 0.5;
@@ -315,7 +407,15 @@ export function scheduleEdits(deps: ScheduleDeps) {
     };
   }
 
-  return { editSetPlatform, editReplan, editMoveToVehicle, editAddTrip, editAddCall, settlePlatforms, platformNote };
+  return {
+    editSetPlatform,
+    editReplan,
+    editMoveToVehicle,
+    editAddTrip,
+    editAddCall,
+    settlePlatforms,
+    platformNote,
+  };
 }
 
 /** Read-only helpers for the trip panel: which platforms a call could use, and which stops a trip could add. */
@@ -354,10 +454,18 @@ export function scheduleRoutes(app: FastifyInstance, sql: Sql) {
     const inTrip = new Set(calls.map((c) => c.stopId));
     const first = calls[0].dist;
     const last = calls[calls.length - 1].dist;
-    const after = (along: number) => [...calls].reverse().find((c) => !c.passing && c.dist <= along)?.name ?? calls[0].name;
-    const out: { stopId: number; name: string; along: number; restore: boolean; after: string }[] = calls
-      .filter((c) => c.passing)
-      .map((c) => ({ stopId: c.stopId, name: c.name, along: c.dist, restore: true, after: after(c.dist - 1) }));
+    const after = (along: number) =>
+      [...calls].reverse().find((c) => !c.passing && c.dist <= along)?.name ?? calls[0].name;
+    const out: { stopId: number; name: string; along: number; restore: boolean; after: string }[] =
+      calls
+        .filter((c) => c.passing)
+        .map((c) => ({
+          stopId: c.stopId,
+          name: c.name,
+          along: c.dist,
+          restore: true,
+          after: after(c.dist - 1),
+        }));
     // One platform per station: the one this line already uses that way, otherwise the nearest to the path.
     const best = new Map<number, (typeof near)[number]>();
     for (const s of near) {
@@ -367,9 +475,17 @@ export function scheduleRoutes(app: FastifyInstance, sql: Sql) {
       if (s.off > (road ? 35 : 120) || s.along <= first + 30 || s.along >= last - 30) continue;
       const key = s.parentId ?? s.id;
       const held = best.get(key);
-      if (!held || s.uses > held.uses || (s.uses === held.uses && s.off < held.off)) best.set(key, s);
+      if (!held || s.uses > held.uses || (s.uses === held.uses && s.off < held.off))
+        best.set(key, s);
     }
-    for (const s of best.values()) out.push({ stopId: s.id, name: s.name, along: s.along, restore: false, after: after(s.along) });
+    for (const s of best.values())
+      out.push({
+        stopId: s.id,
+        name: s.name,
+        along: s.along,
+        restore: false,
+        after: after(s.along),
+      });
     return out.sort((a, b) => a.along - b.along).slice(0, 120);
   });
 }
