@@ -1,9 +1,9 @@
 // The wizard that sets up a simulation: four short steps, each with a sensible choice already
 // made. Nothing starts until the last step. See docs/simulator-plan.md, section 7.1.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getJson } from '../api.ts';
-import { fmt } from '../inspector/parts.tsx';
-import { useStore } from '../store.ts';
+import { getJson } from '../shared/api-client.ts';
+import { fmt } from '../shared/ui/parts.tsx';
+import { useStore } from '../app/store.ts';
 import { follow } from './SimPanel.tsx';
 import {
   madeBy,

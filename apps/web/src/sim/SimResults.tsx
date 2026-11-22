@@ -4,8 +4,8 @@
 import { DAY_BANDS, formatSecs } from '@gtfs-editor/core';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, fmt } from '../inspector/parts.tsx';
-import { useStore } from '../store.ts';
+import { Badge, fmt } from '../shared/ui/parts.tsx';
+import { useStore } from '../app/store.ts';
 import {
   GROUP_COLORS,
   GROUP_LABELS,

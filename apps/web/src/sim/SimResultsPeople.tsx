@@ -3,8 +3,8 @@
 import { formatSecs } from '@gtfs-editor/core';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { fmt } from '../inspector/parts.tsx';
-import { useStore } from '../store.ts';
+import { fmt } from '../shared/ui/parts.tsx';
+import { useStore } from '../app/store.ts';
 import {
   GROUP_COLORS,
   fetchResults,

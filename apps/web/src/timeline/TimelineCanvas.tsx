@@ -3,8 +3,8 @@
 // hover tooltips and clicks.
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useRef } from 'react';
-import { clock } from '../clock.ts';
-import { useStore } from '../store.ts';
+import { clock } from '../shared/clock.ts';
+import { useStore } from '../app/store.ts';
 
 export const COLORS = {
   text: '#e8ecf1',

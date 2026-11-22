@@ -1,7 +1,7 @@
 // What the editor's API says about the passenger simulator, and the calls that change it.
 // See docs/simulator-plan.md, sections 6 and 7.
-import { getJson } from '../api.ts';
-import { useStore } from '../store.ts';
+import { getJson } from '../shared/api-client.ts';
+import { useStore } from '../app/store.ts';
 
 export interface SimBox {
   name: string | null;

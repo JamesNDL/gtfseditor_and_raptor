@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NewStopTool } from './NewStopTool.tsx';
 import { applyEdit } from './scenario.ts';
-import { useStore } from './store.ts';
+import { useStore } from './app/store.ts';
 
 /** Shown while a new line is being drawn: its settings and the stops picked so far. */
 export function NewLinePanel() {

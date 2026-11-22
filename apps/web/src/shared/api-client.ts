@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore } from './store.ts';
+import { useStore } from '../app/store.ts';
 
 export interface Baseline {
   id: number;

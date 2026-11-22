@@ -1,6 +1,6 @@
 // The dark and light versions of the interface. The stylesheet follows `data-theme` on the page;
 // the map and the timeline charts draw their own colours, so they read the palettes here.
-import { COLORS } from './timeline/TimelineCanvas.tsx';
+import { COLORS } from '../timeline/TimelineCanvas.tsx';
 
 export type Theme = 'dark' | 'light';
 

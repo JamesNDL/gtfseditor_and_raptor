@@ -261,7 +261,7 @@ try {
   /** An expression that runs code in the page with the app's own store (s), vehicles (v) and clock. */
   const inApp = (code) => `(async () => {
     const find = (name) => import(performance.getEntriesByType('resource').map((e) => e.name).filter((n) => n.includes('/src/' + name)).pop() ?? '/src/' + name);
-    const [{ useStore }, v, { clock }] = await Promise.all([find('store.ts'), find('vehicles.ts'), find('clock.ts')]);
+    const [{ useStore }, v, { clock }] = await Promise.all([find('app/store.ts'), find('vehicles.ts'), find('shared/clock.ts')]);
     const s = useStore.getState();
     ${code}
   })()`;

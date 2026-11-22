@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useApi } from './api.ts';
+import { useApi } from './shared/api-client.ts';
 import { applyEdit } from './scenario.ts';
-import { useStore } from './store.ts';
+import { useStore } from './app/store.ts';
 
 export interface VehicleType {
   id: number;

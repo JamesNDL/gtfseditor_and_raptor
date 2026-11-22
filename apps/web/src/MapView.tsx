@@ -6,9 +6,9 @@ import * as maplibregl from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef, useState } from 'react';
 import { addClosurePoint, describePick, pickStop, placeStop, togglePart } from './builder.ts';
-import { clock } from './clock.ts';
-import { SIDE_COLORS, useStore } from './store.ts';
-import { fmt } from './inspector/parts.tsx';
+import { clock } from './shared/clock.ts';
+import { SIDE_COLORS, useStore } from './app/store.ts';
+import { fmt } from './shared/ui/parts.tsx';
 import { loadTripLoads, peakText, stepAt, stepColor, stepLabel, tripLoads } from './sim/loads.ts';
 import {
   BLUES,
@@ -27,7 +27,7 @@ import {
 } from './sim/results.ts';
 import { mapView } from './sim/simApi.ts';
 import { mapScale } from './sim/SimMapKey.tsx';
-import { MAP_PALETTE, type MapPalette } from './theme.ts';
+import { MAP_PALETTE, type MapPalette } from './app/theme.ts';
 import { computeFrame, vehicleAt, vehicleData, vehicleFrames, waitingUntil } from './vehicles.ts';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);

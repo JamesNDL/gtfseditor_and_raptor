@@ -1,10 +1,10 @@
 // Time-distance diagram: stations down the side, time across, one line per trip.
 import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
-import { useApi } from '../api.ts';
+import { useApi } from '../shared/api-client.ts';
 import { applyEdit } from '../scenario.ts';
 import { peakText, stepAt, stepColor, useTripColours } from '../sim/loads.ts';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 import { COLORS, fitText, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
 
 interface StringlineData {

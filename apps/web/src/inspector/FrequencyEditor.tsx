@@ -1,8 +1,8 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useMemo, useState } from 'react';
-import type { RouteDetail } from '../api.ts';
+import type { RouteDetail } from '../shared/api-client.ts';
 import { applyEdit } from '../scenario.ts';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 
 // The parts of the day most timetables are planned around.
 const BANDS = [

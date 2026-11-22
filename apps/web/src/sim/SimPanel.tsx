@@ -2,10 +2,10 @@
 // and read its summary, and look up one person. See docs/simulator-plan.md, section 7.
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
-import { getJson } from '../api.ts';
-import { fmt } from '../inspector/parts.tsx';
+import { getJson } from '../shared/api-client.ts';
+import { fmt } from '../shared/ui/parts.tsx';
 import { selectScenario } from '../scenario.ts';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 import { Rename } from './SimLibrary.tsx';
 import {
   OUT_OF_DATE,

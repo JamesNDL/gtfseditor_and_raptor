@@ -1,9 +1,9 @@
 import { formatClock } from '@gtfs-editor/core';
 import { useEffect, useRef } from 'react';
-import { clock } from './clock.ts';
-import { liveStats } from './liveStats.ts';
+import { clock } from '../shared/clock.ts';
+import { liveStats } from '../shared/live-stats.ts';
 import { SPEEDS, useStore } from './store.ts';
-import { activityHistogram, vehicleData } from './vehicles.ts';
+import { activityHistogram, vehicleData } from '../vehicles.ts';
 
 const BIN_SECS = 300;
 

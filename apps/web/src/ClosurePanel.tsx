@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { distanceM } from '@gtfs-editor/core';
-import { Badge, fmt } from './inspector/parts.tsx';
+import { Badge, fmt } from './shared/ui/parts.tsx';
 import { togglePart } from './builder.ts';
 import { applyEdit } from './scenario.ts';
-import { SIDE_COLORS, useStore, type Closing } from './store.ts';
+import { SIDE_COLORS, useStore, type Closing } from './app/store.ts';
 
 type Action =
   'detour' | 'shortened' | 'split' | 'joined' | 'removed' | 'blocked' | 'failed' | 'left';

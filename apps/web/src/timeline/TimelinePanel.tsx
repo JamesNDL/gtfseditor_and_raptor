@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useApi, type RouteDetail } from '../api.ts';
-import { clock } from '../clock.ts';
-import { Badge, shortStop } from '../inspector/parts.tsx';
+import { useApi, type RouteDetail } from '../shared/api-client.ts';
+import { clock } from '../shared/clock.ts';
+import { Badge, shortStop } from '../shared/ui/parts.tsx';
 import { FULL_STEPS, placeholderNote } from '../sim/results.ts';
 import { EMPTY_COLOR } from '../sim/loads.ts';
 import { useShownRun } from '../sim/SimFigures.tsx';
-import { useStore, type TimelineTab } from '../store.ts';
+import { useStore, type TimelineTab } from '../app/store.ts';
 import { PlatformView } from './PlatformView.tsx';
 import { StringlineView } from './StringlineView.tsx';
 import { VehicleView } from './VehicleView.tsx';

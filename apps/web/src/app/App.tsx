@@ -1,27 +1,27 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import { getJson, type Baseline, type Mode, type RouteListItem } from './api.ts';
-import { clock } from './clock.ts';
-import { ClosurePanel } from './ClosurePanel.tsx';
-import { EditConfirm } from './EditConfirm.tsx';
-import { FleetPanel } from './FleetPanel.tsx';
-import { Inspector } from './inspector/Inspector.tsx';
-import { liveStats } from './liveStats.ts';
+import { getJson, type Baseline, type Mode, type RouteListItem } from '../shared/api-client.ts';
+import { clock } from '../shared/clock.ts';
+import { ClosurePanel } from '../ClosurePanel.tsx';
+import { EditConfirm } from '../EditConfirm.tsx';
+import { FleetPanel } from '../FleetPanel.tsx';
+import { Inspector } from '../inspector/Inspector.tsx';
+import { liveStats } from '../shared/live-stats.ts';
 import { LeftRail } from './LeftRail.tsx';
-import { MapView } from './MapView.tsx';
-import { NewLinePanel } from './NewLinePanel.tsx';
-import { ReshapePanel } from './ReshapePanel.tsx';
-import { loadScenarios, redo, selectScenario, undo } from './scenario.ts';
-import { ScenarioManager } from './ScenarioManager.tsx';
-import { SimLibrary } from './sim/SimLibrary.tsx';
-import { SimMapKey } from './sim/SimMapKey.tsx';
-import { SimResults } from './sim/SimResults.tsx';
-import { SimWizard } from './sim/SimWizard.tsx';
+import { MapView } from '../MapView.tsx';
+import { NewLinePanel } from '../NewLinePanel.tsx';
+import { ReshapePanel } from '../ReshapePanel.tsx';
+import { loadScenarios, redo, selectScenario, undo } from '../scenario.ts';
+import { ScenarioManager } from '../ScenarioManager.tsx';
+import { SimLibrary } from '../sim/SimLibrary.tsx';
+import { SimMapKey } from '../sim/SimMapKey.tsx';
+import { SimResults } from '../sim/SimResults.tsx';
+import { SimWizard } from '../sim/SimWizard.tsx';
 import { useStore } from './store.ts';
 import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
-import { TimelinePanel } from './timeline/TimelinePanel.tsx';
+import { TimelinePanel } from '../timeline/TimelinePanel.tsx';
 import { TopBar } from './TopBar.tsx';
-import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from './vehicles.ts';
+import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from '../vehicles.ts';
 
 // Small packs first so something is moving almost immediately.
 // Read the link once at startup, before anything rewrites the address bar.

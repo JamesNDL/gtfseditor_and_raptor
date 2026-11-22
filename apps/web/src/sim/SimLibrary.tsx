@@ -2,9 +2,9 @@
 // date, with scenario runs listed under the BAU run they were made against. Nothing is removed
 // unless someone removes it. See docs/simulator-plan.md, section 6.5.
 import { useEffect, useMemo, useState } from 'react';
-import { getJson } from '../api.ts';
-import { fmt } from '../inspector/parts.tsx';
-import { useStore } from '../store.ts';
+import { getJson } from '../shared/api-client.ts';
+import { fmt } from '../shared/ui/parts.tsx';
+import { useStore } from '../app/store.ts';
 import {
   bytes,
   isActive,

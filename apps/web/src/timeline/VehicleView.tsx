@@ -1,10 +1,10 @@
 // Vehicle chart: one row per vehicle, its trips as bars across the day.
 import { formatSecs } from '@gtfs-editor/core';
 import { useMemo } from 'react';
-import { useApi } from '../api.ts';
+import { useApi } from '../shared/api-client.ts';
 import { applyEdit } from '../scenario.ts';
 import { EMPTY_COLOR, peakText, stepColor, tripLoads, useTripColours } from '../sim/loads.ts';
-import { currentSelection, useStore } from '../store.ts';
+import { currentSelection, useStore } from '../app/store.ts';
 import {
   COLORS,
   fitText,

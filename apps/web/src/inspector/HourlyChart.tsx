@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { HourlyRow } from '../api.ts';
-import { fmt } from './parts.tsx';
+import type { HourlyRow } from '../shared/api-client.ts';
+import { fmt } from '../shared/ui/parts.tsx';
 
 interface Props {
   title: string;

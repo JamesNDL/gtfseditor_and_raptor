@@ -4,11 +4,11 @@
 // the map is not buried under panels nobody is using.
 import type React from 'react';
 import { useEffect } from 'react';
-import { startClosing } from './builder.ts';
-import { ModePanel } from './ModePanel.tsx';
-import { ScenarioPanel } from './ScenarioPanel.tsx';
-import { SimPanel } from './sim/SimPanel.tsx';
-import { isActive } from './sim/simApi.ts';
+import { startClosing } from '../builder.ts';
+import { ModePanel } from '../ModePanel.tsx';
+import { ScenarioPanel } from '../ScenarioPanel.tsx';
+import { SimPanel } from '../sim/SimPanel.tsx';
+import { isActive } from '../sim/simApi.ts';
 import { useStore, type LeftPane } from './store.ts';
 
 const icon = (path: React.ReactNode) => (

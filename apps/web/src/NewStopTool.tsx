@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { isRoadMode } from './builder.ts';
-import { useStore } from './store.ts';
+import { useStore } from './app/store.ts';
 
 /**
  * Inside the line-drawing and route-changing panels: adds a stop where nothing stops today.

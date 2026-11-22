@@ -1,4 +1,4 @@
-import { useStore } from './store.ts';
+import { useStore } from './app/store.ts';
 
 export function ModePanel() {
   const modes = useStore((s) => s.modes);
