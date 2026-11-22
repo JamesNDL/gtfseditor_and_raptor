@@ -45,20 +45,22 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 
 | Part | Purpose | Depends on / used by | Start reading | Tests |
 |---|---|---|---|---|
-| `src/server.ts` | Entry point. Connects, migrates, and serves baselines, modes, routes, the inspector and timeline reads, vector tiles, packs and waits. Registers the other route files. | `packages/gtfs` db, packs | `server.ts` | e2e |
-| `src/scenarios.ts` | **The scenario edit engine.** `visible()` (the copy-on-write rule), `applyEdit` (transaction, 409, confirm), `assignVehicles`, the stats, impact and fleet figures, the **clash rules** (`conflictsIn`, around lines 1379-1747), and ten edit kinds plus the reshape wrapper. `POST /edits` dispatches all 19 kinds (around lines 1866-1888). | core; the edit modules below | `applyEdit`, `visible` | e2e |
-| `src/reshape.ts` | Reshape planning and applying (`planReshape`, `applyReshape`), also used by closures | roads, tracks, timings, core/reshape | `planReshape` | `core/reshape.test.ts`, e2e |
-| `src/closures.ts` | `close` edits: whole line, drawn cut, road, part of the day | reshape | `planClosure` | e2e |
-| `src/delete-stop.ts` | `deleteStop` edits and the preview | core/delete-stop | `planDeleteStop` | `core/delete-stop.test.ts`, e2e |
-| `src/schedule.ts` | `setPlatform`, `replan`, `moveToVehicle`, `addTrip`, `addCall`, and `settlePlatforms` | scenarios | `scheduleEdits` | e2e |
-| `src/stops.ts` | `addStop` edits, `stopVisible` (hides deleted stops), new stops as GeoJSON | roads (`nearestRoad`) | `editAddStop` | e2e |
-| `src/roads.ts` | Road paths through OSRM (`ROUTER_URL`), including getting round a closure (`routedAround`) | outside OSRM | `roadPath` | e2e |
-| `src/tracks.ts` | Train, tram and ferry paths over an in-memory station-link graph built from published patterns | database | `trackPath` | e2e |
-| `src/timings.ts` | Run times for new stretches by time of day: published medians, then nearby speeds, then the mode's typical speed | core/time | `sectionTime` | `core/reshape.test.ts` |
-| `src/fleet.ts` | Vehicle-type catalogue routes | | | e2e |
-| `src/export.ts` | GTFS zip export (optional shapes, bounding box, `editor_*.txt`) | database | | e2e Reality block, `export:check` |
-| `src/sim.ts` | Simulator back end: demand sets, areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions | Java router | `drive` | `test/sim.e2e.mjs` |
-| `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. | `sim_*` tables | | `test/sim.e2e.mjs` |
+| `src/server.ts` | Entry point. Connects, migrates, registers the route files below, and listens (`PORT`). Nothing else. | `packages/gtfs` db | `server.ts` | e2e |
+| `src/http.ts` | `fail()` (an error with its HTTP status), `int()` and `notFound()`, used by every route file | | | n/a |
+| `src/network/` | The baseline's read routes, moved out of `server.ts`: `baselines.ts` (days, modes, the lines of a day), `map-data.ts` (packs from `PACKS_DIR`, waits, vector tiles), `inspector.ts` (line, trip, vehicle day, station summary), `timelines.ts` (trip diagram, platforms, a line's vehicles) | scenarios (`scenarioOf`, `visible`), core waits | `inspector.ts` | e2e |
+| `src/scenarios/scenarios.ts` | **The scenario edit engine.** `visible()` (the copy-on-write rule), `applyEdit` (transaction, 409, confirm), `assignVehicles`, the stats, impact and fleet figures, the **clash rules** (`conflictsIn`, around lines 1377-1745), and ten edit kinds plus the reshape wrapper. `POST /edits` dispatches all 19 kinds (around lines 1864-1886). Split up in stage 3. | core; the edit modules below | `applyEdit`, `visible` | e2e |
+| `src/scenarios/stops.ts` | `addStop` edits, `stopVisible` (hides deleted stops), new stops as GeoJSON | routing/roads (`nearestRoad`) | `editAddStop` | e2e |
+| `src/scenarios/edits/reshape.ts` | Reshape planning and applying (`planReshape`, `applyReshape`), also used by closures | routing, core/edits/reshape | `planReshape` | `core/edits/reshape.test.ts`, e2e |
+| `src/scenarios/edits/closure.ts` | `close` edits: whole line, drawn cut, road, part of the day | reshape | `planClosure` | e2e |
+| `src/scenarios/edits/delete-stop.ts` | `deleteStop` edits and the preview | core/edits/delete-stop | `planDeleteStop` | `core/edits/delete-stop.test.ts`, e2e |
+| `src/scenarios/edits/schedule.ts` | `setPlatform`, `replan`, `moveToVehicle`, `addTrip`, `addCall`, and `settlePlatforms` | scenarios | `scheduleEdits` | e2e |
+| `src/routing/roads.ts` | Road paths through OSRM (`ROUTER_URL`), including getting round a closure (`routedAround`) | outside OSRM | `roadPath` | e2e |
+| `src/routing/tracks.ts` | Train, tram and ferry paths over an in-memory station-link graph built from published patterns | database | `trackPath` | e2e |
+| `src/routing/timings.ts` | Run times for new stretches by time of day: published medians, then nearby speeds, then the mode's typical speed | core/time | `sectionTime` | `core/edits/reshape.test.ts` |
+| `src/catalogue/routes.ts` | Vehicle-type catalogue routes | | | e2e |
+| `src/export/routes.ts` | GTFS zip export (optional shapes, bounding box, `editor_*.txt`) | database | | e2e Reality block, `export:check` |
+| `src/sim/sim.ts` | Simulator back end: demand sets (`SIM_DEMAND_DIR`), areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions. Split up in stage 3. | Java router | `drive` | `test/sim.e2e.mjs` |
+| `src/sim/results-read.ts` | Results comparisons for the results window, and `buildLinkLoads`. | `sim_*` tables | | `test/sim.e2e.mjs` |
 | `test/scenarios.e2e.mjs`, `test/sim.e2e.mjs` | Scripted HTTP tests of every edit kind, and of the simulator | need the API (and the router) | | n/a |
 | `test/run-e2e-fixture.mjs` | `test:e2e:fixture`: imports the test feed into `gtfs_e2e`, starts an API on 3101, checks the packs went to its `PACKS_DIR` and that re-importing a day with a scenario is refused, runs `scenarios.e2e.mjs` (its export check writes under `EXPORTS_DIR`, in the run's temp folder), and always cleans up, also on Ctrl+C | the database container | | n/a |
 
@@ -66,14 +68,13 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 
 | Part | Purpose | Used by | Start reading | Tests |
 |---|---|---|---|---|
-| `packages/core/src/` | Pure logic with no IO and no dependencies: `vehicle-days`, `pack`, `waits`, `reshape`, `delete-stop`, `limits`, `time`, `simplify`. Exported as raw `.ts` from `index.ts`. | api, gtfs, web (formatting, packs, waits only) | `index.ts` | `*.test.ts` beside each |
+| `packages/core/src/` | Pure logic with no IO and no dependencies: `vehicle-days`, `pack`, `waits`, `limits`, `time`, `simplify` at the top; `edits/reshape` and `edits/delete-stop` (the parts of those edit kinds that need no database). Exported as raw `.ts` from `index.ts`. | api, gtfs, web (formatting, packs, waits only) | `index.ts` | `*.test.ts` beside each |
 | `packages/gtfs/sql/schema.sql` | **The whole database schema.** Idempotent, and run at every API start and every import (`migrate()`). | db.ts | | n/a |
 | `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()` | api, CLIs | | n/a |
-| `packages/gtfs/src/feed-cache.ts`, `fetch-cli.ts` | Download the TfNSW feed into `data/feeds/` (`API_KEY`), or use a feed on disk (`FEED_PATH`, `localFeed`) | import | `ensureFeed` | n/a |
-| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables), `replace-guard.ts` (refuses a day that has scenarios without `--replace`; date checks), `finish.ts` (counts, marks ready), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
+| `packages/gtfs/src/feed/` | `feed-cache.ts` downloads the TfNSW feed into `data/feeds/` (`API_KEY`), or uses a feed on disk (`FEED_PATH`, `localFeed`); `unzip.ts`; `audit.ts` and `audit-db.ts`, the phase 0 data audit (DuckDB, `feed:audit`) | import, CLIs | `ensureFeed` | n/a |
+| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables), `replace-guard.ts` (refuses a day that has scenarios without `--replace`; date checks), `finish.ts` (counts, marks ready), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `cli/import.ts`, `cli/packs.ts` | `cli/import.ts` | `replace-guard.test.ts` |
+| `packages/gtfs/src/cli/` | What the npm scripts run: `fetch.ts` (`feed:fetch`), `import.ts` (`import`), `packs.ts` (`packs`), `backup.ts` (`db:backup`, `db:restore`; writes `data/backups/`), and `export-check.ts` with `export-references.ts` (`export:check`: downloads an export from the running API into `data/exports/` or `EXPORTS_DIR` and checks it: references, ids, monotonic times, and that it matches the feed for the published day) | npm scripts, e2e | | n/a |
 | `packages/gtfs/test/fixtures/` | `mini-feed/`: a small made-up weekday feed in central Sydney (T1 train, buses 333, 373 and 389, F1 ferry), written by `make-mini-feed.mjs` and its modules in `mini-feed-gen/` | `test:e2e:fixture` | `make-mini-feed.mjs` | n/a |
-| `packages/gtfs/src/audit*.ts` | The phase 0 data audit (DuckDB) | `feed:audit` | | n/a |
-| `packages/gtfs/src/export-check.ts`, `export-references.ts` | Downloads an export from the running API into `data/exports/` (or `EXPORTS_DIR`) and checks it (references, ids, monotonic times; matches the feed for the published day) | `export:check`, e2e | | n/a |
 
 ### services/router: the Java journey router and simulator
 
@@ -93,32 +94,32 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 |---|---|---|---|
 | Baseline (one service date) | `schema.sql` `baselines` | Postgres | importer |
 | Routes, patterns, trips, stop times, stops, shapes, vehicle days | `schema.sql` | Postgres; scenario rows carry `scenario_id` and `created_edit` | importer; edit engine |
-| Scenario, edit | `schema.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios.ts` and the edit modules |
-| Clash | `scenarios.ts` `Conflict`, `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
-| Vehicle type | `schema.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `fleet.ts` |
+| Scenario, edit | `schema.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios/scenarios.ts` and the edit modules in `scenarios/edits/` |
+| Clash | `scenarios/scenarios.ts` `Conflict`, `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
+| Vehicle type | `schema.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `catalogue/routes.ts` |
 | Pack | `packages/core/src/pack.ts` | `data/packs/<baseline>/<mode>.bin` | `import/packs.ts` |
-| Demand set | `schema.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim.ts`; the router generates made-up sets |
-| Sim run and results | `schema.sql` `sim_*` | Postgres partitions per run; router files in `data/router/sim/` | `sim.ts`, the router |
+| Demand set | `schema.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim/sim.ts`; the router generates made-up sets |
+| Sim run and results | `schema.sql` `sim_*` | Postgres partitions per run; router files in `data/router/sim/` | `sim/sim.ts`, the router |
 | Router timetable and snapshot | `Timetable.java`, `TimetableSnapshot.java` | Memory; `data/router/snapshots/` | router |
 
 ## Where do I find…
 
-- **Adding an edit kind:** write the function in `apps/api/src/scenarios.ts`, or in a module wired in from there. Add it to the dispatch in `POST /api/scenarios/:id/edits`, send it from the web with `applyEdit({ kind, … })`, and cover it in `apps/api/test/scenarios.e2e.mjs`. Put any logic that needs no database in `packages/core` with a unit test.
-- **Adding an API route:** register it in the relevant `apps/api/src/*.ts` `register*Routes` or `*Routes` function, and take `?s=` through `scenarioOf()` if it reads timetable data.
-- **What a scenario can see:** `visible()` in `apps/api/src/scenarios.ts`; for stops, `stopVisible()` in `apps/api/src/stops.ts`.
+- **Adding an edit kind:** write the function in `apps/api/src/scenarios/scenarios.ts`, or in a module in `scenarios/edits/` wired in from there. Add it to the dispatch in `POST /api/scenarios/:id/edits`, send it from the web with `applyEdit({ kind, … })`, and cover it in `apps/api/test/scenarios.e2e.mjs`. Put any logic that needs no database in `packages/core` with a unit test.
+- **Adding an API route:** register it in the relevant `register*Routes` or `*Routes` function under `apps/api/src/` (baseline reads in `network/`), and take `?s=` through `scenarioOf()` if it reads timetable data.
+- **What a scenario can see:** `visible()` in `apps/api/src/scenarios/scenarios.ts`; for stops, `stopVisible()` in `apps/api/src/scenarios/stops.ts`.
 - **Clash rules:** `conflictsIn` in `apps/api/src/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
-- **Run times for new stretches:** `apps/api/src/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
-- **Road and track paths:** `apps/api/src/roads.ts` (OSRM) and `apps/api/src/tracks.ts`.
-- **Database tables:** `packages/gtfs/sql/schema.sql`. Sim partitions are created at runtime in `apps/api/src/sim.ts`.
+- **Run times for new stretches:** `apps/api/src/routing/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
+- **Road and track paths:** `apps/api/src/routing/roads.ts` (OSRM) and `apps/api/src/routing/tracks.ts`.
+- **Database tables:** `packages/gtfs/sql/schema.sql`. Sim partitions are created at runtime in `apps/api/src/sim/sim.ts`.
 - **Map layers:** `apps/web/src/MapView.tsx`. Tiles come from `server.ts` `/tiles`.
 - **Vehicle animation:** `apps/web/src/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
 - **Timeline dragging:** `apps/web/src/timeline/TimelineCanvas.tsx`.
 - **Theme:** `apps/web/src/theme.ts`, and `styles.css` line 32.
 - **URL deep links and keyboard shortcuts:** `apps/web/src/App.tsx`.
-- **How the API talks to the router:** `apps/api/src/sim.ts` (`ensureTimetable`, `drive`, `importResults`).
+- **How the API talks to the router:** `apps/api/src/sim/sim.ts` (`ensureTimetable`, `drive`, `importResults`).
 - **Router endpoints:** `services/router/router-server/.../RouterServer.java` (around lines 89-106), and `services/router/README.md`.
 - **Environment variables:**
-  - API side: `DATABASE_URL` (`db.ts`), `PORT` and `PACKS_DIR` (`server.ts`), `ROUTER_URL` (`roads.ts`), and `ROUTER_SERVICE_URL`, `API_PUBLIC_URL`, `ROUTER_SHARES_FILES`, `SIM_DEMAND_DIR` (`sim.ts`). `API_KEY` is used by the CLIs.
+  - API side: `DATABASE_URL` (`db.ts`), `PORT` (`server.ts`), `PACKS_DIR` (`network/map-data.ts`, and `import/packs.ts` in the gtfs package), `ROUTER_URL` (`routing/roads.ts`), and `ROUTER_SERVICE_URL`, `API_PUBLIC_URL`, `ROUTER_SHARES_FILES`, `SIM_DEMAND_DIR` (`sim/sim.ts`). `API_KEY` is used by the CLIs.
   - Router side: `ROUTER_PORT`, `ROUTER_THREADS`, `ROUTER_MAX_TIMETABLES`, `ROUTER_DATA`, `ROUTER_LOAD`, `ROUTER_BULK_LIMIT` (`Settings.java`).
 
 ## Conventions that decide where code goes
@@ -150,7 +151,7 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 
 ## Planned layout
 
-**Status: planned, not built.** This is the target from `docs/refactor-plan.md` §2.3–2.5. Files move into it one PR at a time; until a file has moved, the tables above say where it is. `→` means the file is renamed when it moves.
+**Status: the API and the packages have moved (ticket T-6); the web app is planned, not built.** This is the target from `docs/refactor-plan.md` §2.3–2.5. Files move into it one PR at a time; until a file has moved, the tables above say where it is. `→` means the file is renamed when it moves.
 
 ### apps/web/src (planned)
 
@@ -204,13 +205,13 @@ apps/api/src/
       shift.ts, delete.ts, delete-line.ts, duplicate.ts, skip-stop.ts, headway.ts,
       add-stop.ts (from stops.ts), delete-stop.ts, closure.ts (from closures.ts),
       and one file per kind now in schedule.ts
-  catalogue/        the vehicle catalogue routes (today's fleet.ts)
-  export/           export.ts
+  catalogue/        routes.ts: the vehicle catalogue routes (was fleet.ts)
+  export/           routes.ts (was export.ts)
   sim/              routes.ts, timetables.ts, runner.ts, router-client.ts, results-import.ts,
                     results-read.ts (today's sim-results.ts)
 ```
 
-The API import circles break when `engine.ts` comes out of `scenarios.ts` (stage 3). Stage 2 moves only the files outside the circle, plus `http.ts`, `network/`, `routing/`, `catalogue/` and `export/`.
+**Built so far (stage 2, T-6):** `server.ts`, `http.ts`, `network/` (as four files: `baselines.ts`, `map-data.ts`, `inspector.ts`, `timelines.ts`), `routing/`, `catalogue/routes.ts`, `export/routes.ts`, `scenarios/scenarios.ts` and `scenarios/stops.ts`, `scenarios/edits/` (`closure.ts`, `delete-stop.ts`, `reshape.ts`, `schedule.ts`), `sim/sim.ts` and `sim/results-read.ts`. `scenarios.ts` and `sim.ts` moved whole; stage 3 splits them into the files above. The API import circles break when `engine.ts` comes out of `scenarios.ts` (stage 3).
 
 ### packages (planned)
 
@@ -220,7 +221,7 @@ packages/core/src/
   api/              the shared request and response types (stage 4)
   time.ts, limits.ts, simplify.ts, pack.ts, waits.ts, vehicle-days.ts
   edits/            reshape.ts, delete-stop.ts (the pure parts of edit kinds), with tests
-  core.test.ts      split into a test beside each file it covers
+                    (core.test.ts is now split into a test beside each file it covers)
 
 packages/gtfs/
   sql/              schema.sql (later migrations/, stage 6)
@@ -228,6 +229,9 @@ packages/gtfs/
     db.ts
     feed/           feed-cache.ts, unzip.ts, audit.ts, audit-db.ts
     import/         as now
-    cli/            fetch.ts, import.ts, packs.ts, export-check.ts (the npm scripts point here)
+    cli/            fetch.ts, import.ts, packs.ts, backup.ts, export-check.ts, export-references.ts
+                    (the npm scripts point here)
   test/fixtures/    the small test feed (stage 1.4)
 ```
+
+**Built (stage 2, T-6)**, except `core/src/api/` (stage 4) and `migrations/` (stage 6).
