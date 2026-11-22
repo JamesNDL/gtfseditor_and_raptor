@@ -60,7 +60,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `src/sim.ts` | Simulator back end: demand sets, areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions | Java router | `drive` | `test/sim.e2e.mjs` |
 | `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. | `sim_*` tables | | `test/sim.e2e.mjs` |
 | `test/scenarios.e2e.mjs`, `test/sim.e2e.mjs` | Scripted HTTP tests of every edit kind, and of the simulator | need the API (and the router) | | n/a |
-| `test/run-e2e-fixture.mjs` | `test:e2e:fixture`: imports the test feed into `gtfs_e2e`, starts an API on 3101, runs `scenarios.e2e.mjs`, and always cleans up | the database container | | n/a |
+| `test/run-e2e-fixture.mjs` | `test:e2e:fixture`: imports the test feed into `gtfs_e2e`, starts an API on 3101, checks the packs went to its `PACKS_DIR` and that re-importing a day with a scenario is refused, runs `scenarios.e2e.mjs` (its export check writes under `EXPORTS_DIR`, in the run's temp folder), and always cleans up, also on Ctrl+C | the database container | | n/a |
 
 ### packages
 
@@ -70,10 +70,10 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `packages/gtfs/sql/schema.sql` | **The whole database schema.** Idempotent, and run at every API start and every import (`migrate()`). | db.ts | | n/a |
 | `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()` | api, CLIs | | n/a |
 | `packages/gtfs/src/feed-cache.ts`, `fetch-cli.ts` | Download the TfNSW feed into `data/feeds/` (`API_KEY`), or use a feed on disk (`FEED_PATH`, `localFeed`) | import | `ensureFeed` | n/a |
-| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables; issue **I1** is at line 54), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
-| `packages/gtfs/test/fixtures/` | `mini-feed/`: a small made-up weekday feed in central Sydney (T1 train, buses 333, 373 and 389, F1 ferry), written by `make-mini-feed.mjs` | `test:e2e:fixture` | `make-mini-feed.mjs` | n/a |
+| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables), `replace-guard.ts` (refuses a day that has scenarios without `--replace`; date checks), `finish.ts` (counts, marks ready), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
+| `packages/gtfs/test/fixtures/` | `mini-feed/`: a small made-up weekday feed in central Sydney (T1 train, buses 333, 373 and 389, F1 ferry), written by `make-mini-feed.mjs` and its modules in `mini-feed-gen/` | `test:e2e:fixture` | `make-mini-feed.mjs` | n/a |
 | `packages/gtfs/src/audit*.ts` | The phase 0 data audit (DuckDB) | `feed:audit` | | n/a |
-| `packages/gtfs/src/export-check.ts` | Downloads an export from the running API and checks it (references, ids, monotonic times; matches the feed for the published day) | `export:check`, e2e | | n/a |
+| `packages/gtfs/src/export-check.ts`, `export-references.ts` | Downloads an export from the running API into `data/exports/` (or `EXPORTS_DIR`) and checks it (references, ids, monotonic times; matches the feed for the published day) | `export:check`, e2e | | n/a |
 
 ### services/router: the Java journey router and simulator
 
