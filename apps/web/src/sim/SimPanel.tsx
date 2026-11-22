@@ -19,6 +19,7 @@ import {
   type SimJourney,
   type SimRun,
 } from './sim-api.ts';
+import './sim.css';
 
 const minutes = (n: number) =>
   `${n.toLocaleString('en-AU', { maximumFractionDigits: n < 10 ? 1 : 0 })} min`;

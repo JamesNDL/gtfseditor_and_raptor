@@ -5,6 +5,7 @@ import { Badge, fmt, shortStop, Tag } from '../../shared/ui/parts.tsx';
 import { NewStopTool } from '../NewStopTool.tsx';
 import { applyEdit } from '../../scenarios/scenario-client.ts';
 import { useStore } from '../../app/store.ts';
+import '../editing.css';
 
 interface Side {
   coords: [number, number][];

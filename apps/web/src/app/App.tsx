@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import './shell.css';
 import { getJson, type Baseline, type Mode, type RouteListItem } from '../shared/api-client.ts';
 import { clock } from '../shared/clock.ts';
 import { ClosurePanel } from '../editing/closures/ClosurePanel.tsx';
@@ -27,6 +28,7 @@ import {
   loadWaits,
   vehicleData,
 } from '../vehicles/vehicles.ts';
+import './left-rail.css';
 
 // Small packs first so something is moving almost immediately.
 // Read the link once at startup, before anything rewrites the address bar.

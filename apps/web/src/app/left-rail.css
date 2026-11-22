@@ -1,0 +1,252 @@
+.left-column {
+  position: absolute;
+  top: 78px;
+  left: 14px;
+  bottom: 118px;
+  z-index: 9;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.left-column > * {
+  pointer-events: auto;
+}
+
+.draw-button {
+  text-align: center;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Closing a road or a line */
+.close-button {
+  margin-top: 6px;
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+/* The tools that change the network, on the map itself beside the left column. */
+.map-tools {
+  position: absolute;
+  top: 78px;
+  left: 326px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.map-tools > * {
+  pointer-events: auto;
+}
+
+.map-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 650;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.map-tool.close-button {
+  margin-top: 0;
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.map-tool.on {
+  background: var(--accent);
+  color: var(--panel);
+}
+
+.map-tool.close-button.on {
+  background: var(--danger-text);
+  color: var(--panel);
+}
+
+.map-tool-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.map-tools-hint {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------------------------------------------------------------- the rail */
+/* A narrow rail of buttons down the left edge. The tools that change the network are always on
+   it; the timetable, the simulation and the layers fold out beside it one at a time. */
+.rail {
+  position: absolute;
+  top: 78px;
+  left: 14px;
+  z-index: 9;
+  width: 78px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail .map-tools {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.rail-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 2px 7px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.rail-button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rail-button.on {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.rail-button.draw-button {
+  color: var(--accent);
+}
+
+.rail-button.close-button {
+  color: var(--danger-text);
+}
+
+.rail-button.draw-button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--panel);
+}
+
+.rail-button.close-button.on {
+  background: var(--danger-text);
+  border-color: var(--danger-text);
+  color: var(--panel);
+}
+
+.rail-icon {
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.rail-rule {
+  height: 1px;
+  margin: 2px 6px;
+  background: var(--border);
+}
+
+.rail-fold {
+  padding: 4px 2px;
+}
+
+.rail-badge {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--border);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-badge.warn {
+  background: var(--danger-text);
+  color: var(--panel);
+}
+
+.rail-badge.going {
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  top: 6px;
+  right: 12px;
+  background: var(--accent);
+}
+
+/* The panel folded out of the rail. */
+.left-column {
+  left: 100px;
+}
+
+.left-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.left-pane[hidden] {
+  display: none;
+}
+
+.left-pane > .panel {
+  min-height: 0;
+}
+
+.left-pane > .sim-panel,
+.left-pane > .sim-panel.open {
+  flex: 0 1 auto;
+}
+
+.rail-hint {
+  position: absolute;
+  top: 78px;
+  left: 100px;
+  z-index: 9;
+}
+
+/* What sits beside the left edge moves over when a panel is folded out, and back when it is not. */
+.tl-panel,
+.map-key {
+  left: 100px;
+}
+
+.app.pane-open .tl-panel,
+.app.pane-open .map-key,
+.app.pane-open .rail-hint {
+  left: 410px;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cancelConfirm, confirmEdit } from './scenario-client.ts';
 import { useStore } from '../app/store.ts';
+import './scenarios.css';
 
 /**
  * Asks before a change that would add many vehicles. The server has worked the change out and

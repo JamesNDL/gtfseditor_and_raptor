@@ -11,6 +11,7 @@ import {
   type Conflict,
 } from './scenario-client.ts';
 import { useStore } from '../app/store.ts';
+import './scenarios.css';
 
 const fmt = (n: number) => n.toLocaleString('en-AU');
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : 'no change');

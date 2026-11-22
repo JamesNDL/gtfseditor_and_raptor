@@ -1,0 +1,114 @@
+/* The wizard. */
+.sim-wizard {
+  width: min(720px, 100%);
+}
+
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sim-steps .on {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sim-steps .done {
+  color: var(--text);
+}
+
+.sim-step {
+  padding: 4px 18px 12px;
+  min-height: 250px;
+}
+
+.sim-step h3 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+}
+
+.sim-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sim-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.sim-choice.on {
+  border-color: var(--accent);
+}
+
+.sim-choice.off {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.sim-number {
+  width: 84px;
+}
+
+.sim-report {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sim-report ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sim-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.sim-settings label:not(.check) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.sim-settings b {
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sim-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
