@@ -75,8 +75,8 @@ Within a feature folder that grows past about 10 files, use subfolders by sub-fe
 - **One main thing per file.** A component file exports one component, with small private helpers beside it.
 - **Styles live beside their component.** `styles.css` is split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component.
 - **What may import what:**
-  - `shared/` imports nothing from features.
-  - Features may import `shared/` and the app store. A feature imports another feature only through that feature's main file, not its internals.
+  - `shared/` imports nothing from features. `app/` (the shell) is not a feature, and `shared/` may read the app store (`app/store.ts`) but nothing else in `app/`.
+  - Features may import `shared/` and the app store. A feature imports another feature only through files at the top of that feature's folder, never from its subfolders.
   - In the API, `scenarios/engine.ts` imports no edit kinds. Edit kinds import the engine; the registry imports the edit kinds.
   - No import circles, enforced by oxlint's `import/no-cycle` rule once stage 3 has broken the API circles.
 - **No barrel files** (`index.ts` that only re-exports), except each package's public entry. Barrels hide circles and slow Vite's reload.
@@ -185,7 +185,9 @@ Split as in 2.4. Fix I2 (the `sim-results.ts` header says it writes nothing) dur
 
 ## Stage 4: Shared types between web and API (3–5 days)
 
-Chosen approach: request and response types written once in `packages/core/src/api/` and imported by both sides. There's no new library and no build step. Checking request bodies when the app runs (a schema library such as Zod) can be added route by route before hosting.
+Options considered (decision D9 in `docs/architecture/system.md`): A, shared types in `packages/core/src/api/`; B, a schema library such as Zod, giving types and checks when the app runs; C, a client generated from an OpenAPI description, which adds a build step.
+
+Chosen approach: A, request and response types written once in `packages/core/src/api/` and imported by both sides. There's no new library and no build step. Checking request bodies when the app runs (a schema library such as Zod) can be added route by route before hosting.
 
 - 4.1 Create `packages/core/src/api/` with the scenario and edit types first, then the simulator, the catalogue and the network. Point the API routes and the web client at them; delete the hand-copied types.
 - 4.2 Route every web request through `shared/api-client.ts` and each feature's own small API file (e.g. `sim/sim-api.ts`). Today 11 files call `fetch` directly.

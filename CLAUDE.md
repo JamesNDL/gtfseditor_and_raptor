@@ -24,7 +24,7 @@ The code is moving to this layout in stages (`docs/refactor-plan.md` stage 2), s
 
 - One folder per part of the product (`scenarios/`, `map/`, `sim/`…), each holding its own components, logic, styles and types, plus `shared/` for what everything uses. Not `components/`, `hooks/` or `lib/`.
 - File names: React components `PascalCase.tsx`; everything else `kebab-case.ts` (not camelCase). Unit tests beside the file as `name.test.ts`; end-to-end tests and fixtures in the package's `test/` folder. Styles go in the feature's own CSS file beside its components, not in `styles.css`.
-- `shared/` imports nothing from a feature. A feature imports another feature only through its main file, never its internals. No import circles.
+- `shared/` imports nothing from a feature (it may read the app store). A feature imports another only through files at the top of that feature's folder, never its subfolders. No import circles.
 - No barrel files (an `index.ts` that only re-exports), except a package's public entry.
 
 ## Commands

@@ -279,9 +279,8 @@ export function FleetPanel() {
           </table>
         </div>
         <footer className="muted small fleet-footer">
-          Click a value to change it; press Enter or click away to save. To run a line, a vehicle or
-          a trip with a different type, open it: the type pickers are there whenever a day is open,
-          and the first change starts a scenario.
+          Click a value to edit it; Enter or click away saves. To change a type, open the line,
+          vehicle or trip: pickers show whenever a day is open; the first change starts a scenario.
         </footer>
       </section>
     </div>
@@ -320,7 +319,7 @@ function Cell({
   );
 }
 
-/** "Run this with ..." control, shown while a scenario is being edited. */
+/** "Run this with ..." control, shown whenever a day is open; the first change starts a scenario. */
 export function VehicleTypePicker({
   scope,
   id,

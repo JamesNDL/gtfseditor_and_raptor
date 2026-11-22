@@ -18,7 +18,7 @@ The commands and their quirks are in `CLAUDE.md`. In short:
 
 ## Parts of the application
 
-Status is **existing** for everything listed unless marked otherwise. Open issues (I1 to I5) are in `docs/architecture/system.md` §11.
+Status is **existing** for everything listed unless marked otherwise. Issues found in the code are tracked in `docs/architecture/system.md` §11.
 
 ### apps/web: the user interface
 
@@ -27,14 +27,14 @@ Status is **existing** for everything listed unless marked otherwise. Open issue
 | `src/App.tsx`, `src/main.tsx` | The composition root. It loads days, modes and packs, keeps the URL hash in step, and handles keyboard shortcuts. No domain logic. | Everything | `App.tsx` | ui-smoke |
 | `src/store.ts` | The single zustand store: selection history, scenario state, tool state, simulator state, the timeline window. Data that changes many times a second (clock, vehicles, loads) is kept outside it. | Used by everything | `store.ts` | n/a |
 | `src/api.ts` | Response types, plus `useApi(url)`, which adds `?s=<scenario>` and refetches when `dataVersion` changes | Inspector, timelines | `api.ts` | n/a |
-| `src/scenario.ts` | Every change: `applyEdit` (one at a time, with the confirm flow and `idMap`), undo and redo, `refreshScenario`, `fixAll`. Issue **I3** is here. | `/api/scenarios/*` | `applyEdit` | ui-smoke, e2e |
+| `src/scenario.ts` | Every change: `applyEdit` (one at a time, with the confirm flow and `idMap`), undo and redo, `refreshScenario`, `fixAll`. | `/api/scenarios/*` | `applyEdit` | ui-smoke, e2e |
 | `src/vehicles.ts`, `src/clock.ts`, `src/liveStats.ts` | Vehicle animation: decodes packs, computes each frame, terminus waits, hides removed trips. Kept outside React. | `packages/core` pack and waits | `computeFrame` | `core/waits.test.ts` |
 | `src/MapView.tsx` | The whole map (about 2,000 lines): MapLibre layers, the deck.gl vehicle layer, click and hover logic, scenario and simulator layers, the animation loop. It does not send edits; it calls `builder.ts`. | store, builder, sim | Section comments; layers start around line 518 | ui-smoke |
 | `src/builder.ts` | Map-click tools: picking stops for a new or reshaped line, placing a new stop, closure points | MapView, panels | `pickStop`, `placeStop` | ui-smoke |
 | `src/LeftRail.tsx`, `TopBar.tsx`, `TimeBar.tsx`, `ModePanel.tsx` | The frame around the map: rail buttons and folding panes, day picker and search, clock and scrubber, mode toggles | store | | ui-smoke |
 | `src/ScenarioPanel.tsx`, `ScenarioManager.tsx`, `EditConfirm.tsx` | The Timetable pane (stats, impact, clash list with fixes, export link), the scenario manager, the "adds N vehicles" dialog | scenario.ts | `ConflictRow` | ui-smoke |
 | `src/NewLinePanel.tsx`, `ReshapePanel.tsx`, `NewStopTool.tsx`, `ClosurePanel.tsx` | Network-editing tools, each previewing before applying: `createLine`, `reshape`, `addStop`, `close` | `/api/*-preview`, `applyEdit` | | ui-smoke, e2e |
-| `src/FleetPanel.tsx` | The vehicle catalogue modal and `VehicleTypePicker` (`setVehicleType`). Issue **I4** is here. | `/api/vehicle-types` | | e2e |
+| `src/FleetPanel.tsx` | The vehicle catalogue modal and `VehicleTypePicker` (`setVehicleType`). | `/api/vehicle-types` | | e2e |
 | `src/inspector/` | The right-hand panel: route, trip (with `TripEditTools`), vehicle day, station, delete stop, frequency editor | `useApi`, `applyEdit` | `Inspector.tsx` | ui-smoke |
 | `src/timeline/` | Canvas charts: trip diagram (`StringlineView`), platforms, vehicles. Dragging is handled in one place, `TimelineCanvas.tsx`. | `/api/patterns/:id/stringline`, `/api/stations/:id/platforms`, `/api/routes/:id/vehicles` | `TimelineCanvas.tsx` | ui-smoke |
 | `src/sim/` | The simulator interface: Simulate pane, four-step wizard, library, the results window (five tabs), passenger figures, map key, colouring by how full | `/api/sim-*`, `/api/demand*` | `SimPanel.tsx`, `results.ts` | ui-smoke 1b and 18 |
@@ -58,7 +58,7 @@ Status is **existing** for everything listed unless marked otherwise. Open issue
 | `src/fleet.ts` | Vehicle-type catalogue routes | | | e2e |
 | `src/export.ts` | GTFS zip export (optional shapes, bounding box, `editor_*.txt`) | database | | e2e Reality block, `export:check` |
 | `src/sim.ts` | Simulator back end: demand sets, areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions | Java router | `drive` | `test/sim.e2e.mjs` |
-| `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. Issue **I2** is here. | `sim_*` tables | | `test/sim.e2e.mjs` |
+| `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. | `sim_*` tables | | `test/sim.e2e.mjs` |
 | `test/scenarios.e2e.mjs`, `test/sim.e2e.mjs` | Scripted HTTP tests of every edit kind, and of the simulator | need the API (and the router) | | n/a |
 
 ### packages
@@ -138,8 +138,8 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 - **One main thing per file.** A component file exports one component, with small private helpers beside it.
 - **Styles beside their component.** `apps/web/src/styles.css` is to be split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component. `base.css` loads first.
 - **What may import what:**
-  - `shared/` imports nothing from features.
-  - A feature may import `shared/` and the app store. It imports another feature only through that feature's main file, not its internals.
+  - `shared/` imports nothing from features. `app/` (the shell) is not a feature, and `shared/` may read the app store (`app/store.ts`) but nothing else in `app/`.
+  - A feature may import `shared/` and the app store. It imports another feature only through files at the top of that feature's folder, never from its subfolders.
   - In the API, `scenarios/engine.ts` imports no edit kinds. Edit kinds import the engine; the registry imports the edit kinds.
   - No import circles. oxlint's `import/no-cycle` rule will enforce this once the API circles are broken (stage 3); until then, don't add new ones.
 - **No barrel files** (an `index.ts` that only re-exports), except each package's public entry, such as `packages/core/src/index.ts`. Barrels hide circles and slow Vite's reload.
