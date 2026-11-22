@@ -71,7 +71,7 @@ Within a feature folder that grows past about 10 files, use subfolders by sub-fe
 
 ### 2.2 Conventions (go in CLAUDE.md and the codebase map)
 
-- **File names:** React components `PascalCase.tsx`. Everything else `kebab-case.ts` (`live-stats.ts`, `sim-api.ts`), matching the API and packages. Tests sit beside the file as `name.test.ts`.
+- **File names:** React components `PascalCase.tsx`. Everything else `kebab-case.ts` (`live-stats.ts`, `sim-api.ts`), matching the API and packages. Unit tests sit beside the file as `name.test.ts`; end-to-end tests and fixtures live in the package's `test/` folder.
 - **One main thing per file.** A component file exports one component, with small private helpers beside it.
 - **Styles live beside their component.** `styles.css` is split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component.
 - **What may import what:**
@@ -88,7 +88,9 @@ Within a feature folder that grows past about 10 files, use subfolders by sub-fe
 apps/web/src/
   main.tsx
   app/              the shell: App.tsx, TopBar.tsx, LeftRail.tsx, TimeBar.tsx, store.ts, theme.ts, base.css
-  shared/           used everywhere, owns nothing: api-client.ts (the one fetch wrapper), clock.ts,
+  shared/           used everywhere, owns nothing: api-client.ts (the one fetch wrapper: useApi()
+                    and getJson() from today's api.ts, and send() from scenario.ts; the response types go to packages/core/src/api/
+                    in stage 4), clock.ts,
                     live-stats.ts, ui/ (today's inspector/parts.tsx and other small pieces)
   map/              MapView.tsx (later split into hooks here, stage 5), ModePanel.tsx (show or hide
                     each mode's lines), map.css
@@ -146,8 +148,8 @@ The API import circles break when `engine.ts` comes out of `scenarios.ts`. That 
 packages/core/src/
   index.ts          public entry
   api/              the shared request and response types (stage 4)
-  time.ts, limits.ts, simplify.ts, pack.ts, vehicle-days.ts
-  edits/            reshape.ts, delete-stop.ts, waits.ts (the pure parts of edit kinds), with tests
+  time.ts, limits.ts, simplify.ts, pack.ts, waits.ts, vehicle-days.ts
+  edits/            reshape.ts, delete-stop.ts (the pure parts of edit kinds), with tests
   core.test.ts      split into a test beside each file it covers
 
 packages/gtfs/
