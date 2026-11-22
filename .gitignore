@@ -4,3 +4,4 @@ dist/
 data/
 *.log
 CLAUDE.local.md
+.claude/worktrees/
