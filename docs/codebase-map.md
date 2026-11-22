@@ -24,21 +24,21 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 
 | Part | Purpose | Depends on / used by | Start reading | Tests |
 |---|---|---|---|---|
-| `src/App.tsx`, `src/main.tsx` | The composition root. It loads days, modes and packs, keeps the URL hash in step, and handles keyboard shortcuts. No domain logic. | Everything | `App.tsx` | ui-smoke |
-| `src/store.ts` | The single zustand store: selection history, scenario state, tool state, simulator state, the timeline window. Data that changes many times a second (clock, vehicles, loads) is kept outside it. | Used by everything | `store.ts` | n/a |
-| `src/api.ts` | Response types, plus `useApi(url)`, which adds `?s=<scenario>` and refetches when `dataVersion` changes | Inspector, timelines | `api.ts` | n/a |
-| `src/scenario.ts` | Every change: `applyEdit` (one at a time, with the confirm flow and `idMap`), undo and redo, `refreshScenario`, `fixAll`. | `/api/scenarios/*` | `applyEdit` | ui-smoke, e2e |
-| `src/vehicles.ts`, `src/clock.ts`, `src/liveStats.ts` | Vehicle animation: decodes packs, computes each frame, terminus waits, hides removed trips. Kept outside React. | `packages/core` pack and waits | `computeFrame` | `core/waits.test.ts` |
-| `src/MapView.tsx` | The whole map (about 2,000 lines): MapLibre layers, the deck.gl vehicle layer, click and hover logic, scenario and simulator layers, the animation loop. It does not send edits; it calls `builder.ts`. | store, builder, sim | Section comments; layers start around line 518 | ui-smoke |
-| `src/builder.ts` | Map-click tools: picking stops for a new or reshaped line, placing a new stop, closure points | MapView, panels | `pickStop`, `placeStop` | ui-smoke |
-| `src/LeftRail.tsx`, `TopBar.tsx`, `TimeBar.tsx`, `ModePanel.tsx` | The frame around the map: rail buttons and folding panes, day picker and search, clock and scrubber, mode toggles | store | | ui-smoke |
-| `src/ScenarioPanel.tsx`, `ScenarioManager.tsx`, `EditConfirm.tsx` | The Timetable pane (stats, impact, clash list with fixes, export link), the scenario manager, the "adds N vehicles" dialog | scenario.ts | `ConflictRow` | ui-smoke |
-| `src/NewLinePanel.tsx`, `ReshapePanel.tsx`, `NewStopTool.tsx`, `ClosurePanel.tsx` | Network-editing tools, each previewing before applying: `createLine`, `reshape`, `addStop`, `close` | `/api/*-preview`, `applyEdit` | | ui-smoke, e2e |
-| `src/FleetPanel.tsx` | The vehicle catalogue modal and `VehicleTypePicker` (`setVehicleType`). | `/api/vehicle-types` | | e2e |
-| `src/inspector/` | The right-hand panel: route, trip (with `TripEditTools`), vehicle day, station, delete stop, frequency editor | `useApi`, `applyEdit` | `Inspector.tsx` | ui-smoke |
+| `src/app/App.tsx`, `src/main.tsx` | The composition root. It loads days, modes and packs, keeps the URL hash in step, and handles keyboard shortcuts. No domain logic. | Everything | `App.tsx` | ui-smoke |
+| `src/app/store.ts` | The single zustand store: selection history, scenario state, tool state, simulator state, the timeline window. Data that changes many times a second (clock, vehicles, loads) is kept outside it. | Used by everything | `store.ts` | n/a |
+| `src/shared/api-client.ts` | Response types, plus `useApi(url)`, which adds `?s=<scenario>` and refetches when `dataVersion` changes | Inspector, timelines | `api-client.ts` | n/a |
+| `src/scenarios/scenario-client.ts` | Every change: `applyEdit` (one at a time, with the confirm flow and `idMap`), undo and redo, `refreshScenario`, `fixAll`. | `/api/scenarios/*` | `applyEdit` | ui-smoke, e2e |
+| `src/vehicles/vehicles.ts`, `src/shared/clock.ts`, `src/shared/live-stats.ts` | Vehicle animation: decodes packs, computes each frame, terminus waits, hides removed trips. Kept outside React. | `packages/core` pack and waits | `computeFrame` | `core/waits.test.ts` |
+| `src/map/MapView.tsx` | The whole map (about 2,000 lines): MapLibre layers, the deck.gl vehicle layer, click and hover logic, scenario and simulator layers, the animation loop. It does not send edits; it calls `builder.ts`. | store, builder, sim | Section comments; layers start around line 518 | ui-smoke |
+| `src/editing/builder.ts` | Map-click tools: picking stops for a new or reshaped line, placing a new stop, closure points | MapView, panels | `pickStop`, `placeStop` | ui-smoke |
+| `src/app/LeftRail.tsx`, `TopBar.tsx`, `TimeBar.tsx`; `src/map/ModePanel.tsx` | The frame around the map: rail buttons and folding panes, day picker and search, clock and scrubber, mode toggles | store | | ui-smoke |
+| `src/scenarios/ScenarioPanel.tsx`, `ScenarioManager.tsx`, `EditConfirm.tsx` | The Timetable pane (stats, impact, clash list with fixes, export link), the scenario manager, the "adds N vehicles" dialog | scenario-client.ts | `ConflictRow` | ui-smoke |
+| `src/editing/`: `new-line/NewLinePanel.tsx`, `reshape/ReshapePanel.tsx`, `NewStopTool.tsx`, `closures/ClosurePanel.tsx` | Network-editing tools, each previewing before applying: `createLine`, `reshape`, `addStop`, `close` | `/api/*-preview`, `applyEdit` | | ui-smoke, e2e |
+| `src/catalogue/CataloguePanel.tsx` | The vehicle catalogue modal (`CataloguePanel`) and `VehicleTypePicker` (`setVehicleType`). | `/api/vehicle-types` | | e2e |
+| `src/inspector/` | The right-hand panel: route, trip (with `TripEditTools`), vehicle day, station, delete stop, frequency editor. Its small shared pieces are in `src/shared/ui/parts.tsx`. | `useApi`, `applyEdit` | `Inspector.tsx` | ui-smoke |
 | `src/timeline/` | Canvas charts: trip diagram (`StringlineView`), platforms, vehicles. Dragging is handled in one place, `TimelineCanvas.tsx`. | `/api/patterns/:id/stringline`, `/api/stations/:id/platforms`, `/api/routes/:id/vehicles` | `TimelineCanvas.tsx` | ui-smoke |
-| `src/sim/` | The simulator interface: Simulate pane, four-step wizard, library, the results window (five tabs), passenger figures, map key, colouring by how full | `/api/sim-*`, `/api/demand*` | `SimPanel.tsx`, `results.ts` | ui-smoke 1b and 18 |
-| `src/theme.ts`, `src/styles.css` | Light and dark theme: CSS variables under `:root[data-theme='light']`, plus colours for the map and timelines | | | ui-smoke 15 |
+| `src/sim/` | The simulator interface: Simulate pane and `sim-api.ts` at the top; `wizard/` (four steps), `library/`, and `results/` (the results window with five tabs, passenger figures, map key, colouring by how full) | `/api/sim-*`, `/api/demand*` | `SimPanel.tsx`, `results/results.ts` | ui-smoke 1b and 18 |
+| `src/app/theme.ts`, `src/app/styles.css` | Light and dark theme: CSS variables under `:root[data-theme='light']`, plus colours for the map and timelines | | | ui-smoke 15 |
 | `test/ui-smoke.mjs` | Headless Edge or Chrome over CDP, about 20 steps through the whole interface | needs `npm run dev` | | n/a |
 
 ### apps/api: HTTP API, edit engine, simulator back end
@@ -106,15 +106,15 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 - **Adding an edit kind:** write the function in `apps/api/src/scenarios.ts`, or in a module wired in from there. Add it to the dispatch in `POST /api/scenarios/:id/edits`, send it from the web with `applyEdit({ kind, … })`, and cover it in `apps/api/test/scenarios.e2e.mjs`. Put any logic that needs no database in `packages/core` with a unit test.
 - **Adding an API route:** register it in the relevant `apps/api/src/*.ts` `register*Routes` or `*Routes` function, and take `?s=` through `scenarioOf()` if it reads timetable data.
 - **What a scenario can see:** `visible()` in `apps/api/src/scenarios.ts`; for stops, `stopVisible()` in `apps/api/src/stops.ts`.
-- **Clash rules:** `conflictsIn` in `apps/api/src/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
+- **Clash rules:** `conflictsIn` in `apps/api/src/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/scenarios/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
 - **Run times for new stretches:** `apps/api/src/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
 - **Road and track paths:** `apps/api/src/roads.ts` (OSRM) and `apps/api/src/tracks.ts`.
 - **Database tables:** `packages/gtfs/sql/schema.sql`. Sim partitions are created at runtime in `apps/api/src/sim.ts`.
-- **Map layers:** `apps/web/src/MapView.tsx`. Tiles come from `server.ts` `/tiles`.
-- **Vehicle animation:** `apps/web/src/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
+- **Map layers:** `apps/web/src/map/MapView.tsx`. Tiles come from `server.ts` `/tiles`.
+- **Vehicle animation:** `apps/web/src/vehicles/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
 - **Timeline dragging:** `apps/web/src/timeline/TimelineCanvas.tsx`.
-- **Theme:** `apps/web/src/theme.ts`, and `styles.css` line 32.
-- **URL deep links and keyboard shortcuts:** `apps/web/src/App.tsx`.
+- **Theme:** `apps/web/src/app/theme.ts`, and `app/styles.css` line 32.
+- **URL deep links and keyboard shortcuts:** `apps/web/src/app/App.tsx`.
 - **How the API talks to the router:** `apps/api/src/sim.ts` (`ensureTimetable`, `drive`, `importResults`).
 - **Router endpoints:** `services/router/router-server/.../RouterServer.java` (around lines 89-106), and `services/router/README.md`.
 - **Environment variables:**
@@ -138,7 +138,7 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 - **File names.** React components are `PascalCase.tsx`. Everything else is `kebab-case.ts` (`live-stats.ts`, `sim-api.ts`), as in the API and packages already. Older camelCase names (`liveStats.ts`, `simApi.ts`) are renamed when their folder moves.
 - **Tests.** Unit tests sit beside the file they cover as `name.test.ts`. End-to-end tests and fixtures live in the package's `test/` folder (as `apps/api/test/` and `apps/web/test/` do now).
 - **One main thing per file.** A component file exports one component, with small private helpers beside it.
-- **Styles beside their component.** `apps/web/src/styles.css` is to be split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component. `base.css` loads first.
+- **Styles beside their component.** `apps/web/src/app/styles.css` is to be split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component. `base.css` loads first.
 - **What may import what:**
   - `shared/` imports nothing from features. `app/` (the shell) is not a feature, and `shared/` may read the app store (`app/store.ts`) but nothing else in `app/`.
   - A feature may import `shared/` and the app store. It imports another feature only through files at the top of that feature's folder, never from its subfolders.
@@ -152,7 +152,9 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 
 **Status: planned, not built.** This is the target from `docs/refactor-plan.md` §2.3–2.5. Files move into it one PR at a time; until a file has moved, the tables above say where it is. `→` means the file is renamed when it moves.
 
-### apps/web/src (planned)
+### apps/web/src (moved)
+
+**Status: files moved (T-7).** Every file is in its folder below. Still to come: `styles.css` sits whole in `app/` until T-8 splits it into `app/base.css` and one CSS file per feature; `send()` has not yet moved from `scenario-client.ts` into `api-client.ts`; the response types move in stage 4; `MapView.tsx` is split in stage 5.
 
 ```
 apps/web/src/
