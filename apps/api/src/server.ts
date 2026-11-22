@@ -1,8 +1,8 @@
 import compress from '@fastify/compress';
 import Fastify from 'fastify';
 import { connect, migrate } from '@gtfs-editor/gtfs/db';
-import { registerExportRoutes } from './export.ts';
-import { registerFleetRoutes } from './fleet.ts';
+import { registerExportRoutes } from './export/routes.ts';
+import { registerFleetRoutes } from './catalogue/routes.ts';
 import { registerBaselineRoutes } from './network/baselines.ts';
 import { registerInspectorRoutes } from './network/inspector.ts';
 import { registerMapDataRoutes } from './network/map-data.ts';
