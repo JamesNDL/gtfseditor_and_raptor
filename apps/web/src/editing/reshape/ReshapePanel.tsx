@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useApi, type RouteDetail } from './shared/api-client.ts';
-import { isRoadMode, startReshape } from './builder.ts';
-import { Badge, fmt, shortStop, Tag } from './shared/ui/parts.tsx';
-import { NewStopTool } from './NewStopTool.tsx';
-import { applyEdit } from './scenario.ts';
-import { useStore } from './app/store.ts';
+import { useApi, type RouteDetail } from '../../shared/api-client.ts';
+import { isRoadMode, startReshape } from '../builder.ts';
+import { Badge, fmt, shortStop, Tag } from '../../shared/ui/parts.tsx';
+import { NewStopTool } from '../NewStopTool.tsx';
+import { applyEdit } from '../../scenarios/scenario-client.ts';
+import { useStore } from '../../app/store.ts';
 
 interface Side {
   coords: [number, number][];

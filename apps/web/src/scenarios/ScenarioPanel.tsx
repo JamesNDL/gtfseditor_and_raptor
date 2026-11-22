@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { clock } from './shared/clock.ts';
+import { clock } from '../shared/clock.ts';
 import {
   applyEdit,
   createScenario,
@@ -9,8 +9,8 @@ import {
   selectScenario,
   undo,
   type Conflict,
-} from './scenario.ts';
-import { useStore } from './app/store.ts';
+} from './scenario-client.ts';
+import { useStore } from '../app/store.ts';
 
 const fmt = (n: number) => n.toLocaleString('en-AU');
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : 'no change');

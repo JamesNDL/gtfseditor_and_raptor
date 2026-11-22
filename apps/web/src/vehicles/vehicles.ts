@@ -7,7 +7,7 @@ import {
   vehicleState,
   type Pack,
 } from '@gtfs-editor/core';
-import type { RouteListItem } from './shared/api-client.ts';
+import type { RouteListItem } from '../shared/api-client.ts';
 
 export interface ModeVehicles {
   modeId: string;

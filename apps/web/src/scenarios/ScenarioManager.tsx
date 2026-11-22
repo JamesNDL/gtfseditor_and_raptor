@@ -5,8 +5,8 @@ import {
   renameScenario,
   selectScenario,
   type ScenarioSummary,
-} from './scenario.ts';
-import { useStore } from './app/store.ts';
+} from './scenario-client.ts';
+import { useStore } from '../app/store.ts';
 
 /** Every scenario of the chosen day in one place: open, rename, delete. */
 export function ScenarioManager() {

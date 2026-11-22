@@ -1,8 +1,8 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useState } from 'react';
 import { useApi, type TripDetail } from '../shared/api-client.ts';
-import { VehicleTypePicker } from '../FleetPanel.tsx';
-import { applyEdit } from '../scenario.ts';
+import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
+import { applyEdit } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
 import { Tag } from '../shared/ui/parts.tsx';
 

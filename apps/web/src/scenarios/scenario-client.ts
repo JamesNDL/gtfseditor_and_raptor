@@ -1,13 +1,13 @@
 // Client side of scenarios: choosing one, sending edits, and keeping every view in step afterwards.
-import { getJson, type RouteListItem } from './shared/api-client.ts';
-import { useStore } from './app/store.ts';
+import { getJson, type RouteListItem } from '../shared/api-client.ts';
+import { useStore } from '../app/store.ts';
 import {
   applyRemovedTrips,
   applyWaits,
   loadScenarioVehicles,
   loadWaits,
   vehicleData,
-} from './vehicles.ts';
+} from '../vehicles/vehicles.ts';
 
 export interface ScenarioSummary {
   id: number;

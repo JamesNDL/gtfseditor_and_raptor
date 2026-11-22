@@ -1,12 +1,12 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useApi, type RouteDetail, type RouteTrip } from '../shared/api-client.ts';
-import { startReshape } from '../builder.ts';
-import { applyEdit } from '../scenario.ts';
+import { startReshape } from '../editing/builder.ts';
+import { applyEdit } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
-import { VehicleTypePicker } from '../FleetPanel.tsx';
+import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
 import { FrequencyEditor } from './FrequencyEditor.tsx';
-import { RoutePassengers } from '../sim/SimFigures.tsx';
+import { RoutePassengers } from '../sim/results/SimFigures.tsx';
 import { HourlyChart } from './HourlyChart.tsx';
 import { Badge, duration, fmt, Loading, shortStop, Tag, Tile } from '../shared/ui/parts.tsx';
 

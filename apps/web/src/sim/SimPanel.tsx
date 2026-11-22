@@ -4,9 +4,9 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
 import { getJson } from '../shared/api-client.ts';
 import { fmt } from '../shared/ui/parts.tsx';
-import { selectScenario } from '../scenario.ts';
+import { selectScenario } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
-import { Rename } from './SimLibrary.tsx';
+import { Rename } from './library/SimLibrary.tsx';
 import {
   OUT_OF_DATE,
   areaText,
@@ -18,7 +18,7 @@ import {
   walkText,
   type SimJourney,
   type SimRun,
-} from './simApi.ts';
+} from './sim-api.ts';
 
 const minutes = (n: number) =>
   `${n.toLocaleString('en-AU', { maximumFractionDigits: n < 10 ? 1 : 0 })} min`;

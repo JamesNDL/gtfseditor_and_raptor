@@ -4,8 +4,8 @@
 import { DAY_BANDS, formatSecs } from '@gtfs-editor/core';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, fmt } from '../shared/ui/parts.tsx';
-import { useStore } from '../app/store.ts';
+import { Badge, fmt } from '../../shared/ui/parts.tsx';
+import { useStore } from '../../app/store.ts';
 import {
   GROUP_COLORS,
   GROUP_LABELS,
@@ -27,7 +27,7 @@ import {
   type Shift,
   type Who,
 } from './results.ts';
-import { OUT_OF_DATE, areaText, type SimRun } from './simApi.ts';
+import { OUT_OF_DATE, areaText, type SimRun } from '../sim-api.ts';
 import { PatternsTab, PeopleTab, followPeople } from './SimResultsPeople.tsx';
 
 const TABS: { id: ResultsTab; label: string }[] = [

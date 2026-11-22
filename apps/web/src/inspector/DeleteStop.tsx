@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { applyEdit, undo } from '../scenario.ts';
+import { applyEdit, undo } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
 import { Badge, fmt } from '../shared/ui/parts.tsx';
 

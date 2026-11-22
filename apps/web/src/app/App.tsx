@@ -1,27 +1,27 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { getJson, type Baseline, type Mode, type RouteListItem } from '../shared/api-client.ts';
 import { clock } from '../shared/clock.ts';
-import { ClosurePanel } from '../ClosurePanel.tsx';
-import { EditConfirm } from '../EditConfirm.tsx';
-import { FleetPanel } from '../FleetPanel.tsx';
+import { ClosurePanel } from '../editing/closures/ClosurePanel.tsx';
+import { EditConfirm } from '../scenarios/EditConfirm.tsx';
+import { CataloguePanel } from '../catalogue/CataloguePanel.tsx';
 import { Inspector } from '../inspector/Inspector.tsx';
 import { liveStats } from '../shared/live-stats.ts';
 import { LeftRail } from './LeftRail.tsx';
-import { MapView } from '../MapView.tsx';
-import { NewLinePanel } from '../NewLinePanel.tsx';
-import { ReshapePanel } from '../ReshapePanel.tsx';
-import { loadScenarios, redo, selectScenario, undo } from '../scenario.ts';
-import { ScenarioManager } from '../ScenarioManager.tsx';
-import { SimLibrary } from '../sim/SimLibrary.tsx';
-import { SimMapKey } from '../sim/SimMapKey.tsx';
-import { SimResults } from '../sim/SimResults.tsx';
-import { SimWizard } from '../sim/SimWizard.tsx';
+import { MapView } from '../map/MapView.tsx';
+import { NewLinePanel } from '../editing/new-line/NewLinePanel.tsx';
+import { ReshapePanel } from '../editing/reshape/ReshapePanel.tsx';
+import { loadScenarios, redo, selectScenario, undo } from '../scenarios/scenario-client.ts';
+import { ScenarioManager } from '../scenarios/ScenarioManager.tsx';
+import { SimLibrary } from '../sim/library/SimLibrary.tsx';
+import { SimMapKey } from '../sim/results/SimMapKey.tsx';
+import { SimResults } from '../sim/results/SimResults.tsx';
+import { SimWizard } from '../sim/wizard/SimWizard.tsx';
 import { useStore } from './store.ts';
 import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
 import { TimelinePanel } from '../timeline/TimelinePanel.tsx';
 import { TopBar } from './TopBar.tsx';
-import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from '../vehicles.ts';
+import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from '../vehicles/vehicles.ts';
 
 // Small packs first so something is moving almost immediately.
 // Read the link once at startup, before anything rewrites the address bar.
@@ -208,7 +208,7 @@ export function App() {
       <ReshapePanel />
       <ClosurePanel />
       <TimeBar key={`timebar-${theme}`} />
-      <FleetPanel />
+      <CataloguePanel />
       <ScenarioManager />
       <EditConfirm />
       <SimResults />

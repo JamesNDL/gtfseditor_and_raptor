@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { clock } from '../shared/clock.ts';
 import { liveStats } from '../shared/live-stats.ts';
 import { SPEEDS, useStore } from './store.ts';
-import { activityHistogram, vehicleData } from '../vehicles.ts';
+import { activityHistogram, vehicleData } from '../vehicles/vehicles.ts';
 
 const BIN_SECS = 300;
 

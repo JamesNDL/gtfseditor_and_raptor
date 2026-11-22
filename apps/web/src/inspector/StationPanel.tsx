@@ -2,7 +2,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
 import { useApi } from '../shared/api-client.ts';
 import { clock } from '../shared/clock.ts';
-import { StationPassengers } from '../sim/SimFigures.tsx';
+import { StationPassengers } from '../sim/results/SimFigures.tsx';
 import { useStore } from '../app/store.ts';
 import { DeletedNote, DeletePreviewCard, type Deletion } from './DeleteStop.tsx';
 import { Badge, fmt, Loading, Tag, Tile } from '../shared/ui/parts.tsx';

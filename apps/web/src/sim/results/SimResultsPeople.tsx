@@ -3,8 +3,8 @@
 import { formatSecs } from '@gtfs-editor/core';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { fmt } from '../shared/ui/parts.tsx';
-import { useStore } from '../app/store.ts';
+import { fmt } from '../../shared/ui/parts.tsx';
+import { useStore } from '../../app/store.ts';
 import {
   GROUP_COLORS,
   fetchResults,
@@ -21,7 +21,7 @@ import {
   type PersonRow,
   type Who,
 } from './results.ts';
-import { walkText, type SimJourney, type SimRun } from './simApi.ts';
+import { walkText, type SimJourney, type SimRun } from '../sim-api.ts';
 
 /** Picks people out: they are followed on the map, and listed in the People tab when asked. */
 export function followPeople(who: Who, options: { list?: boolean; map?: boolean } = {}) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useApi } from './shared/api-client.ts';
-import { applyEdit } from './scenario.ts';
-import { useStore } from './app/store.ts';
+import { useApi } from '../shared/api-client.ts';
+import { applyEdit } from '../scenarios/scenario-client.ts';
+import { useStore } from '../app/store.ts';
 
 export interface VehicleType {
   id: number;
@@ -40,7 +40,7 @@ export function useVehicleTypes(enabled = true) {
 }
 
 /** The catalogue screen: capacities, fleet sizes and how many of each type are in use. */
-export function FleetPanel() {
+export function CataloguePanel() {
   const open = useStore((s) => s.fleetOpen);
   const set = useStore((s) => s.set);
   const modes = useStore((s) => s.modes);

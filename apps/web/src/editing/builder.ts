@@ -1,8 +1,8 @@
 // Picking stops on the map, for a new line being drawn or an existing one being reshaped.
 import { distanceM } from '@gtfs-editor/core';
-import { getJson } from './shared/api-client.ts';
-import { applyEdit } from './scenario.ts';
-import { useStore, type BuilderStop } from './app/store.ts';
+import { getJson } from '../shared/api-client.ts';
+import { applyEdit } from '../scenarios/scenario-client.ts';
+import { useStore, type BuilderStop } from '../app/store.ts';
 
 export interface MapStop {
   id: number;
