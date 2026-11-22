@@ -42,8 +42,10 @@ function inDb(
       stdio: [io.input ? 'pipe' : 'ignore', 'pipe', 'inherit'],
     });
     let text = '';
-    if (io.output) child.stdout.pipe(io.output);
-    else child.stdout.on('data', (d: Buffer) => (text += d.toString()));
+    // stdout is always piped (see stdio above), so it is never null here.
+    const stdout = child.stdout!;
+    if (io.output) stdout.pipe(io.output);
+    else stdout.on('data', (d: Buffer) => (text += d.toString()));
     if (io.input && child.stdin) io.input.pipe(child.stdin);
     child.on('error', reject);
     child.on('close', (code) => {
