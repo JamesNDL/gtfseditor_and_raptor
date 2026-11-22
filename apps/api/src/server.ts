@@ -8,8 +8,8 @@ import { registerInspectorRoutes } from './network/inspector.ts';
 import { registerMapDataRoutes } from './network/map-data.ts';
 import { registerTimelineRoutes } from './network/timelines.ts';
 import { registerScenarioRoutes } from './scenarios/scenarios.ts';
-import { registerSimRoutes } from './sim.ts';
-import { registerSimResultRoutes } from './sim-results.ts';
+import { registerSimRoutes } from './sim/sim.ts';
+import { registerSimResultRoutes } from './sim/results-read.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 

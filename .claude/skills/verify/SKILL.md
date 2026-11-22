@@ -12,7 +12,7 @@ Work out what changed: `git status --short` and `git diff --name-only master...H
 | any TS, or a `tsconfig*.json` | `npm run typecheck` (checks every workspace) |
 | `services/router/**` | `npm run router:test` (javac warnings fail the build, so read them) |
 | `apps/api/**` or `packages/gtfs/**` | `npm run test:e2e` if the API answers on http://localhost:3001 |
-| `apps/api/src/sim*.ts`, `services/router/router-sim/**` or `router-server/**` | `npm run test:sim` if both the API (3001) and the router (3002) answer |
+| `apps/api/src/sim/**`, `services/router/router-sim/**` or `router-server/**` | `npm run test:sim` if both the API (3001) and the router (3002) answer |
 | `packages/gtfs/src/export*` | Mention `npm run export:check` (about 5 min). Run it only if asked, and don't edit files while it runs. |
 
 - Check whether the servers are up with a quick request (e.g. `curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/...`). Don't start the dev servers yourself. If one is down, say which suite was skipped and the command the owner should start.

@@ -8,7 +8,7 @@
 // (a platform counts as its station), and by the stretch between two consecutive calls.
 import type { FastifyInstance } from 'fastify';
 import type { QueryValue, Sql } from '@gtfs-editor/gtfs/db';
-import { fail } from './http.ts';
+import { fail } from '../http.ts';
 
 /**
  * Where the change in arrival time is cut into groups, in seconds later than the other run. Under
