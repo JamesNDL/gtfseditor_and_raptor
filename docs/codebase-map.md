@@ -1,0 +1,129 @@
+# Codebase map
+
+Read this first, then only the files it points to. It was last checked against commit `c33fbef` on 22 Nov 2026.
+
+A GTFS timetable editor and passenger simulator for NSW. It has a React web app, a Fastify API over Postgres and PostGIS, shared TypeScript packages, and a separate Java journey router and simulator.
+- How the parts fit together: `docs/architecture/system.md`
+- Status and next steps: `PLAN.md`
+- The router: `docs/router-plan.md` and `services/router/README.md`
+- The simulator: `docs/simulator-plan.md`
+- No glossary or BRDs exist yet (`docs/glossary.md` and `docs/brd/` are planned).
+
+## Running, building and testing
+
+The commands and their quirks are in `CLAUDE.md`. In short:
+- `npm run db:up`, then `npm run dev` (web on :5173, API on :3001).
+- `npm run router:dev` (on :3002).
+- Tests: `npm test` (unit), `npm run typecheck -w @gtfs-editor/web`, `npm run lint`, `npm run router:test`. `npm run test:e2e`, `npm run test:sim` and `npm run test:ui` need the servers running.
+
+## Parts of the application
+
+Status is **existing** for everything listed unless marked otherwise. Open issues (I1 to I5) are in `docs/architecture/system.md` §11.
+
+### apps/web: the user interface
+
+| Part | Purpose | Depends on / used by | Start reading | Tests |
+|---|---|---|---|---|
+| `src/App.tsx`, `src/main.tsx` | The composition root. It loads days, modes and packs, keeps the URL hash in step, and handles keyboard shortcuts. No domain logic. | Everything | `App.tsx` | ui-smoke |
+| `src/store.ts` | The single zustand store: selection history, scenario state, tool state, simulator state, the timeline window. Data that changes many times a second (clock, vehicles, loads) is kept outside it. | Used by everything | `store.ts` | n/a |
+| `src/api.ts` | Response types, plus `useApi(url)`, which adds `?s=<scenario>` and refetches when `dataVersion` changes | Inspector, timelines | `api.ts` | n/a |
+| `src/scenario.ts` | Every change: `applyEdit` (one at a time, with the confirm flow and `idMap`), undo and redo, `refreshScenario`, `fixAll`. Issue **I3** is here. | `/api/scenarios/*` | `applyEdit` | ui-smoke, e2e |
+| `src/vehicles.ts`, `src/clock.ts`, `src/liveStats.ts` | Vehicle animation: decodes packs, computes each frame, terminus waits, hides removed trips. Kept outside React. | `packages/core` pack and waits | `computeFrame` | `core/waits.test.ts` |
+| `src/MapView.tsx` | The whole map (about 2,000 lines): MapLibre layers, the deck.gl vehicle layer, click and hover logic, scenario and simulator layers, the animation loop. It does not send edits; it calls `builder.ts`. | store, builder, sim | Section comments; layers start around line 518 | ui-smoke |
+| `src/builder.ts` | Map-click tools: picking stops for a new or reshaped line, placing a new stop, closure points | MapView, panels | `pickStop`, `placeStop` | ui-smoke |
+| `src/LeftRail.tsx`, `TopBar.tsx`, `TimeBar.tsx`, `ModePanel.tsx` | The frame around the map: rail buttons and folding panes, day picker and search, clock and scrubber, mode toggles | store | | ui-smoke |
+| `src/ScenarioPanel.tsx`, `ScenarioManager.tsx`, `EditConfirm.tsx` | The Timetable pane (stats, impact, clash list with fixes, export link), the scenario manager, the "adds N vehicles" dialog | scenario.ts | `ConflictRow` | ui-smoke |
+| `src/NewLinePanel.tsx`, `ReshapePanel.tsx`, `NewStopTool.tsx`, `ClosurePanel.tsx` | Network-editing tools, each previewing before applying: `createLine`, `reshape`, `addStop`, `close` | `/api/*-preview`, `applyEdit` | | ui-smoke, e2e |
+| `src/FleetPanel.tsx` | The vehicle catalogue modal and `VehicleTypePicker` (`setVehicleType`). Issue **I4** is here. | `/api/vehicle-types` | | e2e |
+| `src/inspector/` | The right-hand panel: route, trip (with `TripEditTools`), vehicle day, station, delete stop, frequency editor | `useApi`, `applyEdit` | `Inspector.tsx` | ui-smoke |
+| `src/timeline/` | Canvas charts: trip diagram (`StringlineView`), platforms, vehicles. Dragging is handled in one place, `TimelineCanvas.tsx`. | `/api/patterns/:id/stringline`, `/api/stations/:id/platforms`, `/api/routes/:id/vehicles` | `TimelineCanvas.tsx` | ui-smoke |
+| `src/sim/` | The simulator interface: Simulate pane, four-step wizard, library, the results window (five tabs), passenger figures, map key, colouring by how full | `/api/sim-*`, `/api/demand*` | `SimPanel.tsx`, `results.ts` | ui-smoke 1b and 18 |
+| `src/theme.ts`, `src/styles.css` | Light and dark theme: CSS variables under `:root[data-theme='light']`, plus colours for the map and timelines | | | ui-smoke 15 |
+| `test/ui-smoke.mjs` | Headless Edge or Chrome over CDP, about 20 steps through the whole interface | needs `npm run dev` | | n/a |
+
+### apps/api: HTTP API, edit engine, simulator back end
+
+| Part | Purpose | Depends on / used by | Start reading | Tests |
+|---|---|---|---|---|
+| `src/server.ts` | Entry point. Connects, migrates, and serves baselines, modes, routes, the inspector and timeline reads, vector tiles, packs and waits. Registers the other route files. | `packages/gtfs` db, packs | `server.ts` | e2e |
+| `src/scenarios.ts` | **The scenario edit engine.** `visible()` (the copy-on-write rule), `applyEdit` (transaction, 409, confirm), `assignVehicles`, the stats, impact and fleet figures, the **clash rules** (`conflictsIn`, around lines 1379-1747), and ten edit kinds plus the reshape wrapper. `POST /edits` dispatches all 19 kinds (around lines 1866-1888). | core; the edit modules below | `applyEdit`, `visible` | e2e |
+| `src/reshape.ts` | Reshape planning and applying (`planReshape`, `applyReshape`), also used by closures | roads, tracks, timings, core/reshape | `planReshape` | `core/reshape.test.ts`, e2e |
+| `src/closures.ts` | `close` edits: whole line, drawn cut, road, part of the day | reshape | `planClosure` | e2e |
+| `src/delete-stop.ts` | `deleteStop` edits and the preview | core/delete-stop | `planDeleteStop` | `core/delete-stop.test.ts`, e2e |
+| `src/schedule.ts` | `setPlatform`, `replan`, `moveToVehicle`, `addTrip`, `addCall`, and `settlePlatforms` | scenarios | `scheduleEdits` | e2e |
+| `src/stops.ts` | `addStop` edits, `stopVisible` (hides deleted stops), new stops as GeoJSON | roads (`nearestRoad`) | `editAddStop` | e2e |
+| `src/roads.ts` | Road paths through OSRM (`ROUTER_URL`), including getting round a closure (`routedAround`) | outside OSRM | `roadPath` | e2e |
+| `src/tracks.ts` | Train, tram and ferry paths over an in-memory station-link graph built from published patterns | database | `trackPath` | e2e |
+| `src/timings.ts` | Run times for new stretches by time of day: published medians, then nearby speeds, then the mode's typical speed | core/time | `sectionTime` | `core/reshape.test.ts` |
+| `src/fleet.ts` | Vehicle-type catalogue routes | | | e2e |
+| `src/export.ts` | GTFS zip export (optional shapes, bounding box, `editor_*.txt`) | database | | e2e Reality block, `export:check` |
+| `src/sim.ts` | Simulator back end: demand sets, areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions | Java router | `drive` | `test/sim.e2e.mjs` |
+| `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. Issue **I2** is here. | `sim_*` tables | | `test/sim.e2e.mjs` |
+| `test/scenarios.e2e.mjs`, `test/sim.e2e.mjs` | Scripted HTTP tests of every edit kind, and of the simulator | need the API (and the router) | | n/a |
+
+### packages
+
+| Part | Purpose | Used by | Start reading | Tests |
+|---|---|---|---|---|
+| `packages/core/src/` | Pure logic with no IO and no dependencies: `vehicle-days`, `pack`, `waits`, `reshape`, `delete-stop`, `limits`, `time`, `simplify`. Exported as raw `.ts` from `index.ts`. | api, gtfs, web (formatting, packs, waits only) | `index.ts` | `*.test.ts` beside each |
+| `packages/gtfs/sql/schema.sql` | **The whole database schema.** Idempotent, and run at every API start and every import (`migrate()`). | db.ts | | n/a |
+| `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()` | api, CLIs | | n/a |
+| `packages/gtfs/src/feed-cache.ts`, `fetch-cli.ts` | Download the TfNSW feed into `data/feeds/` (`API_KEY`) | import | `ensureFeed` | n/a |
+| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables; issue **I1** is at line 54), `vehicle-days.ts`, `packs.ts` (issue **I5**) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
+| `packages/gtfs/src/audit*.ts` | The phase 0 data audit (DuckDB) | `feed:audit` | | n/a |
+| `packages/gtfs/src/export-check.ts` | Downloads an export from the running API and checks it (references, ids, monotonic times; matches the feed for the published day) | `export:check`, e2e | | n/a |
+
+### services/router: the Java journey router and simulator
+
+| Module | Purpose | Start reading | Tests |
+|---|---|---|---|
+| `router-core` | Timetable (flat arrays), snapshots, RAPTOR search, capacity modes (off, check, assign), load states, walking links over water. No dependencies. | `Timetable.java`, `Router.java` | `BruteForceTest`, `CapacityTest`, … |
+| `router-gtfs` | Reads a GTFS zip (with `editor_*.txt`), builds walking links, snapshot cache; the `loadTimetable` and `route` CLIs | `GtfsLoader.java`, `TransferBuilder.java` | `GtfsLoaderTest`, `JourneyScenariosTest`, `RealExportTest` (needs `ROUTER_REAL_ZIP`) |
+| `router-sim` | The passenger simulator: plan, then replay with capacity; demand reading, writing and generation; result files | `Simulation.java`, `SimRun.java` | `StopRuleTest`, `HonestyTest`, `SimRunTest`, … |
+| `router-server` | Javalin HTTP service: named timetables (`Timetables.java`), journeys, bulk, load states, demand, simulation jobs (`Simulations.java`), settings from env | `RouterServer.java` | `RouterServerTest`, `SimulationsTest` |
+| `router-road` | **Planned** (phase 6): road routing. An empty package; `roadImport` throws. | | |
+| `router-bench` | **Planned** (phase 5): benchmarks. Only a placeholder JMH benchmark. | | |
+| `tools/compare-tfnsw.mjs` | Compares the router's journeys with the TfNSW trip planner | | |
+
+## Data and information
+
+| Entity | Defined in | Stored | Written by |
+|---|---|---|---|
+| Baseline (one service date) | `schema.sql` `baselines` | Postgres | importer |
+| Routes, patterns, trips, stop times, stops, shapes, vehicle days | `schema.sql` | Postgres; scenario rows carry `scenario_id` and `created_edit` | importer; edit engine |
+| Scenario, edit | `schema.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios.ts` and the edit modules |
+| Clash | `scenarios.ts` `Conflict`, `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
+| Vehicle type | `schema.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `fleet.ts` |
+| Pack | `packages/core/src/pack.ts` | `data/packs/<baseline>/<mode>.bin` | `import/packs.ts` |
+| Demand set | `schema.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim.ts`; the router generates made-up sets |
+| Sim run and results | `schema.sql` `sim_*` | Postgres partitions per run; router files in `data/router/sim/` | `sim.ts`, the router |
+| Router timetable and snapshot | `Timetable.java`, `TimetableSnapshot.java` | Memory; `data/router/snapshots/` | router |
+
+## Where do I find…
+
+- **Adding an edit kind:** write the function in `apps/api/src/scenarios.ts`, or in a module wired in from there. Add it to the dispatch in `POST /api/scenarios/:id/edits`, send it from the web with `applyEdit({ kind, … })`, and cover it in `apps/api/test/scenarios.e2e.mjs`. Put any logic that needs no database in `packages/core` with a unit test.
+- **Adding an API route:** register it in the relevant `apps/api/src/*.ts` `register*Routes` or `*Routes` function, and take `?s=` through `scenarioOf()` if it reads timetable data.
+- **What a scenario can see:** `visible()` in `apps/api/src/scenarios.ts`; for stops, `stopVisible()` in `apps/api/src/stops.ts`.
+- **Clash rules:** `conflictsIn` in `apps/api/src/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
+- **Run times for new stretches:** `apps/api/src/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
+- **Road and track paths:** `apps/api/src/roads.ts` (OSRM) and `apps/api/src/tracks.ts`.
+- **Database tables:** `packages/gtfs/sql/schema.sql`. Sim partitions are created at runtime in `apps/api/src/sim.ts`.
+- **Map layers:** `apps/web/src/MapView.tsx`. Tiles come from `server.ts` `/tiles`.
+- **Vehicle animation:** `apps/web/src/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
+- **Timeline dragging:** `apps/web/src/timeline/TimelineCanvas.tsx`.
+- **Theme:** `apps/web/src/theme.ts`, and `styles.css` line 32.
+- **URL deep links and keyboard shortcuts:** `apps/web/src/App.tsx`.
+- **How the API talks to the router:** `apps/api/src/sim.ts` (`ensureTimetable`, `drive`, `importResults`).
+- **Router endpoints:** `services/router/router-server/.../RouterServer.java` (around lines 89-106), and `services/router/README.md`.
+- **Environment variables:**
+  - API side: `DATABASE_URL` (`db.ts`), `PORT` and `PACKS_DIR` (`server.ts`), `ROUTER_URL` (`roads.ts`), and `ROUTER_SERVICE_URL`, `API_PUBLIC_URL`, `ROUTER_SHARES_FILES`, `SIM_DEMAND_DIR` (`sim.ts`). `API_KEY` is used by the CLIs.
+  - Router side: `ROUTER_PORT`, `ROUTER_THREADS`, `ROUTER_MAX_TIMETABLES`, `ROUTER_DATA`, `ROUTER_LOAD`, `ROUTER_BULK_LIMIT` (`Settings.java`).
+
+## Conventions that decide where code goes
+
+- Logic that needs no database or IO goes in `packages/core`, with a `*.test.ts` beside it. Logic that needs the database goes in `apps/api`.
+- Every change to a timetable is a scenario edit sent through `POST /api/scenarios/:id/edits`. No other route writes timetable rows.
+- The browser never decides validity. Clashes come only from the API.
+- Node runs `.ts` directly: use `.ts` import extensions and erasable syntax only.
+- The router never reads the database. It gets everything from GTFS exports and demand files.
+- Names follow `PLAN.md`'s plain English: line (route), vehicle day, stay-aboard, clash (conflict in code), closure, baseline (one service day).
