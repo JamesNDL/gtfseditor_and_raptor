@@ -5,11 +5,24 @@ import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef, useState } from 'react';
-import { addClosurePoint, describePick, pickStop, placeStop, togglePart } from '../editing/builder.ts';
+import {
+  addClosurePoint,
+  describePick,
+  pickStop,
+  placeStop,
+  togglePart,
+} from '../editing/builder.ts';
 import { clock } from '../shared/clock.ts';
 import { SIDE_COLORS, useStore } from '../app/store.ts';
 import { fmt } from '../shared/ui/parts.tsx';
-import { loadTripLoads, peakText, stepAt, stepColor, stepLabel, tripLoads } from '../sim/results/loads.ts';
+import {
+  loadTripLoads,
+  peakText,
+  stepAt,
+  stepColor,
+  stepLabel,
+  tripLoads,
+} from '../sim/results/loads.ts';
 import {
   BLUES,
   MIDDLE,
@@ -28,7 +41,13 @@ import {
 import { mapView } from '../sim/sim-api.ts';
 import { mapScale } from '../sim/results/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
-import { computeFrame, vehicleAt, vehicleData, vehicleFrames, waitingUntil } from '../vehicles/vehicles.ts';
+import {
+  computeFrame,
+  vehicleAt,
+  vehicleData,
+  vehicleFrames,
+  waitingUntil,
+} from '../vehicles/vehicles.ts';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 

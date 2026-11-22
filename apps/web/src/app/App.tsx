@@ -21,7 +21,12 @@ import { applyTheme } from './theme.ts';
 import { TimeBar } from './TimeBar.tsx';
 import { TimelinePanel } from '../timeline/TimelinePanel.tsx';
 import { TopBar } from './TopBar.tsx';
-import { applyRemovedTrips, loadModeVehicles, loadWaits, vehicleData } from '../vehicles/vehicles.ts';
+import {
+  applyRemovedTrips,
+  loadModeVehicles,
+  loadWaits,
+  vehicleData,
+} from '../vehicles/vehicles.ts';
 
 // Small packs first so something is moving almost immediately.
 // Read the link once at startup, before anything rewrites the address bar.
