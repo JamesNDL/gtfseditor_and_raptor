@@ -251,7 +251,7 @@ flowchart LR
 
 | # | Found | Where | Who acts |
 |---|---|---|---|
-| I5 | The importer writes packs to `data/packs` relative to the working directory and ignores `PACKS_DIR`, which the API reads. | `packages/gtfs/src/import/packs.ts:10,25` versus `apps/api/src/server.ts:19` | Developer: make them agree |
+| — | No open issues. | | |
 
 ### Resolved: fixed in the code
 
@@ -261,6 +261,7 @@ flowchart LR
 | I3 | Undo and redo did not check `editBusy`, so Ctrl+Z during an edit in flight was not refused. | 23 Nov 2026 | `step` in `apps/web/src/scenario.ts` returns at once while `editBusy` is set, as `applyEdit` does, so the button and the keys send nothing until the edit lands. |
 | I4 | Two strings said vehicle types are picked "while editing a scenario". | 23 Nov 2026 | `TripEditTools.tsx` and `FleetPanel.tsx` now say the pickers are there whenever a day is open, and the first change starts a scenario. |
 | I1 | Re-importing a service date deleted that baseline and all its scenarios by cascade, with no warning. | 23 Nov 2026 | The importer refuses a day that has scenarios unless given `--replace`, and says how many it would delete. `npm run db:backup` and `db:restore` back up and restore the whole database. The cascade itself stays. |
+| I5 | The importer wrote packs to `data/packs` relative to the working directory and ignored `PACKS_DIR`, which the API reads. | 23 Nov 2026 | `packsDir` in `packages/gtfs/src/import/packs.ts` now uses `PACKS_DIR`, otherwise the repo's `data/packs` found from the file's own location, as `server.ts` does. |
 
 ### Resolved: the docs are stale and the code is right (owner, 22 Nov 2026)
 
@@ -310,3 +311,4 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | I2, I3 and I4 fixed and moved to the resolved table (ticket T-4) | Small known issues from section 11 |
 | 23 Nov 2026 | Added D8 (feature folders) and D9 (shared web and API types) | Decisions taken in `docs/refactor-plan.md`; recorded here before files move (ticket T-5) |
 | 23 Nov 2026 | I1 resolved; R2 mitigated | Refactor ticket T-2: import guard and backup scripts |
+| 23 Nov 2026 | I5 resolved: the importer honours `PACKS_DIR`. The importer also takes a feed on disk (`FEED_PATH`), and `npm run test:e2e:fixture` runs the scenario e2e suite on a small test feed. | Ticket T-3: e2e tests without the real data or the dev servers. |

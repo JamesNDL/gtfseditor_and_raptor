@@ -14,7 +14,7 @@ A GTFS timetable editor and passenger simulator for NSW. It has a React web app,
 The commands and their quirks are in `CLAUDE.md`. In short:
 - `npm run db:up`, then `npm run dev` (web on :5173, API on :3001).
 - `npm run router:dev` (on :3002).
-- Tests: `npm test` (unit), `npm run typecheck` (every workspace), `npm run lint`, `npm run router:test`. `npm run test:e2e`, `npm run test:sim` and `npm run test:ui` need the servers running.
+- Tests: `npm test` (unit), `npm run typecheck` (every workspace), `npm run lint`, `npm run router:test`. `npm run test:e2e:fixture` runs the scenario e2e suite on its own: a small test feed, a throwaway database and its own API on port 3101. `npm run test:e2e`, `npm run test:sim` and `npm run test:ui` need the servers running.
 
 ## Parts of the application
 
@@ -60,6 +60,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `src/sim.ts` | Simulator back end: demand sets, areas, folders, runs; drives the Java router (`ensureTimetable`, `drive()`); loads results into partitions | Java router | `drive` | `test/sim.e2e.mjs` |
 | `src/sim-results.ts` | Results comparisons for the results window, and `buildLinkLoads`. | `sim_*` tables | | `test/sim.e2e.mjs` |
 | `test/scenarios.e2e.mjs`, `test/sim.e2e.mjs` | Scripted HTTP tests of every edit kind, and of the simulator | need the API (and the router) | | n/a |
+| `test/run-e2e-fixture.mjs` | `test:e2e:fixture`: imports the test feed into `gtfs_e2e`, starts an API on 3101, runs `scenarios.e2e.mjs`, and always cleans up | the database container | | n/a |
 
 ### packages
 
@@ -68,8 +69,9 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `packages/core/src/` | Pure logic with no IO and no dependencies: `vehicle-days`, `pack`, `waits`, `reshape`, `delete-stop`, `limits`, `time`, `simplify`. Exported as raw `.ts` from `index.ts`. | api, gtfs, web (formatting, packs, waits only) | `index.ts` | `*.test.ts` beside each |
 | `packages/gtfs/sql/schema.sql` | **The whole database schema.** Idempotent, and run at every API start and every import (`migrate()`). | db.ts | | n/a |
 | `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()` | api, CLIs | | n/a |
-| `packages/gtfs/src/feed-cache.ts`, `fetch-cli.ts` | Download the TfNSW feed into `data/feeds/` (`API_KEY`) | import | `ensureFeed` | n/a |
-| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables; issue **I1** is at line 54), `vehicle-days.ts`, `packs.ts` (issue **I5**) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
+| `packages/gtfs/src/feed-cache.ts`, `fetch-cli.ts` | Download the TfNSW feed into `data/feeds/` (`API_KEY`), or use a feed on disk (`FEED_PATH`, `localFeed`) | import | `ensureFeed` | n/a |
+| `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables; issue **I1** is at line 54), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `import-cli.ts`, `packs-cli.ts` | `import-cli.ts` | n/a |
+| `packages/gtfs/test/fixtures/` | `mini-feed/`: a small made-up weekday feed in central Sydney (T1 train, buses 333, 373 and 389, F1 ferry), written by `make-mini-feed.mjs` | `test:e2e:fixture` | `make-mini-feed.mjs` | n/a |
 | `packages/gtfs/src/audit*.ts` | The phase 0 data audit (DuckDB) | `feed:audit` | | n/a |
 | `packages/gtfs/src/export-check.ts` | Downloads an export from the running API and checks it (references, ids, monotonic times; matches the feed for the published day) | `export:check`, e2e | | n/a |
 
