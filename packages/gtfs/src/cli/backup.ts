@@ -8,10 +8,10 @@ import { createReadStream } from 'node:fs';
 import { mkdir, open, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_DATABASE_URL } from './db.ts';
+import { DEFAULT_DATABASE_URL } from '../db.ts';
 
 // docker compose finds the db service from the repo root.
-const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const USER = 'gtfs';
 // The owner's database: a restore never replaces it without --yes, whatever DATABASE_URL names.
 const OWNER_DB = 'gtfs_editor';

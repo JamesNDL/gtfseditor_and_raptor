@@ -1,6 +1,6 @@
 // Rebuilds the animation packs for existing baselines. Usage: npm run packs [-- baselineId ...]
-import { connect } from './db.ts';
-import { buildPacks } from './import/packs.ts';
+import { connect } from '../db.ts';
+import { buildPacks } from '../import/packs.ts';
 
 const sql = connect();
 try {

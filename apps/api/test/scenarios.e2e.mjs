@@ -1735,7 +1735,7 @@ try {
     const check = spawnSync(
       process.execPath,
       [
-        'packages/gtfs/src/export-check.ts',
+        'packages/gtfs/src/cli/export-check.ts',
         String(R),
         '--box=-33.98,151.1,-33.78,151.32',
         '--no-shapes',
