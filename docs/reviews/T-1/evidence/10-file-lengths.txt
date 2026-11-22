@@ -1,0 +1,8 @@
+# Line counts of changed source files at commit 2f92076 (wc -l)
+  2152 apps/api/src/scenarios.ts
+   491 apps/api/src/schedule.ts
+   685 apps/api/src/server.ts
+  1678 apps/api/src/sim.ts
+  1138 apps/api/src/sim-results.ts
+   306 packages/gtfs/src/export-check.ts
+  6450 total

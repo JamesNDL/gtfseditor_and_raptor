@@ -38,7 +38,8 @@ export function TimeBar() {
   useEffect(() => {
     const update = (n: number, waiting: number) => {
       if (countRef.current) countRef.current.textContent = n.toLocaleString('en-AU');
-      if (waitingRef.current) waitingRef.current.textContent = `${waiting.toLocaleString('en-AU')} waiting`;
+      if (waitingRef.current)
+        waitingRef.current.textContent = `${waiting.toLocaleString('en-AU')} waiting`;
     };
     update(liveStats.vehicles, liveStats.waiting);
     return liveStats.subscribe(update);
@@ -63,7 +64,9 @@ export function TimeBar() {
       const max = Math.max(1, ...bins);
       ctx.beginPath();
       ctx.moveTo(0, height);
-      bins.forEach((v, i) => ctx.lineTo((i / (bins.length - 1)) * width, height - (v / max) * (height - 2)));
+      bins.forEach((v, i) =>
+        ctx.lineTo((i / (bins.length - 1)) * width, height - (v / max) * (height - 2)),
+      );
       ctx.lineTo(width, height);
       ctx.closePath();
       ctx.fillStyle = 'rgba(76, 194, 255, 0.22)';
@@ -84,7 +87,11 @@ export function TimeBar() {
 
   return (
     <footer className="panel timebar">
-      <button className="play" onClick={() => set({ playing: !playing })} aria-label={playing ? 'Pause' : 'Play'}>
+      <button
+        className="play"
+        onClick={() => set({ playing: !playing })}
+        aria-label={playing ? 'Pause' : 'Play'}
+      >
         {playing ? (
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
             <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
@@ -142,7 +149,11 @@ export function TimeBar() {
 
       <div className="speeds" role="group" aria-label="Playback speed">
         {SPEEDS.map((s) => (
-          <button key={s} className={s === speed ? 'on' : ''} onClick={() => set({ speed: s, playing: true })}>
+          <button
+            key={s}
+            className={s === speed ? 'on' : ''}
+            onClick={() => set({ speed: s, playing: true })}
+          >
             {s}×
           </button>
         ))}

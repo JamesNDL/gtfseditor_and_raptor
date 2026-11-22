@@ -31,11 +31,17 @@
     "router:demand": "cd services/router && .\\gradlew -q :router-sim:demand",
     "router:simulate": "cd services/router && .\\gradlew -q :router-sim:simulate",
     "router:bench": "cd services/router && .\\gradlew :router-bench:jmh",
-    "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport"
+    "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "concurrently": "^10.0.7",
+    "oxlint": "^1.94.0",
+    "prettier": "^3.10.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }

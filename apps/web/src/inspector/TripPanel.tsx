@@ -42,13 +42,18 @@ export function TripPanel({ tripId }: { tripId: number }) {
   return (
     <>
       <div className="title-row">
-        <button className="badge-button" onClick={() => open({ kind: 'route', id: t.routeId })} title="Open this line">
+        <button
+          className="badge-button"
+          onClick={() => open({ kind: 'route', id: t.routeId })}
+          title="Open this line"
+        >
           <Badge color={t.color}>{t.routeShortName ?? '?'}</Badge>
         </button>
         <div>
           <h2>{t.headsign ? `To ${t.headsign}` : t.routeLongName}</h2>
           <div className="muted">
-            {formatSecs(t.startSecs)} to {formatSecs(t.endSecs)} · {duration(t.endSecs - t.startSecs)} · {status}
+            {formatSecs(t.startSecs)} to {formatSecs(t.endSecs)} ·{' '}
+            {duration(t.endSecs - t.startSecs)} · {status}
           </div>
         </div>
       </div>
@@ -62,7 +67,15 @@ export function TripPanel({ tripId }: { tripId: number }) {
             const last = t.stopTimes[t.stopTimes.length - 1];
             const lons = t.stopTimes.map((s) => s.lon);
             const lats = t.stopTimes.map((s) => s.lat);
-            if (first && last) set({ fitBounds: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)] });
+            if (first && last)
+              set({
+                fitBounds: [
+                  Math.min(...lons),
+                  Math.min(...lats),
+                  Math.max(...lons),
+                  Math.max(...lats),
+                ],
+              });
           }}
         >
           Jump to departure
@@ -76,7 +89,10 @@ export function TripPanel({ tripId }: { tripId: number }) {
         <ul className="rows clickable">
           {t.vehicleDayId !== null && (
             <li>
-              <button className="row" onClick={() => open({ kind: 'vehicleDay', id: t.vehicleDayId! })}>
+              <button
+                className="row"
+                onClick={() => open({ kind: 'vehicleDay', id: t.vehicleDayId! })}
+              >
                 <div className="grow">
                   <div>
                     {t.vehicleDayLabel}
@@ -93,7 +109,11 @@ export function TripPanel({ tripId }: { tripId: number }) {
             </li>
           )}
         </ul>
-        {t.vehicleDayId === null && <p className="note">This trip has no vehicle. Use the vehicle buttons above to give it one.</p>}
+        {t.vehicleDayId === null && (
+          <p className="note">
+            This trip has no vehicle. Use the vehicle buttons above to give it one.
+          </p>
+        )}
         <div className="row">
           <div>
             <div>{t.vehicleType}</div>
@@ -105,7 +125,10 @@ export function TripPanel({ tripId }: { tripId: number }) {
                 </Tag>
               )}
               {t.vehicleAssumed && (
-                <Tag kind="info" title="The feed does not say which vehicle runs this trip; this is the default for the mode.">
+                <Tag
+                  kind="info"
+                  title="The feed does not say which vehicle runs this trip; this is the default for the mode."
+                >
                   assumed
                 </Tag>
               )}
@@ -149,16 +172,31 @@ export function TripPanel({ tripId }: { tripId: number }) {
                     {s.name.replace(/, Platform .*$/, '')}
                   </button>
                   {s.platformCode && <span className="muted"> · platform {s.platformCode}</span>}
-                  {editing && s.platformCode && !noBoard && <PlatformPicker tripId={t.id} seq={s.seq} />}
+                  {editing && s.platformCode && !noBoard && (
+                    <PlatformPicker tripId={t.id} seq={s.seq} />
+                  )}
                   {noBoard && <span className="muted"> · passes through</span>}
-                  {s.dep - s.arr >= 60 && <span className="muted"> · waits {duration(s.dep - s.arr)}</span>}
+                  {s.dep - s.arr >= 60 && (
+                    <span className="muted"> · waits {duration(s.dep - s.arr)}</span>
+                  )}
                 </span>
                 {editing && i > 0 && i < t.stopTimes.length - 1 && !noBoard && (
                   <button
                     className="skip-button"
                     disabled={busy}
-                    title={stopScope === 'pattern' ? 'Every trip like this one runs through here without stopping' : 'This trip runs through here without stopping'}
-                    onClick={() => applyEdit({ kind: 'skipStop', tripId: t.id, stopSeq: s.seq, scope: stopScope })}
+                    title={
+                      stopScope === 'pattern'
+                        ? 'Every trip like this one runs through here without stopping'
+                        : 'This trip runs through here without stopping'
+                    }
+                    onClick={() =>
+                      applyEdit({
+                        kind: 'skipStop',
+                        tripId: t.id,
+                        stopSeq: s.seq,
+                        scope: stopScope,
+                      })
+                    }
                   >
                     Skip
                   </button>
@@ -194,7 +232,9 @@ function PlatformPicker({ tripId, seq }: { tripId: number; seq: number }) {
         className="link small platform-change"
         title="Use a different platform at this station"
         onClick={() =>
-          void getJson<PlatformChoice[]>(`/api/trips/${tripId}/platforms?seq=${seq}${scenarioId === null ? '' : `&s=${scenarioId}`}`).then(setChoices, () => setChoices([]))
+          void getJson<PlatformChoice[]>(
+            `/api/trips/${tripId}/platforms?seq=${seq}${scenarioId === null ? '' : `&s=${scenarioId}`}`,
+          ).then(setChoices, () => setChoices([]))
         }
       >
         change
@@ -210,7 +250,13 @@ function PlatformPicker({ tripId, seq }: { tripId: number; seq: number }) {
       disabled={busy}
       aria-label="Platform to use instead"
       onChange={(e) => {
-        if (e.target.value) void applyEdit({ kind: 'setPlatform', tripId, stopSeq: seq, stopId: Number(e.target.value) });
+        if (e.target.value)
+          void applyEdit({
+            kind: 'setPlatform',
+            tripId,
+            stopSeq: seq,
+            stopId: Number(e.target.value),
+          });
       }}
     >
       <option value="">Move to…</option>

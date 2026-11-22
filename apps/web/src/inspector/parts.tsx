@@ -16,7 +16,15 @@ export function Badge({ color, children }: { color: string; children: ReactNode 
   );
 }
 
-export function Tag({ kind, title, children }: { kind: 'warn' | 'info'; title?: string; children: ReactNode }) {
+export function Tag({
+  kind,
+  title,
+  children,
+}: {
+  kind: 'warn' | 'info';
+  title?: string;
+  children: ReactNode;
+}) {
   return (
     <span className={`tag tag-${kind}`} title={title}>
       {children}
@@ -38,4 +46,5 @@ export function Loading({ error }: { error: string | null }) {
 }
 
 /** Station names in the feed end in ", Platform N" or " Station"; trim for compact lists. */
-export const shortStop = (name: string) => name.replace(/ Station(?=,|$)/, '').replace(/, Platform /, ' P');
+export const shortStop = (name: string) =>
+  name.replace(/ Station(?=,|$)/, '').replace(/, Platform /, ' P');

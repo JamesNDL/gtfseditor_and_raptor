@@ -5,7 +5,14 @@ import { useApi } from '../api.ts';
 import { applyEdit } from '../scenario.ts';
 import { EMPTY_COLOR, peakText, stepColor, tripLoads, useTripColours } from '../sim/loads.ts';
 import { currentSelection, useStore } from '../store.ts';
-import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
+import {
+  COLORS,
+  fitText,
+  roundRect,
+  TimelineCanvas,
+  type Env,
+  type Hit,
+} from './TimelineCanvas.tsx';
 
 interface VehicleTrip {
   id: number;
@@ -47,10 +54,19 @@ export function VehicleView({ routeId }: { routeId: number }) {
   // Trips coloured by how full they are in the chosen simulation run, when that is switched on.
   const loaded = useTripColours() !== null;
 
-  const stay = useMemo(() => new Set((data?.stayAboard ?? []).map(([a, b]) => `${a}>${b}`)), [data]);
+  const stay = useMemo(
+    () => new Set((data?.stayAboard ?? []).map(([a, b]) => `${a}>${b}`)),
+    [data],
+  );
 
-  if (!data) return <div className="muted pad timeline-message">{error ? `Could not load: ${error}` : 'Loading ...'}</div>;
-  if (data.vehicleDays.length === 0) return <div className="muted pad timeline-message">No vehicles run this line on this day.</div>;
+  if (!data)
+    return (
+      <div className="muted pad timeline-message">
+        {error ? `Could not load: ${error}` : 'Loading ...'}
+      </div>
+    );
+  if (data.vehicleDays.length === 0)
+    return <div className="muted pad timeline-message">No vehicles run this line on this day.</div>;
 
   const rowTop = (env: Env, r: number) => env.top + r * ROW_H - env.scrollY;
 
@@ -68,7 +84,11 @@ export function VehicleView({ routeId }: { routeId: number }) {
       }
       // Vehicles the scenario added are named in the accent colour with a plus sign.
       ctx.fillStyle = day.isNew ? '#4cc2ff' : day.id === selectedDayId ? COLORS.text : COLORS.muted;
-      ctx.fillText(fitText(ctx, day.isNew ? `+ ${day.label}` : day.label, env.gutter - 16), 10, y + ROW_H / 2);
+      ctx.fillText(
+        fitText(ctx, day.isNew ? `+ ${day.label}` : day.label, env.gutter - 16),
+        10,
+        y + ROW_H / 2,
+      );
 
       ctx.save();
       ctx.beginPath();
@@ -185,7 +205,11 @@ export function VehicleView({ routeId }: { routeId: number }) {
         tooltip: [
           day.label,
           `${day.trips.length} trips · ${formatSecs(day.startSecs)} to ${formatSecs(day.endSecs)}`,
-          day.isNew ? 'Added by this scenario for its new trips' : day.source === 'inferred' ? "Inferred, not the operator's roster" : 'From the run number in the feed',
+          day.isNew
+            ? 'Added by this scenario for its new trips'
+            : day.source === 'inferred'
+              ? "Inferred, not the operator's roster"
+              : 'From the run number in the feed',
         ],
       };
     }
@@ -227,7 +251,8 @@ export function VehicleView({ routeId }: { routeId: number }) {
       hitTest={hitTest}
       onHit={(hit) => {
         if (hit.tripId !== undefined) open({ kind: 'trip', id: hit.tripId }, { replace: true });
-        else if (hit.vehicleDayId !== undefined) open({ kind: 'vehicleDay', id: hit.vehicleDayId }, { replace: true });
+        else if (hit.vehicleDayId !== undefined)
+          open({ kind: 'vehicleDay', id: hit.vehicleDayId }, { replace: true });
       }}
       rowAt={(py, env) => {
         const r = Math.floor((py - env.top + env.scrollY) / ROW_H);
@@ -239,7 +264,12 @@ export function VehicleView({ routeId }: { routeId: number }) {
         editing
           ? (tripId, delta) => {
               open({ kind: 'trip', id: tripId }, { replace: true });
-              void applyEdit({ kind: 'shift', tripIds: [tripId], delta, ripple: useStore.getState().ripple });
+              void applyEdit({
+                kind: 'shift',
+                tripIds: [tripId],
+                delta,
+                ripple: useStore.getState().ripple,
+              });
             }
           : undefined
       }
@@ -248,7 +278,11 @@ export function VehicleView({ routeId }: { routeId: number }) {
           ? (hit, row) => {
               if (hit.tripId === undefined) return;
               open({ kind: 'trip', id: hit.tripId }, { replace: true });
-              void applyEdit({ kind: 'moveToVehicle', tripId: hit.tripId, vehicleDayId: data.vehicleDays[row].id });
+              void applyEdit({
+                kind: 'moveToVehicle',
+                tripId: hit.tripId,
+                vehicleDayId: data.vehicleDays[row].id,
+              });
             }
           : undefined
       }

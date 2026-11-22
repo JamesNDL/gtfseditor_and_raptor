@@ -8,7 +8,13 @@ const A: [number, number] = [151.0, -33.8];
 const B: [number, number] = [151.1, -33.8]; // about 9 km east of A
 
 let nextId = 1;
-function trip(from: [number, number], to: [number, number], start: number, end: number, extra: Partial<ChainTrip> = {}): ChainTrip {
+function trip(
+  from: [number, number],
+  to: [number, number],
+  start: number,
+  end: number,
+  extra: Partial<ChainTrip> = {},
+): ChainTrip {
   return {
     id: nextId++,
     startSecs: start,
@@ -36,12 +42,17 @@ describe('buildVehicleDays', () => {
 
   it('does not chain when the layover is too short, too long, or somewhere else', () => {
     expect(buildVehicleDays([trip(A, B, 0, 1000), trip(B, A, 1010, 2000)])).toHaveLength(2); // 10 s turnaround
-    expect(buildVehicleDays([trip(A, B, 0, 1000), trip(B, A, 1000 + 2 * 3600, 9000)])).toHaveLength(2); // 2 h wait
+    expect(buildVehicleDays([trip(A, B, 0, 1000), trip(B, A, 1000 + 2 * 3600, 9000)])).toHaveLength(
+      2,
+    ); // 2 h wait
     expect(buildVehicleDays([trip(A, B, 0, 1000), trip(A, B, 1300, 2300)])).toHaveLength(2); // starts at A, bus is at B
   });
 
   it('never chains across partitions', () => {
-    const days = buildVehicleDays([trip(A, B, 0, 1000), trip(B, A, 1300, 2300, { partition: 'bus|op2|' })]);
+    const days = buildVehicleDays([
+      trip(A, B, 0, 1000),
+      trip(B, A, 1300, 2300, { partition: 'bus|op2|' }),
+    ]);
     expect(days).toHaveLength(2);
   });
 
@@ -61,7 +72,11 @@ describe('buildVehicleDays', () => {
 
   it('uses run numbers as given and counts station jumps as gaps', () => {
     const rail = { ruleSet: 'rail' as const, partition: 'train|st|', runKey: '1--' };
-    const days = buildVehicleDays([trip(A, B, 0, 1000, rail), trip(A, B, 5000, 6000, rail), trip(B, A, 6100, 7000, rail)]);
+    const days = buildVehicleDays([
+      trip(A, B, 0, 1000, rail),
+      trip(A, B, 5000, 6000, rail),
+      trip(B, A, 6100, 7000, rail),
+    ]);
     expect(days).toHaveLength(1);
     expect(days[0].source).toBe('run_number');
     expect(days[0].tripIds).toHaveLength(3);
@@ -94,11 +109,20 @@ describe('animation pack', () => {
     ptLat: Int32Array.of(-33.8 * COORD_SCALE, -33.8 * COORD_SCALE, -33.8 * COORD_SCALE),
     ptDist: Float32Array.of(0, 1000, 2000),
   };
-  const meta = { version: 1 as const, modeId: 'train', tripCount: 1, stopTimeCount: 3, shapeCount: 1, pointCount: 3 };
+  const meta = {
+    version: 1 as const,
+    modeId: 'train',
+    tripCount: 1,
+    stopTimeCount: 3,
+    shapeCount: 1,
+    pointCount: 3,
+  };
 
   it('survives encoding and decoding', () => {
     const bytes = encodePack(meta, arrays);
-    const pack = decodePack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const pack = decodePack(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    );
     expect(pack.meta).toEqual(meta);
     expect(Array.from(pack.stDep)).toEqual([100, 260, 400]);
     expect(Array.from(pack.ptLon)).toEqual(Array.from(arrays.ptLon));

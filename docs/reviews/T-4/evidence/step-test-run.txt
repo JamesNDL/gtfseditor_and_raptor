@@ -1,0 +1,20 @@
+2026-11-23T09:00:55+11:00
+HEAD 61dde1f
+
+ RUN  v5.1.0 C:/Programming Projects/GTFS Editor/docs/reviews/T-4/evidence
+
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > undo and redo send nothing while editBusy is set, and leave editBusy set 3ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > undo works when nothing is in flight, and clears editBusy afterwards 37ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > redo works when nothing is in flight 1ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > two quick presses of Ctrl+Z send one undo 1ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > while the "adds N vehicles" question is open, undo is refused; after Cancel it works 63ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > after "Go ahead", undo works once the edit has landed 59ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > a failed undo clears editBusy and shows the error, so the next undo is not blocked 1ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > an edit is refused while an undo is in flight (the other direction) 1ms
+ ✓ step.test.ts > T-4 I3: undo and redo while an edit is in flight > a hung undo request leaves editBusy set (no timeout): documents current behaviour 60ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  09:00:57
+   Duration  493ms (tests 77%, import 14%, transform 6%, worker 2%)
+

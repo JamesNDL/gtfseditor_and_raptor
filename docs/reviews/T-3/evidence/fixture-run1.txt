@@ -1,0 +1,136 @@
+== Mon, Nov 23, 2026  8:50:55 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 0
+  temp extracted feeds: 0
+  data/ in checkout: none
+  node processes: 0
+== start 08:50:56 env: 
+
+> test:e2e:fixture
+> node apps/api/test/run-e2e-fixture.mjs
+
+[fixture 0s] creating database gtfs_e2e
+[fixture 0s] importing the test feed
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-db8d96a2fb)
+Staged agency: 3 rows in 0.1s
+Staged calendar: 1 rows in 0.1s
+Staged calendar_dates: 1 rows in 0.1s
+Staged pathways: 1 rows in 0.1s
+Staged routes: 5 rows in 0.1s
+Staged shapes: 2,268 rows in 0.1s
+Staged stops: 107 rows in 0.1s
+Staged stop_times: 5,572 rows in 0.1s
+Staged trips: 491 rows in 0.0s
+Importing 20260106 ...
+  trips running on the day: 491 rows in 0.0s
+  routes: 5 rows in 0.0s
+  stops: 107 rows in 0.0s
+  stop parents: 24 rows in 0.0s
+  shapes: 10 rows in 0.0s
+  trips: 491 rows in 0.0s
+  stop times: 5,572 rows in 0.1s
+  trip stop sequences: 491 rows in 0.0s
+  trip start, end and terminals: 491 rows in 0.0s
+  trips with no stop times removed: 0 rows in 0.0s
+  patterns: 12 rows in 0.0s
+  trip patterns: 491 rows in 0.0s
+  map lines: 10 rows in 0.0s
+  route trip counts: 5 rows in 0.0s
+  modes calling at each stop: 92 rows in 0.0s
+  modes calling at each station: 13 rows in 0.0s
+  vehicle types seen in the feed: 2 rows in 0.0s
+  trip vehicle types from the feed: 158 rows in 0.0s
+  stay-aboard links: 43 rows in 0.0s
+  pathways: 1 rows in 0.0s
+  platform and wharf overlaps already in the feed: 0 rows in 0.0s
+  vehicle days: 19 (4 from train run numbers, 15 inferred) in 0.1s
+  shapes simplified: 10 shapes, 2,268 points down to 100 in 0.0s
+  pack bus: 288 trips, 0.1 MB in 0.0s
+  pack train: 158 trips, 0.0 MB in 0.0s
+  pack ferry: 45 trips, 0.0 MB in 0.0s
+Baseline 1 ready: Tuesday 6 Jan 2026 in 1s
+{
+  "trips": 491,
+  "patterns": 12,
+  "stopTimes": 5572,
+  "lastArrival": 90780,
+  "vehicleDays": 19,
+  "routesRunning": 5,
+  "firstDeparture": 18000,
+  "baselineConflicts": 0,
+  "vehicleDaysInferred": 15,
+  "tripsWithAssumedVehicle": 333
+}
+[fixture 2s] starting the API on http://localhost:3101
+API listening on http://localhost:3101
+[fixture 4s] running the scenario checks
+ok  new scenario matches the baseline
+ok  retime replaces the trip in the scenario only
+ok  conflict found: Run 101: next trip leaves before it arrives
+ok  one-click fix clears it
+ok  undo and redo
+ok  skip stop: T1 05:00 Redfern to Chatswood now skips North Sydney Station Platform 1, saving 1.3 min (estimated)
+ok  editing after undo discards the redo history
+ok  new trip got a vehicle: New vehicle 1 (added)
+ok  a trip can be put on its own new vehicle
+ok  duplicate and delete
+ok  headway: T1: every 10 min from 10:00 to 12:00 (12 trips, replacing 8); 8 new vehicles, 4 trips on vehicles with spare time
+ok  impact: 158 to 162 trips, 4 to 12 vehicles
+ok  undoing everything returns trips and vehicles to the published numbers
+ok  whole-line frequency: T1: new frequency in 1 time band, both directions (16 trips, replacing 16); 2 new vehicles, 8 trips on vehicles with spare time
+ok  run times by time of day: 36 min in the morning peak, 30 min in the middle of the day
+ok  the way back uses 3 of 3 stops from the other side of the road
+ok  vehicles stay on the drawn path both ways (82 positions checked, furthest 3 m off)
+ok  new line: New line X99: 3 stops, every 20 min from 06:00 to 22:00 (96 trips), following existing bus routes where they run; run times: 4 sections from published trips; end to end 36 min in the morning peak, 30 min at the quietest time; the way back uses the stop across the road at 3 of 3 stops; 4 new vehicles
+ok  undo removes the new line and redo brings it back
+ok  cut short: 333 towards Bondi Rd at Watson St: 2 stops removed on 48 trips, trip times about 4 min shorter. The other direction changed to match: 2 stops removed, 48 trips, trip times about 4 min shorter
+ok  extended: 333 towards Bondi Beach: 2 stops added on 48 trips, trip times about 4 min longer; new path following existing bus routes where they run; run times: 2 sections from published trips; the new stretches take 5 min all day
+ok  vehicles follow the reshaped path (furthest 3 m off)
+ok  stop added: 333 towards Bondi Beach: 1 stop added on 48 trips, trip times about 1 min longer; new path drawn straight between stops; run times: 1 section from the speed of services nearby, 1 section at the typical speed for this mode; the new stretches take 3 min all day
+ok  undo restores the published line and redo reshapes it again
+ok  new stop: New bus stop E2E Road; no road was found close by, so there is no stop across the road and lines will use this one both ways
+ok  line extended to the new stop: 333 towards E2E Road: 1 stop added on 48 trips, trip times about 1 min longer; new path drawn straight between stops; run times: 1 section at the typical speed for this mode; the new stretches take 30 s all day. The other direction is unchanged: the change could not be matched to its stops
+ok  undo removes the new stop and redo brings it back
+ok  new station: New train station E2E Junction Station with 2 platforms; 64 trips run to it
+ok  loop: New one-way loop LP: 3 stops, every 20 min from 06:00 to 22:00 (48 trips), following existing bus routes where they run; run times: 2 sections from published trips, 1 section from the speed of services nearby; end to end 38 min in the morning peak, 32 min at the quietest time; 2 new vehicles
+ok  track: New line TRK: 2 stops, every 30 min from 06:00 to 22:00 (64 trips), following existing track; run times: 2 sections from published trips; end to end 22 min all day; 2 new vehicles
+ok  line cut: Train closed between North Sydney and Waverton: 2 lines changed; 162 trips now run in two parts, one either side; 64 trips removed; their vehicles were worked out again and stay on their own side of the closure: 23 new vehicles, 0 parts on vehicles already running; the network now uses 46 vehicles, 7 more than before (an estimate: each is a chain of trips one vehicle could run), and the most trips these lines have running at once went from 7 to 5
+ok  undo reopens the line
+ok  closure drawn across the track: Closed near Waverton (a line 880 m long): 2 lines changed; 162 trips now run in two parts, one either side; 64 trips removed; the parts run as T1-E, T1-W; their vehicles were worked out again and stay on their own side of the closure: 23 new vehicles, 0 parts on vehicles already running; the network now uses 46 vehicles, 7 more than before (an estimate: each is a chain of trips one vehicle could run), and the most trips these lines have running at once went from 7 to 5
+ok  one side kept (W): 162 trips keep one part; T1 can be left running
+ok  line cut for part of the day: Train closed between North Sydney and Waverton, 10:00 to 14:00: 2 lines changed; 37 trips now run in two parts, one either side; 16 trips removed; their vehicles were worked out again and stay on their own side of the closure: 23 new vehicles, 4 parts on vehicles already running; the network now uses 56 vehicles, 17 more than before (an estimate: each is a chain of trips one vehicle could run), and the most trips these lines have running at once went from 7 to 6
+ok  road closure: no routing server answered, so no way round could be found (skipped)
+ok  trip added: Added a 373 trip departing 12:07, timed like the 12:05; 1 new vehicle
+ok  vehicles re-planned: 373: vehicles worked out again for all 115 trips; 8 vehicles where there were 14; across the whole network that is 6 fewer
+ok  trip moved between vehicles: 373 06:05 Museum to Coogee Beach, Arden St moved to New vehicle 33
+ok  stop restored: 373 12:25 Museum to Coogee Beach, Arden St now stops at Alison Rd at Randwick Racecourse, 20 seconds longer (estimated)
+ok  stop added to one trip: 333 06:00 Circular Quay, Alfred St to E2E Road now stops at Oxford St near Victoria St, 20 seconds longer (estimated)
+ok  shared frequency: 389: new frequency in 1 time band, both directions, shared between 2 stop patterns (48 trips, replacing 36); 4 new vehicles, 3 trips on vehicles with spare time
+ok  platform changed: T1 05:15 Redfern to Chatswood now uses platform 2 at Central
+ok  copy one minute behind: Added a copy of T1 05:15 Redfern to Chatswood departing 05:16; 1 new vehicle; 60 platform clashes left, 0 with a free platform offered
+ok  vehicle type: T1 05:30 Chatswood to Redfern now runs with Tangara (T set), 4 cars
+ok  fleet limit: Ferry (assumed) needs 2, fleet has 1
+ok  map data for the scenario
+ok  timeline queries
+ok  an edit naming a trip that was already replaced is refused, and makes no second copy
+ok  a stop skipped on every trip of a pattern: 3 patterns, 120 trips read back, none runs backwards
+ok  line 100 does not cross the bridge on this day (skipped)
+ok  a road closed across bus lines: 192 parts of line 333 on 8 vehicles, none of which works both sides
+ok  the scenario exports as valid GTFS (references, order of times and distances, speeds, blocks)
+ok  stop deleted from the middle of a line: Deleted Oxford St at Paddington Town Hall: 72 trips on 2 lines no longer call there, typically no quicker (estimated, and never faster past there than they run today). Nothing is re-routed and vehicles stay on their trips; the number of vehicles does not change. The scenario has no clashes.
+ok  terminus deleted: Deleted Bondi Beach, Campbell Pde: 48 trips that started or ended there are cut short to the next or previous stop, at the times they already had. Nothing is re-routed and vehicles stay on their trips; the number of vehicles does not change; 4 vehicles now start or end a trip short of there. The scenario has no clashes.
+ok  platform deleted: Deleted platform 1 at Central Station: 80 calls moved to another platform there (80 to platform 2), none onto a platform in use at that time. The number of vehicles does not change. The scenario has no clashes.
+ok  station deleted: Deleted Central Station and its 2 platforms: 158 trips on 1 line no longer call there, typically 30 seconds quicker (estimated, and never faster past there than they run today). Nothing is re-routed and vehicles stay on their trips; the number of vehicles does not change. Warning: This is line T1's only stop in the area: its nearest other stop is Town Hall Station Platform 1, 1.1 km away. The scenario has no clashes.
+ok  a stop the scenario added is deleted: Deleted E2E Gone: 48 trips that started or ended there are cut short to the next or previous stop, at the times they already had. Nothing is re-routed and vehicles stay on their trips; the number of vehicles does not change; 4 vehicles now start or end a trip short of there. The scenario has no clashes.
+ok  deletions undone: the scenario is the published timetable again
+all scenario checks passed
+[fixture 45s] passed; cleaned up
+== exit=0 end 08:51:43 took 47s
+== Mon, Nov 23, 2026  8:51:43 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 0
+  temp extracted feeds: 0
+  data/ in checkout: data
+  node processes: 0

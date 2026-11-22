@@ -1,0 +1,256 @@
+2026-11-23T09:04:57+11:00
+HEAD 61dde1f
+== Existing parts (everything before '## Planned layout') ==
+OK      docs/architecture/system.md  -> docs/architecture/system.md
+OK      PLAN.md  -> PLAN.md
+OK      docs/router-plan.md  -> docs/router-plan.md
+OK      services/router/README.md  -> services/router/README.md
+OK      docs/simulator-plan.md  -> docs/simulator-plan.md
+MISSING docs/glossary.md
+MISSING docs/brd/
+OK      CLAUDE.md  -> CLAUDE.md
+OK      src/App.tsx  -> apps/web/src/App.tsx
+OK      src/main.tsx  -> apps/web/src/main.tsx
+OK      App.tsx  -> apps/web/src/App.tsx
+OK      src/store.ts  -> apps/web/src/store.ts
+OK      store.ts  -> apps/web/src/store.ts
+OK      src/api.ts  -> apps/web/src/api.ts
+OK      api.ts  -> apps/web/src/api.ts
+OK      src/scenario.ts  -> apps/web/src/scenario.ts
+OK      src/vehicles.ts  -> apps/web/src/vehicles.ts
+OK      src/clock.ts  -> apps/web/src/clock.ts
+OK      src/liveStats.ts  -> apps/web/src/liveStats.ts
+OK      packages/core  -> packages/core
+MISSING core/waits.test.ts
+OK      src/MapView.tsx  -> apps/web/src/MapView.tsx
+OK      builder.ts  -> apps/web/src/builder.ts
+OK      src/builder.ts  -> apps/web/src/builder.ts
+OK      src/LeftRail.tsx  -> apps/web/src/LeftRail.tsx
+OK      TopBar.tsx  -> apps/web/src/TopBar.tsx
+OK      TimeBar.tsx  -> apps/web/src/TimeBar.tsx
+OK      ModePanel.tsx  -> apps/web/src/ModePanel.tsx
+OK      src/ScenarioPanel.tsx  -> apps/web/src/ScenarioPanel.tsx
+OK      ScenarioManager.tsx  -> apps/web/src/ScenarioManager.tsx
+OK      EditConfirm.tsx  -> apps/web/src/EditConfirm.tsx
+OK      src/NewLinePanel.tsx  -> apps/web/src/NewLinePanel.tsx
+OK      ReshapePanel.tsx  -> apps/web/src/ReshapePanel.tsx
+OK      NewStopTool.tsx  -> apps/web/src/NewStopTool.tsx
+OK      ClosurePanel.tsx  -> apps/web/src/ClosurePanel.tsx
+OK      src/FleetPanel.tsx  -> apps/web/src/FleetPanel.tsx
+OK      src/inspector/  -> apps/web/src/inspector
+OK      Inspector.tsx  -> apps/web/src/inspector/Inspector.tsx
+OK      src/timeline/  -> apps/web/src/timeline
+OK      TimelineCanvas.tsx  -> apps/web/src/timeline/TimelineCanvas.tsx
+OK      src/sim/  -> apps/web/src/sim
+OK      SimPanel.tsx  -> apps/web/src/sim/SimPanel.tsx
+OK      results.ts  -> apps/web/src/sim/results.ts
+OK      src/theme.ts  -> apps/web/src/theme.ts
+OK      src/styles.css  -> apps/web/src/styles.css
+OK      test/ui-smoke.mjs  -> apps/web/test/ui-smoke.mjs
+OK      src/server.ts  -> apps/api/src/server.ts
+OK      packages/gtfs  -> packages/gtfs
+OK      server.ts  -> apps/api/src/server.ts
+OK      src/scenarios.ts  -> apps/api/src/scenarios.ts
+OK      src/reshape.ts  -> apps/api/src/reshape.ts
+MISSING core/reshape.test.ts
+OK      src/closures.ts  -> apps/api/src/closures.ts
+OK      src/delete-stop.ts  -> apps/api/src/delete-stop.ts
+MISSING core/delete-stop.test.ts
+OK      src/schedule.ts  -> apps/api/src/schedule.ts
+OK      src/stops.ts  -> apps/api/src/stops.ts
+OK      src/roads.ts  -> apps/api/src/roads.ts
+OK      src/tracks.ts  -> apps/api/src/tracks.ts
+OK      src/timings.ts  -> apps/api/src/timings.ts
+OK      src/fleet.ts  -> apps/api/src/fleet.ts
+OK      src/export.ts  -> apps/api/src/export.ts
+OK      src/sim.ts  -> apps/api/src/sim.ts
+OK      test/sim.e2e.mjs  -> apps/api/test/sim.e2e.mjs
+OK      src/sim-results.ts  -> apps/api/src/sim-results.ts
+OK      test/scenarios.e2e.mjs  -> apps/api/test/scenarios.e2e.mjs
+OK      packages/core/src/  -> packages/core/src
+MISSING .ts
+OK      index.ts  -> packages/core/src/index.ts
+OK      *.test.ts  -> pattern (checked by hand)
+OK      packages/gtfs/sql/schema.sql  -> packages/gtfs/sql/schema.sql
+OK      packages/gtfs/src/db.ts  -> packages/gtfs/src/db.ts
+OK      packages/gtfs/src/feed-cache.ts  -> packages/gtfs/src/feed-cache.ts
+OK      fetch-cli.ts  -> packages/gtfs/src/fetch-cli.ts
+MISSING data/feeds/
+OK      packages/gtfs/src/import/  -> packages/gtfs/src/import
+OK      stage.ts  -> packages/gtfs/src/import/stage.ts
+OK      baseline.ts  -> packages/gtfs/src/import/baseline.ts
+OK      vehicle-days.ts  -> packages/core/src/vehicle-days.ts
+OK      packs.ts  -> packages/gtfs/src/import/packs.ts
+OK      import-cli.ts  -> packages/gtfs/src/import-cli.ts
+OK      packs-cli.ts  -> packages/gtfs/src/packs-cli.ts
+OK      packages/gtfs/src/audit*.ts  -> pattern (checked by hand)
+OK      packages/gtfs/src/export-check.ts  -> packages/gtfs/src/export-check.ts
+MISSING Timetable.java
+MISSING Router.java
+MISSING GtfsLoader.java
+MISSING TransferBuilder.java
+MISSING Simulation.java
+MISSING SimRun.java
+MISSING Timetables.java
+MISSING Simulations.java
+MISSING RouterServer.java
+OK      tools/compare-tfnsw.mjs  -> services/router/tools/compare-tfnsw.mjs
+OK      schema.sql  -> packages/gtfs/sql/schema.sql
+OK      apps/api/src/scenarios.ts  -> apps/api/src/scenarios.ts
+OK      scenarios.ts  -> apps/api/src/scenarios.ts
+OK      fleet.ts  -> apps/api/src/fleet.ts
+OK      packages/core/src/pack.ts  -> packages/core/src/pack.ts
+MISSING data/packs/<baseline>/<mode>.bin
+OK      import/packs.ts  -> packages/gtfs/src/import/packs.ts
+MISSING data/sim/demand/
+OK      sim.ts  -> apps/api/src/sim.ts
+MISSING data/router/sim/
+MISSING TimetableSnapshot.java
+MISSING data/router/snapshots/
+OK      apps/api/test/scenarios.e2e.mjs  -> apps/api/test/scenarios.e2e.mjs
+OK      apps/api/src/*.ts  -> pattern (checked by hand)
+OK      apps/api/src/stops.ts  -> apps/api/src/stops.ts
+OK      packages/core/src/limits.ts  -> packages/core/src/limits.ts
+OK      apps/web/src/ScenarioPanel.tsx  -> apps/web/src/ScenarioPanel.tsx
+OK      timeline/PlatformView.tsx  -> apps/web/src/timeline/PlatformView.tsx
+OK      apps/api/src/timings.ts  -> apps/api/src/timings.ts
+OK      packages/core/src/time.ts  -> packages/core/src/time.ts
+OK      apps/api/src/roads.ts  -> apps/api/src/roads.ts
+OK      apps/api/src/tracks.ts  -> apps/api/src/tracks.ts
+OK      apps/api/src/sim.ts  -> apps/api/src/sim.ts
+OK      apps/web/src/MapView.tsx  -> apps/web/src/MapView.tsx
+MISSING /tiles
+OK      apps/web/src/vehicles.ts  -> apps/web/src/vehicles.ts
+OK      waits.ts  -> packages/core/src/waits.ts
+OK      apps/web/src/timeline/TimelineCanvas.tsx  -> apps/web/src/timeline/TimelineCanvas.tsx
+OK      apps/web/src/theme.ts  -> apps/web/src/theme.ts
+OK      styles.css  -> apps/web/src/styles.css
+OK      apps/web/src/App.tsx  -> apps/web/src/App.tsx
+OK      services/router/router-server/.../RouterServer.java  -> pattern (checked by hand)
+OK      db.ts  -> packages/gtfs/src/db.ts
+OK      roads.ts  -> apps/api/src/roads.ts
+MISSING Settings.java
+OK      apps/api  -> apps/api
+OK      docs/refactor-plan.md  -> docs/refactor-plan.md
+MISSING scenarios/
+MISSING map/
+OK      sim/  -> apps/web/src/sim
+OK      timeline/  -> apps/web/src/timeline
+MISSING components/
+MISSING hooks/
+MISSING lib/
+MISSING routes/
+MISSING shared/
+MISSING sim/results/
+MISSING PascalCase.tsx
+MISSING kebab-case.ts
+MISSING live-stats.ts
+MISSING sim-api.ts
+OK      liveStats.ts  -> apps/web/src/liveStats.ts
+OK      simApi.ts  -> apps/web/src/sim/simApi.ts
+MISSING name.test.ts
+OK      test/  -> apps/web/test
+OK      apps/api/test/  -> apps/api/test
+OK      apps/web/test/  -> apps/web/test
+OK      apps/web/src/styles.css  -> apps/web/src/styles.css
+MISSING app/base.css
+MISSING base.css
+MISSING scenarios/engine.ts
+MISSING import/no-cycle
+OK      packages/core/src/index.ts  -> packages/core/src/index.ts
+MISSING packages/core/src/api/
+
+== Files named in the planned layout that should exist today (by today's name) ==
+today   App.tsx  .\apps\web\src\App.tsx
+new     CataloguePanel.tsx
+today   ClosurePanel.tsx  .\apps\web\src\ClosurePanel.tsx
+today   EditConfirm.tsx  .\apps\web\src\EditConfirm.tsx
+today   FleetPanel.tsx  .\apps\web\src\FleetPanel.tsx
+today   LeftRail.tsx  .\apps\web\src\LeftRail.tsx
+today   MapView.tsx  .\apps\web\src\MapView.tsx
+today   ModePanel.tsx  .\apps\web\src\ModePanel.tsx
+today   NewLinePanel.tsx  .\apps\web\src\NewLinePanel.tsx
+today   NewStopTool.tsx  .\apps\web\src\NewStopTool.tsx
+today   ReshapePanel.tsx  .\apps\web\src\ReshapePanel.tsx
+today   ScenarioManager.tsx  .\apps\web\src\ScenarioManager.tsx
+today   ScenarioPanel.tsx  .\apps\web\src\ScenarioPanel.tsx
+today   SimFigures.tsx  .\apps\web\src\sim\SimFigures.tsx
+today   SimLibrary.tsx  .\apps\web\src\sim\SimLibrary.tsx
+today   SimMapKey.tsx  .\apps\web\src\sim\SimMapKey.tsx
+today   SimPanel.tsx  .\apps\web\src\sim\SimPanel.tsx
+today   SimResults.tsx  .\apps\web\src\sim\SimResults.tsx
+today   SimResultsPeople.tsx  .\apps\web\src\sim\SimResultsPeople.tsx
+today   SimWizard.tsx  .\apps\web\src\sim\SimWizard.tsx
+today   TimeBar.tsx  .\apps\web\src\TimeBar.tsx
+today   TopBar.tsx  .\apps\web\src\TopBar.tsx
+new     add-stop.ts
+new     api-client.ts
+today   api.ts  .\apps\web\src\api.ts
+today   audit-db.ts  .\packages\gtfs\src\audit-db.ts
+today   audit.ts  .\packages\gtfs\src\audit.ts
+new     base.css
+today   builder.ts  .\apps\web\src\builder.ts
+new     clashes.ts
+today   clock.ts  .\apps\web\src\clock.ts
+new     closure.ts
+today   closures.ts  .\apps\api\src\closures.ts
+today   core.test.ts  .\packages\core\src\core.test.ts
+new     create-line.ts
+today   db.ts  .\packages\gtfs\src\db.ts
+new     delete-line.ts
+today   delete-stop.ts  .\apps\api\src\delete-stop.ts
+new     delete.ts
+new     duplicate.ts
+new     engine.ts
+today   export-check.ts  .\packages\gtfs\src\export-check.ts
+today   export.ts  .\apps\api\src\export.ts
+today   feed-cache.ts  .\packages\gtfs\src\feed-cache.ts
+new     fetch.ts
+today   fleet.ts  .\apps\api\src\fleet.ts
+new     headway.ts
+new     http.ts
+new     import.ts
+today   index.ts  .\packages\core\src\index.ts
+today   limits.ts  .\packages\core\src\limits.ts
+new     line-frequency.ts
+new     live-stats.ts
+today   loads.ts  .\apps\web\src\sim\loads.ts
+today   main.tsx  .\apps\web\src\main.tsx
+new     map.css
+today   pack.ts  .\packages\core\src\pack.ts
+today   packs.ts  .\packages\gtfs\src\import\packs.ts
+today   parts.tsx  .\apps\web\src\inspector\parts.tsx
+new     registry.ts
+today   reshape.ts  .\apps\api\src\reshape.ts
+new     results-import.ts
+new     results-read.ts
+today   results.ts  .\apps\web\src\sim\results.ts
+today   roads.ts  .\apps\api\src\roads.ts
+new     router-client.ts
+new     routes.ts
+new     runner.ts
+new     scenario-client.ts
+today   scenario.ts  .\apps\web\src\scenario.ts
+today   scenarios.ts  .\apps\api\src\scenarios.ts
+today   schedule.ts  .\apps\api\src\schedule.ts
+today   schema.sql  .\packages\gtfs\sql\schema.sql
+today   server.ts  .\apps\api\src\server.ts
+new     set-vehicle-type.ts
+new     set-vehicle.ts
+new     shift.ts
+new     sim-api.ts
+today   sim-results.ts  .\apps\api\src\sim-results.ts
+today   simplify.ts  .\packages\core\src\simplify.ts
+new     skip-stop.ts
+new     stops-visible.ts
+today   stops.ts  .\apps\api\src\stops.ts
+today   store.ts  .\apps\web\src\store.ts
+today   theme.ts  .\apps\web\src\theme.ts
+today   time.ts  .\packages\core\src\time.ts
+new     timetables.ts
+today   timings.ts  .\apps\api\src\timings.ts
+today   tracks.ts  .\apps\api\src\tracks.ts
+today   unzip.ts  .\packages\gtfs\src\unzip.ts
+today   vehicle-days.ts  .\packages\core\src\vehicle-days.ts
+today   vehicles.ts  .\apps\web\src\vehicles.ts
+today   waits.ts  .\packages\core\src\waits.ts

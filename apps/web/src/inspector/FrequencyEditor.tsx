@@ -19,7 +19,8 @@ function currentMinutes(starts: number[], from: number, to: number): number | nu
   return inBand === 0 ? null : Math.round((to - from) / 60 / inBand);
 }
 
-const gap = (minutes: number) => (minutes >= 120 ? `every ${Math.round(minutes / 60)} h` : `every ${minutes} min`);
+const gap = (minutes: number) =>
+  minutes >= 120 ? `every ${Math.round(minutes / 60)} h` : `every ${minutes} min`;
 
 /** One card for the whole line: how often it runs in each part of the day, both directions together. */
 export function FrequencyEditor({ route }: { route: RouteDetail }) {
@@ -27,14 +28,20 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
   const now = useMemo(
     () =>
       BANDS.map((b) => {
-        const perDirection = route.mainDepartures.map((d) => currentMinutes(d.starts, b.from * 3600, b.to * 3600)).filter((m) => m !== null);
-        return perDirection.length ? Math.round(perDirection.reduce((a, m) => a + m, 0) / perDirection.length) : null;
+        const perDirection = route.mainDepartures
+          .map((d) => currentMinutes(d.starts, b.from * 3600, b.to * 3600))
+          .filter((m) => m !== null);
+        return perDirection.length
+          ? Math.round(perDirection.reduce((a, m) => a + m, 0) / perDirection.length)
+          : null;
       }),
     [route.mainDepartures],
   );
   // Across every stopping pattern, how often anything on the line leaves in the morning peak.
   const directions = Math.max(1, route.directions.length);
-  const peakTrips = route.hourly.filter((h) => h.hour >= 7 && h.hour < 9).reduce((sum, h) => sum + h.trips, 0) / directions;
+  const peakTrips =
+    route.hourly.filter((h) => h.hour >= 7 && h.hour < 9).reduce((sum, h) => sum + h.trips, 0) /
+    directions;
   const overallPeak = peakTrips > 0 ? Math.max(1, Math.round(120 / peakTrips)) : null;
   const manyPatterns = route.patterns.length > route.mainDepartures.length;
   const main = route.patterns[0];
@@ -45,13 +52,17 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
   const [allPatterns, setAllPatterns] = useState(false);
   // How often anything on the line leaves in each part of the day, whatever its stop pattern.
   const overall = BANDS.map((b) => {
-    const trips = route.hourly.filter((h) => h.hour >= b.from && h.hour < b.to).reduce((sum, h) => sum + h.trips, 0) / directions;
+    const trips =
+      route.hourly
+        .filter((h) => h.hour >= b.from && h.hour < b.to)
+        .reduce((sum, h) => sum + h.trips, 0) / directions;
     return trips > 0 ? Math.max(1, Math.round(((b.to - b.from) * 60) / trips)) : null;
   });
   const shown = manyPatterns && allPatterns ? overall : now;
 
   const changes = BANDS.map((b, i) => ({ band: b, minutes: Number(typed[i]) })).filter(
-    (c, i) => typed[i].trim() !== '' && Number.isFinite(c.minutes) && c.minutes >= 1 && c.minutes <= 240,
+    (c, i) =>
+      typed[i].trim() !== '' && Number.isFinite(c.minutes) && c.minutes >= 1 && c.minutes <= 240,
   );
   const invalid = typed.some((t) => t.trim() !== '' && !(Number(t) >= 1 && Number(t) <= 240));
 
@@ -61,11 +72,13 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
     <section>
       <h3>How often it runs</h3>
       <p className="muted small form-preview">
-        Type a new gap between departures for any part of the day. Both directions change together and vehicles are worked out for you.
+        Type a new gap between departures for any part of the day. Both directions change together
+        and vehicles are worked out for you.
       </p>
       {manyPatterns && (
         <p className="note small">
-          This line runs {route.patterns.length} different stop patterns{overallPeak !== null && `, about ${gap(overallPeak)} between them in the morning peak`}.
+          This line runs {route.patterns.length} different stop patterns
+          {overallPeak !== null && `, about ${gap(overallPeak)} between them in the morning peak`}.
           {allPatterns
             ? ' The gap you type is between departures of any pattern; each keeps the share of departures it has now, so branches and short runs stay in proportion.'
             : ` This card shows and changes only the most common one in each direction${main ? ` (${main.firstStop.replace(/,.*$/, '')} to ${main.lastStop.replace(/,.*$/, '')})` : ''}; branches and express trips stay as they are.`}
@@ -73,7 +86,12 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
       )}
       {manyPatterns && (
         <label className="check small">
-          <input type="checkbox" checked={allPatterns} onChange={(e) => setAllPatterns(e.target.checked)} /> Change the whole line, shared between all its stop patterns
+          <input
+            type="checkbox"
+            checked={allPatterns}
+            onChange={(e) => setAllPatterns(e.target.checked)}
+          />{' '}
+          Change the whole line, shared between all its stop patterns
         </label>
       )}
       <table className="bands">
@@ -120,12 +138,18 @@ export function FrequencyEditor({ route }: { route: RouteDetail }) {
             kind: 'lineFrequency',
             routeId: route.id,
             allPatterns: manyPatterns && allPatterns,
-            bands: changes.map((c) => ({ fromSecs: c.band.from * 3600, toSecs: c.band.to * 3600, headwaySecs: c.minutes * 60 })),
+            bands: changes.map((c) => ({
+              fromSecs: c.band.from * 3600,
+              toSecs: c.band.to * 3600,
+              headwaySecs: c.minutes * 60,
+            })),
           });
           if (done) setTyped(BANDS.map(() => ''));
         }}
       >
-        {changes.length === 0 ? 'Type a number to change the frequency' : `Apply to ${changes.length} part${changes.length === 1 ? '' : 's'} of the day`}
+        {changes.length === 0
+          ? 'Type a number to change the frequency'
+          : `Apply to ${changes.length} part${changes.length === 1 ? '' : 's'} of the day`}
       </button>
     </section>
   );

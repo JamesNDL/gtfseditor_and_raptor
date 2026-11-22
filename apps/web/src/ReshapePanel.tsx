@@ -23,7 +23,11 @@ interface Preview extends Side {
 }
 
 const INSERT_AT = [
-  { id: 'best', label: 'Where it fits', title: 'A clicked stop joins the line where it adds the least distance' },
+  {
+    id: 'best',
+    label: 'Where it fits',
+    title: 'A clicked stop joins the line where it adds the least distance',
+  },
   { id: 'end', label: 'At the end', title: 'A clicked stop becomes the new last stop' },
   { id: 'start', label: 'At the start', title: 'A clicked stop becomes the new first stop' },
 ] as const;
@@ -43,15 +47,16 @@ export function ReshapePanel() {
 
   const stopKey = builder ? builder.stops.map((s) => s.id).join(',') : '';
   const roads = !!builder && isRoadMode(builder.modeId);
-  const request = reshape && builder
-    ? JSON.stringify({
-        patternId: reshape.patternId,
-        stopIds: builder.stops.map((s) => s.id),
-        followRoads: builder.followRoads,
-        direct: roads && reshape.direct,
-        bothWays: reshape.bothWays,
-      })
-    : null;
+  const request =
+    reshape && builder
+      ? JSON.stringify({
+          patternId: reshape.patternId,
+          stopIds: builder.stops.map((s) => s.id),
+          followRoads: builder.followRoads,
+          direct: roads && reshape.direct,
+          bothWays: reshape.bothWays,
+        })
+      : null;
 
   // Work out what the change would do a moment after the stops change, and show its path on the map.
   useEffect(() => {
@@ -80,8 +85,15 @@ export function ReshapePanel() {
           const result = json as Preview;
           setPreview(result);
           setHint(null);
-          const other = result.otherWay && 'coords' in result.otherWay ? result.otherWay.coords : null;
-          set({ builderPath: { coords: result.coords, description: result.stretches, otherCoords: other } });
+          const other =
+            result.otherWay && 'coords' in result.otherWay ? result.otherWay.coords : null;
+          set({
+            builderPath: {
+              coords: result.coords,
+              description: result.stretches,
+              otherCoords: other,
+            },
+          });
         })
         .catch(() => {});
     }, 300);
@@ -113,7 +125,8 @@ export function ReshapePanel() {
         <div className="title-row">
           <Badge color={builder.color}>{builder.name}</Badge>
           <div className="muted">
-            Click a stop on the map to add it to the line. Click a stop that is already on the line, or "Remove" below, to take it off.
+            Click a stop on the map to add it to the line. Click a stop that is already on the line,
+            or "Remove" below, to take it off.
           </div>
         </div>
 
@@ -124,11 +137,22 @@ export function ReshapePanel() {
               <select
                 className="day-select"
                 value={reshape.patternId}
-                onChange={(e) => void startReshape({ id: reshape.routeId, name: builder.name, modeId: builder.modeId, color: builder.color }, Number(e.target.value))}
+                onChange={(e) =>
+                  void startReshape(
+                    {
+                      id: reshape.routeId,
+                      name: builder.name,
+                      modeId: builder.modeId,
+                      color: builder.color,
+                    },
+                    Number(e.target.value),
+                  )
+                }
               >
                 {r.patterns.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {shortStop(p.firstStop)} → {shortStop(p.lastStop)} · {p.stopCount} stops · {fmt(p.tripCount)} trips
+                    {shortStop(p.firstStop)} → {shortStop(p.lastStop)} · {p.stopCount} stops ·{' '}
+                    {fmt(p.tripCount)} trips
                   </option>
                 ))}
               </select>
@@ -141,23 +165,48 @@ export function ReshapePanel() {
             <h3>A clicked stop goes</h3>
             <div className="speeds">
               {INSERT_AT.map((o) => (
-                <button key={o.id} className={reshape.insertAt === o.id ? 'on' : ''} title={o.title} onClick={() => option({ insertAt: o.id })}>
+                <button
+                  key={o.id}
+                  className={reshape.insertAt === o.id ? 'on' : ''}
+                  title={o.title}
+                  onClick={() => option({ insertAt: o.id })}
+                >
                   {o.label}
                 </button>
               ))}
             </div>
           </div>
           <label className="timeline-check">
-            <input type="checkbox" checked={reshape.bothWays} onChange={(e) => option({ bothWays: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={reshape.bothWays}
+              onChange={(e) => option({ bothWays: e.target.checked })}
+            />
             Change the other direction to match
           </label>
           <label className="timeline-check">
-            <input type="checkbox" checked={builder.followRoads} onChange={(e) => update({ followRoads: e.target.checked })} />
-            New stretches follow {roads ? 'roads' : builder.modeId === 'ferry' ? 'existing ferry routes' : 'existing track'}
+            <input
+              type="checkbox"
+              checked={builder.followRoads}
+              onChange={(e) => update({ followRoads: e.target.checked })}
+            />
+            New stretches follow{' '}
+            {roads
+              ? 'roads'
+              : builder.modeId === 'ferry'
+                ? 'existing ferry routes'
+                : 'existing track'}
           </label>
           {roads && (
-            <label className="timeline-check" title="Otherwise the bus keeps to its published path and simply does not stop">
-              <input type="checkbox" checked={reshape.direct} onChange={(e) => option({ direct: e.target.checked })} />
+            <label
+              className="timeline-check"
+              title="Otherwise the bus keeps to its published path and simply does not stop"
+            >
+              <input
+                type="checkbox"
+                checked={reshape.direct}
+                onChange={(e) => option({ direct: e.target.checked })}
+              />
               Where stops are removed, take the direct road
             </label>
           )}
@@ -170,19 +219,33 @@ export function ReshapePanel() {
           ) : preview ? (
             <>
               <p>
-                {preview.what} on {fmt(preview.trips)} trip{preview.trips === 1 ? '' : 's'}; {preview.change}.
-                {preview.stretches && <span className="muted"> {preview.stretches[0].toUpperCase() + preview.stretches.slice(1)}.</span>}
+                {preview.what} on {fmt(preview.trips)} trip{preview.trips === 1 ? '' : 's'};{' '}
+                {preview.change}.
+                {preview.stretches && (
+                  <span className="muted">
+                    {' '}
+                    {preview.stretches[0].toUpperCase() + preview.stretches.slice(1)}.
+                  </span>
+                )}
               </p>
               {other && 'coords' in other && (
                 <p>
-                  Other direction: {other.what} on {fmt(other.trips)} trip{other.trips === 1 ? '' : 's'}; {other.change}.
+                  Other direction: {other.what} on {fmt(other.trips)} trip
+                  {other.trips === 1 ? '' : 's'}; {other.change}.
                 </p>
               )}
-              {other && 'reason' in other && <p className="muted">The other direction stays as it is: {other.reason}.</p>}
-              {other && 'same' in other && <p className="muted">The other direction already matches.</p>}
-              {!other && reshape.bothWays && <p className="muted">This stop pattern has no opposite direction to change.</p>}
+              {other && 'reason' in other && (
+                <p className="muted">The other direction stays as it is: {other.reason}.</p>
+              )}
+              {other && 'same' in other && (
+                <p className="muted">The other direction already matches.</p>
+              )}
+              {!other && reshape.bothWays && (
+                <p className="muted">This stop pattern has no opposite direction to change.</p>
+              )}
               <p className="muted small">
-                Trips keep their times at the first stop that has not changed. Other stop patterns of this line are not touched.
+                Trips keep their times at the first stop that has not changed. Other stop patterns
+                of this line are not touched.
               </p>
             </>
           ) : (
@@ -237,7 +300,11 @@ export function ReshapePanel() {
               }
             }}
           >
-            {busy ? 'Changing ...' : preview && changed ? `Change ${fmt(preview.trips + (other && 'coords' in other ? other.trips : 0))} trips` : 'Change the line'}
+            {busy
+              ? 'Changing ...'
+              : preview && changed
+                ? `Change ${fmt(preview.trips + (other && 'coords' in other ? other.trips : 0))} trips`
+                : 'Change the line'}
           </button>
           <button className="button" onClick={cancel}>
             Cancel

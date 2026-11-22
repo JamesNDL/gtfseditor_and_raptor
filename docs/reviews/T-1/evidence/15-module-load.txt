@@ -1,0 +1,6 @@
+$ node --input-type=module -e "<import the four route modules, print their exports>"
+scenarios registerScenarioRoutes,scenarioOf,visible
+schedule bestFree,platformChoices,scheduleEdits,scheduleRoutes
+sim registerSimRoutes
+sim-results CHANGE_GROUPS,buildLinkLoads,registerSimResultRoutes
+exit=0

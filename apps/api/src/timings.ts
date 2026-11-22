@@ -47,7 +47,8 @@ function banded(rows: { band: number | null; n: number; value: number | null }[]
 }
 
 /** The whole-day figure, replaced in each part of the day that has enough trips of its own. */
-const perBand = (b: Banded, enough: number): number[] => b.bands.map((x) => (x && x.n >= enough && x.value > 0 ? x.value : b.value));
+const perBand = (b: Banded, enough: number): number[] =>
+  b.bands.map((x) => (x && x.n >= enough && x.value > 0 ? x.value : b.value));
 
 const cache = new Map<string, unknown>();
 async function cached<T>(key: string, work: () => Promise<T>): Promise<T> {
@@ -59,7 +60,12 @@ async function cached<T>(key: string, work: () => Promise<T>): Promise<T> {
 }
 
 /** Typical end-to-end speed of a mode in metres per second, stops included, for each part of the day. */
-export function modeSpeeds(tx: Sql, baselineId: number, modeId: string, fallback: number): Promise<number[]> {
+export function modeSpeeds(
+  tx: Sql,
+  baselineId: number,
+  modeId: string,
+  fallback: number,
+): Promise<number[]> {
   return cached(`speed|${baselineId}|${modeId}`, async () => {
     const rows = await tx.unsafe(
       `select ${BAND_CASE('t.start_secs')} as band, count(*)::int as n,
@@ -93,7 +99,13 @@ function modeDwell(tx: Sql, baselineId: number, modeId: string, fallback: number
  * usually does, otherwise the fallback. Timetables for buses give no stop time (it is part of the
  * run time), so for them this is zero.
  */
-export async function stopDwell(tx: Sql, baselineId: number, modeId: string, stopId: number, fallback: number): Promise<number> {
+export async function stopDwell(
+  tx: Sql,
+  baselineId: number,
+  modeId: string,
+  stopId: number,
+  fallback: number,
+): Promise<number> {
   return cached(`dwell|${baselineId}|${modeId}|${stopId}`, async () => {
     const [row] = await tx`
       select count(*)::int as n, percentile_cont(0.5) within group (order by st.dep - st.arr) as median
@@ -106,7 +118,13 @@ export async function stopDwell(tx: Sql, baselineId: number, modeId: string, sto
 }
 
 /** Speed of published trips of a mode between consecutive stops near a stretch, for each part of the day, or null. */
-async function nearbySpeeds(tx: Sql, baselineId: number, modeId: string, from: Place, to: Place): Promise<number[] | null> {
+async function nearbySpeeds(
+  tx: Sql,
+  baselineId: number,
+  modeId: string,
+  from: Place,
+  to: Place,
+): Promise<number[] | null> {
   // About 400 m either side of the stretch; degrees are near enough at these latitudes.
   const near = await tx`
     select s.id from stops s
@@ -164,15 +182,27 @@ export async function sectionTime(
     return { byBand: perBand(seen, 3).map((s) => Math.max(20, round10(s))), source: 'published' };
   }
   const key = (p: Place) => `${p.lon.toFixed(3)},${p.lat.toFixed(3)}`;
-  const near = await cached(`near|${baselineId}|${modeId}|${key(from)}|${key(to)}`, () => nearbySpeeds(tx, baselineId, modeId, from, to));
-  if (near) return { byBand: near.map((v) => Math.max(20, least, round10(lengthM / v))), source: 'nearby' };
+  const near = await cached(`near|${baselineId}|${modeId}|${key(from)}|${key(to)}`, () =>
+    nearbySpeeds(tx, baselineId, modeId, from, to),
+  );
+  if (near)
+    return { byBand: near.map((v) => Math.max(20, least, round10(lengthM / v))), source: 'nearby' };
   const speeds = await modeSpeeds(tx, baselineId, modeId, model.speed);
   // The typical speed already includes time spent at stops, so take the stop time back out.
-  return { byBand: speeds.map((v) => Math.max(30, least, round10(lengthM / v - Math.max(0, model.dwellAtTo)))), source: 'typical' };
+  return {
+    byBand: speeds.map((v) =>
+      Math.max(30, least, round10(lengthM / v - Math.max(0, model.dwellAtTo))),
+    ),
+    source: 'typical',
+  };
 }
 
 /** "3 sections from published trips, 2 from services nearby, 1 at the typical speed for this mode; ..." */
-export function describeTimes(sections: SectionTime[], what: string, first = sections.length): string {
+export function describeTimes(
+  sections: SectionTime[],
+  what: string,
+  first = sections.length,
+): string {
   const count = (source: TimeSource) => sections.filter((s) => s.source === source).length;
   const n = (k: number) => `${k} section${k === 1 ? '' : 's'}`;
   const parts: string[] = [];

@@ -5,7 +5,14 @@ import { useApi } from '../api.ts';
 import { applyEdit } from '../scenario.ts';
 import { stepAt, stepColor, useTripColours } from '../sim/loads.ts';
 import { useStore } from '../store.ts';
-import { COLORS, fitText, roundRect, TimelineCanvas, type Env, type Hit } from './TimelineCanvas.tsx';
+import {
+  COLORS,
+  fitText,
+  roundRect,
+  TimelineCanvas,
+  type Env,
+  type Hit,
+} from './TimelineCanvas.tsx';
 
 export interface PlatformData {
   station: { id: number; name: string };
@@ -24,7 +31,15 @@ export interface PlatformData {
     starts: boolean;
     ends: boolean;
   }[];
-  layovers: { stopId: number; from: number; to: number; tripId: number; nextTripId: number; inferred: boolean; color: string }[];
+  layovers: {
+    stopId: number;
+    from: number;
+    to: number;
+    tripId: number;
+    nextTripId: number;
+    inferred: boolean;
+    color: string;
+  }[];
   conflicts: { stopId: number; tripA: number; tripB: number; from: number; to: number }[];
 }
 
@@ -33,7 +48,13 @@ const MIN_BAR = 3;
 
 const minutes = (secs: number) => `${Math.max(1, Math.round(secs / 60))} min`;
 
-export function PlatformView({ stationId, onStationName }: { stationId: number; onStationName: (name: string) => void }) {
+export function PlatformView({
+  stationId,
+  onStationName,
+}: {
+  stationId: number;
+  onStationName: (name: string) => void;
+}) {
   const { data, error } = useApi<PlatformData>(`/api/stations/${stationId}/platforms`);
   const open = useStore((s) => s.open);
   const focusStopId = useStore((s) => s.timeline.focusStopId);
@@ -58,8 +79,11 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
     const row = new Map(platforms.map((p, i) => [p.id, i]));
     const color = new Map(data.routes.map((r) => [r.id, `#${r.color}`]));
     const name = new Map(data.routes.map((r) => [r.id, r.shortName ?? '?']));
-    const trimmed = (name: string) => name.replace(data.station.name, '').replace(/^[ ,]+/, '') || name;
-    const numbered = platforms.map((p) => (p.platformCode ? `Platform ${p.platformCode}` : trimmed(p.name)));
+    const trimmed = (name: string) =>
+      name.replace(data.station.name, '').replace(/^[ ,]+/, '') || name;
+    const numbered = platforms.map((p) =>
+      p.platformCode ? `Platform ${p.platformCode}` : trimmed(p.name),
+    );
     // Interchanges can have two "Platform 1"s (say train and light rail); fall back to the stop's own name.
     const labels = numbered.map((label, i) =>
       numbered.indexOf(label) !== numbered.lastIndexOf(label) ? trimmed(platforms[i].name) : label,
@@ -67,8 +91,14 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
     return { platforms, row, color, name, labels };
   }, [data]);
 
-  if (!data || !model) return <div className="muted pad timeline-message">{error ? `Could not load: ${error}` : 'Loading ...'}</div>;
-  if (model.platforms.length === 0) return <div className="muted pad timeline-message">No services call here on this day.</div>;
+  if (!data || !model)
+    return (
+      <div className="muted pad timeline-message">
+        {error ? `Could not load: ${error}` : 'Loading ...'}
+      </div>
+    );
+  if (model.platforms.length === 0)
+    return <div className="muted pad timeline-message">No services call here on this day.</div>;
 
   const rowH = model.platforms.length <= 8 ? 34 : model.platforms.length <= 16 ? 26 : 22;
   const focusRow = model.platforms.findIndex((p) => p.id === focusStopId);
@@ -121,7 +151,9 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       const h = rowH - 2 * inset;
       const [x, w] = barX(env, c.arr, c.dep);
       // The fuller of how it arrives and how it leaves: a train that empties here arrived full.
-      const fill = loaded ? stepColor(Math.max(stepAt(c.tripId, c.arr - 1), stepAt(c.tripId, c.dep))) : (model.color.get(c.routeId) ?? COLORS.muted);
+      const fill = loaded
+        ? stepColor(Math.max(stepAt(c.tripId, c.arr - 1), stepAt(c.tripId, c.dep)))
+        : (model.color.get(c.routeId) ?? COLORS.muted);
       if (c.passing) {
         // Runs through without stopping: a thin tick rather than a bar.
         ctx.globalAlpha = 0.55;
@@ -150,7 +182,9 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
 
     // A call being dragged: a dashed white outline on the platform, or at the time, it would move to.
     const held = env.dragHit;
-    const dragged = held ? data.calls.find((c) => c.tripId === held.tripId && c.seq === held.seq) : undefined;
+    const dragged = held
+      ? data.calls.find((c) => c.tripId === held.tripId && c.seq === held.seq)
+      : undefined;
     const draggedRow = dragged ? (env.dragRow ?? model.row.get(dragged.stopId)) : undefined;
     if (dragged && draggedRow !== undefined) {
       const [x, w] = barX(env, dragged.arr + env.dragDelta, dragged.dep + env.dragDelta);
@@ -161,7 +195,14 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       ctx.setLineDash([5, 3]);
       ctx.strokeStyle = COLORS.highlight;
       ctx.lineWidth = 2;
-      roundRect(ctx, x - 1, rowTop(env, draggedRow) + inset - 1, Math.max(w, 6) + 2, rowH - 2 * inset + 2, 4);
+      roundRect(
+        ctx,
+        x - 1,
+        rowTop(env, draggedRow) + inset - 1,
+        Math.max(w, 6) + 2,
+        rowH - 2 * inset + 2,
+        4,
+      );
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -185,7 +226,10 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
     const platform = model.platforms[r];
     if (!platform) return null;
     const overlap = data.conflicts.some(
-      (k) => k.stopId === platform.id && px >= env.x(k.from) - 4 && px <= Math.max(env.x(k.to), env.x(k.from) + 6) + 4,
+      (k) =>
+        k.stopId === platform.id &&
+        px >= env.x(k.from) - 4 &&
+        px <= Math.max(env.x(k.to), env.x(k.from) + 6) + 4,
     );
     // Bars are often only a few pixels wide, so accept a near miss and take the closest.
     let best: PlatformData['calls'][number] | null = null;
@@ -201,14 +245,22 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       }
     }
     if (best) {
-      const what = best.passing ? 'Passes through' : best.starts ? 'Starts here' : best.ends ? 'Terminates here' : `Stops ${minutes(best.dep - best.arr)}`;
+      const what = best.passing
+        ? 'Passes through'
+        : best.starts
+          ? 'Starts here'
+          : best.ends
+            ? 'Terminates here'
+            : `Stops ${minutes(best.dep - best.arr)}`;
       return {
         tripId: best.tripId,
         row: r,
         seq: best.seq,
         tooltip: [
           `${model.name.get(best.routeId) ?? '?'}${best.headsign ? ` to ${best.headsign}` : ''}`,
-          best.arr === best.dep ? formatSecs(best.arr) : `${formatSecs(best.arr)} to ${formatSecs(best.dep)}`,
+          best.arr === best.dep
+            ? formatSecs(best.arr)
+            : `${formatSecs(best.arr)} to ${formatSecs(best.dep)}`,
           what,
           ...(overlap ? ['Overlaps another trip on this platform'] : []),
         ],
@@ -223,7 +275,9 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
           tooltip: [
             `Vehicle waits here ${minutes(l.to - l.from)}`,
             `${formatSecs(l.from)} to ${formatSecs(l.to)}`,
-            ...(l.inferred ? ['Inferred: the feed does not say which vehicle runs the next trip'] : []),
+            ...(l.inferred
+              ? ['Inferred: the feed does not say which vehicle runs the next trip']
+              : []),
           ],
         };
       }
@@ -238,7 +292,9 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
       scrollTo={focusRow >= 0 ? (focusRow - 2) * rowH : undefined}
       render={render}
       hitTest={hitTest}
-      onHit={(hit) => hit.tripId !== undefined && open({ kind: 'trip', id: hit.tripId }, { replace: true })}
+      onHit={(hit) =>
+        hit.tripId !== undefined && open({ kind: 'trip', id: hit.tripId }, { replace: true })
+      }
       rowAt={(py, env) => {
         const r = Math.floor((py - env.top + env.scrollY) / rowH);
         return r >= 0 && r < model.platforms.length ? r : null;
@@ -249,7 +305,12 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
         editing
           ? (tripId, delta) => {
               open({ kind: 'trip', id: tripId }, { replace: true });
-              void applyEdit({ kind: 'shift', tripIds: [tripId], delta, ripple: useStore.getState().ripple });
+              void applyEdit({
+                kind: 'shift',
+                tripIds: [tripId],
+                delta,
+                ripple: useStore.getState().ripple,
+              });
             }
           : undefined
       }
@@ -258,7 +319,12 @@ export function PlatformView({ stationId, onStationName }: { stationId: number; 
           ? (hit, row) => {
               if (hit.tripId === undefined || hit.seq === undefined) return;
               open({ kind: 'trip', id: hit.tripId }, { replace: true });
-              void applyEdit({ kind: 'setPlatform', tripId: hit.tripId, stopSeq: hit.seq, stopId: model.platforms[row].id });
+              void applyEdit({
+                kind: 'setPlatform',
+                tripId: hit.tripId,
+                stopSeq: hit.seq,
+                stopId: model.platforms[row].id,
+              });
             }
           : undefined
       }

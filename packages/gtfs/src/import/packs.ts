@@ -17,7 +17,11 @@ interface SimpleShape {
   dist: Float32Array;
 }
 
-export async function buildPacks(sql: Sql, baselineId: number, log: (m: string) => void): Promise<void> {
+export async function buildPacks(
+  sql: Sql,
+  baselineId: number,
+  log: (m: string) => void,
+): Promise<void> {
   const dir = packsDir(baselineId);
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
@@ -102,7 +106,9 @@ export async function buildPacks(sql: Sql, baselineId: number, log: (m: string) 
     const stCursor = sql`
       select st.trip_id, st.seq, st.arr, st.dep, coalesce(st.dist, 0)::float4 as dist
       from stop_times st join trips t on t.id = st.trip_id join routes r on r.id = t.route_id
-      where t.baseline_id = ${baselineId} and r.mode_id = ${modeId} and t.shape_id is not null`.cursor(20000);
+      where t.baseline_id = ${baselineId} and r.mode_id = ${modeId} and t.shape_id is not null`.cursor(
+      20000,
+    );
     for await (const rows of stCursor) {
       for (const row of rows) {
         const ti = tripIndex.get(row.trip_id)!;
@@ -119,7 +125,9 @@ export async function buildPacks(sql: Sql, baselineId: number, log: (m: string) 
     // Place each stop time in its trip's slot, ordered by sequence.
     const tripStOffset = new Uint32Array(tripCount + 1);
     for (let i = 0; i < tripCount; i++) tripStOffset[i + 1] = tripStOffset[i] + stCounts[i];
-    const order = Uint32Array.from({ length: n }, (_, i) => i).sort((a, b) => stTrip[a] - stTrip[b] || stSeq[a] - stSeq[b]);
+    const order = Uint32Array.from({ length: n }, (_, i) => i).sort(
+      (a, b) => stTrip[a] - stTrip[b] || stSeq[a] - stSeq[b],
+    );
     const stArr = new Int32Array(n);
     const stDep = new Int32Array(n);
     const stDist = new Float32Array(n);
@@ -142,11 +150,29 @@ export async function buildPacks(sql: Sql, baselineId: number, log: (m: string) 
     });
 
     const arrays: PackArrays = {
-      tripId, tripRoute, tripStart, tripEnd, tripShape, tripStOffset,
-      stArr, stDep, stDist, shapePtOffset, ptLon, ptLat, ptDist,
+      tripId,
+      tripRoute,
+      tripStart,
+      tripEnd,
+      tripShape,
+      tripStOffset,
+      stArr,
+      stDep,
+      stDist,
+      shapePtOffset,
+      ptLon,
+      ptLat,
+      ptDist,
     };
     const bytes = encodePack(
-      { version: 1, modeId, tripCount, stopTimeCount: n, shapeCount: usedShapes.length, pointCount },
+      {
+        version: 1,
+        modeId,
+        tripCount,
+        stopTimeCount: n,
+        shapeCount: usedShapes.length,
+        pointCount,
+      },
       arrays,
     );
     await writeFile(path.join(dir, `${modeId}.bin`), bytes);

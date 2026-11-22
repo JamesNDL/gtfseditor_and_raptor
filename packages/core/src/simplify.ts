@@ -4,7 +4,11 @@
 const M_PER_DEG_LAT = 110_540;
 const M_PER_DEG_LON_EQUATOR = 111_320;
 
-export function simplifyIndices(lon: ArrayLike<number>, lat: ArrayLike<number>, toleranceM: number): number[] {
+export function simplifyIndices(
+  lon: ArrayLike<number>,
+  lat: ArrayLike<number>,
+  toleranceM: number,
+): number[] {
   const n = lon.length;
   if (n <= 2) return Array.from({ length: n }, (_, i) => i);
 

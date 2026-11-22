@@ -2,7 +2,11 @@
 import { buildVehicleDays, type ChainTrip, type RuleSet } from '@gtfs-editor/core';
 import type { Sql } from '../db.ts';
 
-export async function importVehicleDays(sql: Sql, baselineId: number, log: (m: string) => void): Promise<void> {
+export async function importVehicleDays(
+  sql: Sql,
+  baselineId: number,
+  log: (m: string) => void,
+): Promise<void> {
   const started = Date.now();
   const rows = await sql`
     select t.id, t.start_secs, t.end_secs, t.run_key, t.feed_block_id, t.vehicle_type_id,
@@ -65,7 +69,8 @@ export async function importVehicleDays(sql: Sql, baselineId: number, log: (m: s
 
   const ids: number[] = [];
   for (let i = 0; i < dayRows.length; i += 2000) {
-    const inserted = await sql`insert into vehicle_days ${sql(dayRows.slice(i, i + 2000))} returning id`;
+    const inserted =
+      await sql`insert into vehicle_days ${sql(dayRows.slice(i, i + 2000))} returning id`;
     for (const row of inserted) ids.push(row.id);
   }
 

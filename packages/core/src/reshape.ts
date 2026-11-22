@@ -17,7 +17,8 @@ export function keptIndexes(previous: number[], next: number[]): number[] {
   const lcs: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      lcs[i][j] = previous[i] === next[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      lcs[i][j] =
+        previous[i] === next[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
   }
   const kept = new Array<number>(m).fill(-1);
@@ -34,19 +35,30 @@ export function keptIndexes(previous: number[], next: number[]): number[] {
 /** Distance along a path at each of its points, in metres. */
 export function pathDistances(coords: Coord[]): number[] {
   const out = [0];
-  for (let i = 1; i < coords.length; i++) out.push(out[i - 1] + distanceM(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]));
+  for (let i = 1; i < coords.length; i++)
+    out.push(
+      out[i - 1] + distanceM(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]),
+    );
   return out;
 }
 
 /** The stretch of a path between two distances along it, with the cut ends interpolated. */
-export function slicePath(coords: Coord[], dists: ArrayLike<number>, from: number, to: number): Coord[] {
+export function slicePath(
+  coords: Coord[],
+  dists: ArrayLike<number>,
+  from: number,
+  to: number,
+): Coord[] {
   const at = (d: number, k: number): Coord => {
     // k is the first point at or beyond d.
     if (k <= 0) return coords[0];
     if (k >= coords.length) return coords[coords.length - 1];
     const span = dists[k] - dists[k - 1];
     const f = span > 0 ? (d - dists[k - 1]) / span : 0;
-    return [coords[k - 1][0] + (coords[k][0] - coords[k - 1][0]) * f, coords[k - 1][1] + (coords[k][1] - coords[k - 1][1]) * f];
+    return [
+      coords[k - 1][0] + (coords[k][0] - coords[k - 1][0]) * f,
+      coords[k - 1][1] + (coords[k][1] - coords[k - 1][1]) * f,
+    ];
   };
   let a = 0;
   while (a < coords.length && dists[a] < from) a++;
@@ -114,9 +126,13 @@ export function distanceToPathM(coords: Coord[], lon: number, lat: number): numb
 /** How close two paths come to each other, in metres: nothing where they cross. */
 export function distanceBetweenPathsM(a: Coord[], b: Coord[]): number {
   if (!a.length || !b.length) return Infinity;
-  const side = (p: Coord, q: Coord, r: Coord) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  const side = (p: Coord, q: Coord, r: Coord) =>
+    Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
   // The box round b, so that most of a long path is passed over quickly.
-  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  let west = Infinity,
+    east = -Infinity,
+    south = Infinity,
+    north = -Infinity;
   for (const p of b) {
     west = Math.min(west, p[0]);
     east = Math.max(east, p[0]);
@@ -126,7 +142,13 @@ export function distanceBetweenPathsM(a: Coord[], b: Coord[]): number {
   for (let i = 1; i < a.length; i++) {
     const p = a[i - 1];
     const q = a[i];
-    if (Math.max(p[0], q[0]) < west || Math.min(p[0], q[0]) > east || Math.max(p[1], q[1]) < south || Math.min(p[1], q[1]) > north) continue;
+    if (
+      Math.max(p[0], q[0]) < west ||
+      Math.min(p[0], q[0]) > east ||
+      Math.max(p[1], q[1]) < south ||
+      Math.min(p[1], q[1]) > north
+    )
+      continue;
     for (let j = 1; j < b.length; j++) {
       const r = b[j - 1];
       const s = b[j];
@@ -214,13 +236,17 @@ export function retime(
     const current = old[a1].arr - old[a0].dep;
     if (s.kind === 'same') return Math.max(0, current);
     let saving = 0;
-    for (let a = a0 + 1; a < a1; a++) if (!isPassing(old[a])) saving += old[a].dep - old[a].arr + options.skipPenaltySecs;
+    for (let a = a0 + 1; a < a1; a++)
+      if (!isPassing(old[a])) saving += old[a].dep - old[a].arr + options.skipPenaltySecs;
     const passing = Math.max(0, Math.round(current * 0.5), current - saving);
     if (s.kind !== 'detour') return passing;
     const scaled = Math.round(passing * s.factor);
     if (s.lengthM === undefined || s.maxSpeed === undefined || !(s.maxSpeed > 0)) return scaled;
     const least = Math.ceil(s.lengthM / s.maxSpeed);
-    const added = s.speed !== undefined && s.speed > 0 ? Math.round(passing + Math.max(0, s.extraM ?? 0) / s.speed) : null;
+    const added =
+      s.speed !== undefined && s.speed > 0
+        ? Math.round(passing + Math.max(0, s.extraM ?? 0) / s.speed)
+        : null;
     // Up to three times the length, the trip's own time is scaled. Beyond that the published time
     // says little about the new way, and where it is nought (or too short to mean anything) it
     // cannot be scaled at all: the extra distance is timed at the mode's typical speed instead.
@@ -307,8 +333,10 @@ export function mirrorStops(args: {
     const following = e + 1 < n ? matchOld[keptAt[e + 1]] : null;
     const preceding = s > 0 ? matchOld[keptAt[s - 1]] : null;
     if (s === 0 && e === n - 1) return ids;
-    if (following !== null && following !== undefined) after.set(following, [...(after.get(following) ?? []), ...ids]);
-    else if (preceding !== null && preceding !== undefined) before.set(preceding, [...ids, ...(before.get(preceding) ?? [])]);
+    if (following !== null && following !== undefined)
+      after.set(following, [...(after.get(following) ?? []), ...ids]);
+    else if (preceding !== null && preceding !== undefined)
+      before.set(preceding, [...ids, ...(before.get(preceding) ?? [])]);
     else return null;
     s = e;
   }

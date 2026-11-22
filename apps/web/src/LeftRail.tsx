@@ -12,7 +12,17 @@ import { isActive } from './sim/simApi.ts';
 import { useStore, type LeftPane } from './store.ts';
 
 const icon = (path: React.ReactNode) => (
-  <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    viewBox="0 0 20 20"
+    width="20"
+    height="20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     {path}
   </svg>
 );
@@ -81,7 +91,20 @@ export function LeftRail() {
             onClick={() =>
               drawing
                 ? set({ builder: null, builderPath: null, placing: null })
-                : set({ builder: { name: '', modeId: 'bus', color: 'FF4FA3', headwayMin: 15, followRoads: true, loop: false, stops: [] }, builderPath: null, closing: null, closingPreview: null })
+                : set({
+                    builder: {
+                      name: '',
+                      modeId: 'bus',
+                      color: 'FF4FA3',
+                      headwayMin: 15,
+                      followRoads: true,
+                      loop: false,
+                      stops: [],
+                    },
+                    builderPath: null,
+                    closing: null,
+                    closingPreview: null,
+                  })
             }
           >
             <span className="rail-icon">{icon(<path d="M10 4v12M4 10h12" />)}</span>
@@ -91,7 +114,9 @@ export function LeftRail() {
             className={`rail-button close-button${closing ? ' on' : ''}`}
             aria-pressed={closing !== null}
             title="Close a road or a line: draw a line on the map and every service that crosses it is cut there. Buses go round; trains, trams and ferries stop either side."
-            onClick={() => (closing ? set({ closing: null, closingPreview: null }) : startClosing())}
+            onClick={() =>
+              closing ? set({ closing: null, closingPreview: null }) : startClosing()
+            }
           >
             <span className="rail-icon" aria-hidden="true">
               ✂
@@ -111,20 +136,33 @@ export function LeftRail() {
             <span className="rail-icon">{p.icon}</span>
             {p.label}
             {p.id === 'scenario' && clashes > 0 && (
-              <span className="rail-badge warn" title={`${clashes} clash${clashes === 1 ? '' : 'es'} to fix`}>
+              <span
+                className="rail-badge warn"
+                title={`${clashes} clash${clashes === 1 ? '' : 'es'} to fix`}
+              >
                 {clashes > 99 ? '99+' : clashes}
               </span>
             )}
             {p.id === 'scenario' && clashes === 0 && changes > 0 && (
-              <span className="rail-badge" title={`${changes} change${changes === 1 ? '' : 's'} in this scenario`}>
+              <span
+                className="rail-badge"
+                title={`${changes} change${changes === 1 ? '' : 's'} in this scenario`}
+              >
                 {changes > 99 ? '99+' : changes}
               </span>
             )}
-            {p.id === 'sim' && simGoing && <span className="rail-badge going" title="A simulation is running" />}
+            {p.id === 'sim' && simGoing && (
+              <span className="rail-badge going" title="A simulation is running" />
+            )}
           </button>
         ))}
         {pane !== null && (
-          <button className="rail-button rail-fold" title="Fold the panel away" aria-label="Fold the panel away" onClick={() => show(null)}>
+          <button
+            className="rail-button rail-fold"
+            title="Fold the panel away"
+            aria-label="Fold the panel away"
+            onClick={() => show(null)}
+          >
             <span className="rail-icon">{icon(<path d="M12 5l-5 5 5 5" />)}</span>
           </button>
         )}

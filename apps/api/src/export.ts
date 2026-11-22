@@ -18,7 +18,8 @@ import yazl from 'yazl';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { scenarioOf, type Scenario } from './scenarios.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 /** Same rule as `visible()` in scenarios.ts, as plain SQL text: COPY cannot take parameters. */
 function visibleText(alias: string, sc: Scenario | null): string {
@@ -44,23 +45,39 @@ function exportBox(text: string | undefined, marginText: string | undefined) {
   const parts = text.split(',').map(Number);
   const margin = marginText === undefined ? 2000 : Number(marginText);
   const [south, west, north, east] = parts;
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n)) || !(south < north) || !(west < east)
-    || south < -90 || north > 90 || west < -180 || east > 180) {
+  if (
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isFinite(n)) ||
+    !(south < north) ||
+    !(west < east) ||
+    south < -90 ||
+    north > 90 ||
+    west < -180 ||
+    east > 180
+  ) {
     throw fail(400, 'box must be south,west,north,east');
   }
-  if (!Number.isFinite(margin) || margin < 0 || margin > 50_000) throw fail(400, 'margin is 0 to 50000 metres');
+  if (!Number.isFinite(margin) || margin < 0 || margin > 50_000)
+    throw fail(400, 'margin is 0 to 50000 metres');
   const lat = margin / 111_000;
-  const lon = lat / Math.max(0.01, Math.cos(((south + north) / 2) * Math.PI / 180));
+  const lon = lat / Math.max(0.01, Math.cos((((south + north) / 2) * Math.PI) / 180));
   const round = (n: number) => Math.round(n * 1e6) / 1e6;
-  return { south: round(south - lat), west: round(west - lon), north: round(north + lat), east: round(east + lon) };
+  return {
+    south: round(south - lat),
+    west: round(west - lon),
+    north: round(north + lat),
+    east: round(east + lon),
+  };
 }
 
 export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
   // An export that was cut off (the server stopped mid-way) leaves its scratch table behind. No
   // export can be running as the server starts, so anything there now is left over.
   void (async () => {
-    const left = await sql`select tablename from pg_tables where schemaname = 'staging' and left(tablename, 7) = 'export_'`;
-    for (const t of left) await sql.unsafe(`drop table if exists staging."${String(t.tablename).replaceAll('"', '')}"`);
+    const left =
+      await sql`select tablename from pg_tables where schemaname = 'staging' and left(tablename, 7) = 'export_'`;
+    for (const t of left)
+      await sql.unsafe(`drop table if exists staging."${String(t.tablename).replaceAll('"', '')}"`);
   })().catch(() => {});
 
   app.get('/api/baselines/:b/export', async (req, reply) => {
@@ -78,23 +95,28 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
     const box = exportBox(query.box, query.margin);
     // Stops inside the box, as SQL on a stops row aliased `alias`. PostGIS takes x (east) first.
     const inBox = (alias: string) =>
-      box ? `${alias}.geom && ST_MakeEnvelope(${box.west}, ${box.south}, ${box.east}, ${box.north}, 4326)` : 'true';
+      box
+        ? `${alias}.geom && ST_MakeEnvelope(${box.west}, ${box.south}, ${box.east}, ${box.north}, 4326)`
+        : 'true';
 
     // Work out which trips are in the export once, into a scratch table, so each file's query is a
     // plain join rather than repeating the scenario rules.
     const scratch = `staging.export_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
-    await sql.unsafe(`create unlogged table ${scratch} as select t.id from trips t where t.baseline_id = ${b} and ${visibleText('t', sc)}${
-      box
-        ? ` and (select count(*) from stop_times st join stops s on s.id = st.stop_id where st.trip_id = t.id and ${inBox('s')}) >= 2`
-        : ''
-    }`);
+    await sql.unsafe(
+      `create unlogged table ${scratch} as select t.id from trips t where t.baseline_id = ${b} and ${visibleText('t', sc)}${
+        box
+          ? ` and (select count(*) from stop_times st join stops s on s.id = st.stop_id where st.trip_id = t.id and ${inBox('s')}) >= 2`
+          : ''
+      }`,
+    );
     await sql.unsafe(`alter table ${scratch} add primary key (id); analyze ${scratch}`);
     const vis = `t.id in (select id from ${scratch})`;
     const live = vis;
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const text = (value: string) => `'${value.replaceAll("'", "''")}'`;
-    const version = (scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published')
-      + (box ? `, cut to ${box.south},${box.west},${box.north},${box.east}` : '');
+    const version =
+      (scenario ? `${scenario.name} (${sc!.head} changes)` : 'as published') +
+      (box ? `, cut to ${box.south},${box.west},${box.north},${box.east}` : '');
     // A stop the scenario has deleted (delete-stop.ts) is in no file: not in stops.txt, and nothing
     // may name it. The edit that deleted it already took it out of every trip; the conditions on
     // stop_times and pathways below make sure of it whatever was edited afterwards.
@@ -228,7 +250,9 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
       try {
         for (const [name, query] of Object.entries(files)) {
           if (name === 'shapes.txt' && !withShapes) continue;
-          const readable = await sql.unsafe(`copy (${query}) to stdout with (format csv, header true)`).readable();
+          const readable = await sql
+            .unsafe(`copy (${query}) to stdout with (format csv, header true)`)
+            .readable();
           await pipeline(readable, createWriteStream(path.join(dir, name)));
           zip.addFile(path.join(dir, name), name);
         }
@@ -241,7 +265,9 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
       }
     })();
 
-    const safe = (scenario?.name ?? 'published').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scenario';
+    const safe =
+      (scenario?.name ?? 'published').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') ||
+      'scenario';
     reply.header('content-type', 'application/zip');
     reply.header('content-disposition', `attachment; filename="gtfs-${baseline.date}-${safe}.zip"`);
     reply.header('cache-control', 'no-store');

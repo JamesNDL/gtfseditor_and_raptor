@@ -6,7 +6,12 @@
 //      that stretch of its path is reused.
 //   3. A straight line.
 // Trains, trams and ferries follow the network of published services (see tracks.ts).
-import { distanceBetweenPathsM, distanceToPathM, pathDistances, slicePath } from '@gtfs-editor/core';
+import {
+  distanceBetweenPathsM,
+  distanceToPathM,
+  pathDistances,
+  slicePath,
+} from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { trackPath } from './tracks.ts';
 
@@ -18,7 +23,8 @@ export interface PathStop {
   stationId?: number | null;
 }
 
-export type PathMethod = 'roads' | 'bus_paths' | 'track' | 'track_partly' | 'water' | 'water_partly' | 'straight';
+export type PathMethod =
+  'roads' | 'bus_paths' | 'track' | 'track_partly' | 'water' | 'water_partly' | 'straight';
 
 /**
  * What a path must stay out of: a circle, or a line drawn on the map that nothing may cross or
@@ -35,7 +41,9 @@ export interface Avoid {
 
 /** How far a path stays from what is closed, less the reach of the closure: nothing or less means it runs into it. */
 const gapM = (coords: [number, number][], avoid: Avoid) =>
-  avoid.line ? distanceBetweenPathsM(coords, avoid.line) - (avoid.widthM ?? 0) : distanceToPathM(coords, avoid.lon, avoid.lat) - avoid.radiusM;
+  avoid.line
+    ? distanceBetweenPathsM(coords, avoid.line) - (avoid.widthM ?? 0)
+    : distanceToPathM(coords, avoid.lon, avoid.lat) - avoid.radiusM;
 
 /** True when a path runs into what is closed. */
 export const entersAvoid = (coords: [number, number][], avoid: Avoid) => gapM(coords, avoid) <= 0;
@@ -65,7 +73,11 @@ const ROUTER_CACHE_MAX = 800;
 
 interface RouterAnswer {
   code?: string;
-  routes?: { distance: number; legs?: { distance: number }[]; geometry: { coordinates: [number, number][] } }[];
+  routes?: {
+    distance: number;
+    legs?: { distance: number }[];
+    geometry: { coordinates: [number, number][] };
+  }[];
   distances?: (number | null)[][];
 }
 
@@ -105,14 +117,24 @@ async function ask(question: string): Promise<RouterAnswer | null> {
   }
 }
 
-const listOf = (points: [number, number][]) => points.map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`).join(';');
+const listOf = (points: [number, number][]) =>
+  points.map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`).join(';');
 
-async function askRouter(points: [number, number][], alternatives: boolean): Promise<Routed[] | null> {
-  const json = await ask(`route/v1/driving/${listOf(points)}?overview=full&geometries=geojson&steps=false${alternatives ? '&alternatives=3' : ''}`);
+async function askRouter(
+  points: [number, number][],
+  alternatives: boolean,
+): Promise<Routed[] | null> {
+  const json = await ask(
+    `route/v1/driving/${listOf(points)}?overview=full&geometries=geojson&steps=false${alternatives ? '&alternatives=3' : ''}`,
+  );
   if (!json || json.code !== 'Ok' || !json.routes?.length) return null;
   const found = json.routes
     .filter((r) => r.geometry.coordinates.length >= 2)
-    .map((r) => ({ coords: r.geometry.coordinates, metres: r.distance, legs: (r.legs ?? []).map((l) => l.distance) }));
+    .map((r) => ({
+      coords: r.geometry.coordinates,
+      metres: r.distance,
+      legs: (r.legs ?? []).map((l) => l.distance),
+    }));
   return found.length ? found : null;
 }
 
@@ -123,7 +145,10 @@ async function askTable(points: [number, number][]): Promise<(number | null)[][]
 }
 
 async function routed(stops: PathStop[]): Promise<[number, number][] | null> {
-  const found = await askRouter(stops.map((s) => [s.lon, s.lat]), false);
+  const found = await askRouter(
+    stops.map((s) => [s.lon, s.lat]),
+    false,
+  );
   return found?.[0]?.coords ?? null;
 }
 
@@ -144,7 +169,8 @@ function shortestChain(table: (number | null)[][], allowed: boolean[][]): number
   dist[0] = 0;
   for (;;) {
     let here = -1;
-    for (let i = 0; i < n; i++) if (!done[i] && dist[i] < Infinity && (here < 0 || dist[i] < dist[here])) here = i;
+    for (let i = 0; i < n; i++)
+      if (!done[i] && dist[i] < Infinity && (here < 0 || dist[i] < dist[here])) here = i;
     if (here < 0) return null;
     if (here === 1) break;
     done[here] = true;
@@ -190,10 +216,14 @@ async function routedAround(stops: PathStop[], avoid: Avoid): Promise<[number, n
       leg = i;
     }
   }
-  const at = (east: number, north: number): [number, number] => [avoid.lon + east / mPerDegLon(avoid.lat), avoid.lat + north / M_PER_DEG_LAT];
+  const at = (east: number, north: number): [number, number] => [
+    avoid.lon + east / mPerDegLon(avoid.lat),
+    avoid.lat + north / M_PER_DEG_LAT,
+  ];
   const nodes: [number, number][] = [points[leg - 1], points[leg]];
   for (const ring of [avoid.radiusM + 120, avoid.radiusM * 2 + 350, avoid.radiusM * 4 + 1000]) {
-    for (let k = 0; k < 8; k++) nodes.push(at(Math.cos((k * Math.PI) / 4) * ring, Math.sin((k * Math.PI) / 4) * ring));
+    for (let k = 0; k < 8; k++)
+      nodes.push(at(Math.cos((k * Math.PI) / 4) * ring, Math.sin((k * Math.PI) / 4) * ring));
   }
   const travel = nodes.length;
   // Spots inside the closure: its middle, and a little way towards each side.
@@ -201,7 +231,8 @@ async function routedAround(stops: PathStop[], avoid: Avoid): Promise<[number, n
     // Along a drawn line: its ends, and three spots between them.
     const along = pathDistances(avoid.line);
     const length = along[along.length - 1];
-    for (const f of [0, 0.25, 0.5, 0.75, 1]) nodes.push(slicePath(avoid.line, along, f * length, length)[0]);
+    for (const f of [0, 0.25, 0.5, 0.75, 1])
+      nodes.push(slicePath(avoid.line, along, f * length, length)[0]);
   } else {
     const inside = avoid.radiusM * 0.6;
     nodes.push(at(0, 0), at(inside, 0), at(-inside, 0), at(0, inside), at(0, -inside));
@@ -214,17 +245,28 @@ async function routedAround(stops: PathStop[], avoid: Avoid): Promise<[number, n
     for (let k = travel; k < nodes.length; k++) {
       const first = table[i][k];
       const second = table[k][j];
-      if (first !== null && second !== null && first + second <= directly + Math.max(25, directly * 0.02)) return true;
+      if (
+        first !== null &&
+        second !== null &&
+        first + second <= directly + Math.max(25, directly * 0.02)
+      )
+        return true;
     }
     return false;
   };
-  const allowed = nodes.map((_, i) => nodes.map((__, j) => i !== j && i < travel && j < travel && !through(i, j)));
+  const allowed = nodes.map((_, i) =>
+    nodes.map((__, j) => i !== j && i < travel && j < travel && !through(i, j)),
+  );
   allowed[0][1] = false; // already known to run through it
 
   for (let attempt = 0; attempt < 12; attempt++) {
     const chain = shortestChain(table, allowed);
     if (!chain) return null;
-    const waypoints = [...points.slice(0, leg - 1), ...chain.map((i) => nodes[i]), ...points.slice(leg + 1)];
+    const waypoints = [
+      ...points.slice(0, leg - 1),
+      ...chain.map((i) => nodes[i]),
+      ...points.slice(leg + 1),
+    ];
     const route = (await askRouter(waypoints, false))?.[0];
     if (!route) return null;
     if (clearOf(route.coords, avoid)) return route.coords;
@@ -253,18 +295,28 @@ export async function nearestRoad(lon: number, lat: number): Promise<[number, nu
   const base = process.env.ROUTER_URL;
   if (!base) return null;
   try {
-    const res = await fetch(`${base.replace(/\/$/, '')}/nearest/v1/driving/${lon.toFixed(6)},${lat.toFixed(6)}?number=1`, {
-      signal: AbortSignal.timeout(6_000),
-    });
+    const res = await fetch(
+      `${base.replace(/\/$/, '')}/nearest/v1/driving/${lon.toFixed(6)},${lat.toFixed(6)}?number=1`,
+      {
+        signal: AbortSignal.timeout(6_000),
+      },
+    );
     if (!res.ok) return null;
-    const json = (await res.json()) as { code?: string; waypoints?: { location: [number, number] }[] };
+    const json = (await res.json()) as {
+      code?: string;
+      waypoints?: { location: [number, number] }[];
+    };
     return json.code === 'Ok' && json.waypoints?.[0] ? json.waypoints[0].location : null;
   } catch {
     return null;
   }
 }
 
-async function alongBusPaths(sql: Sql, baselineId: number, stops: PathStop[]): Promise<{ coords: [number, number][]; found: number }> {
+async function alongBusPaths(
+  sql: Sql,
+  baselineId: number,
+  stops: PathStop[],
+): Promise<{ coords: [number, number][]; found: number }> {
   const coords: [number, number][] = [[stops[0].lon, stops[0].lat]];
   let found = 0;
   for (let i = 1; i < stops.length; i++) {
@@ -293,7 +345,12 @@ async function alongBusPaths(sql: Sql, baselineId: number, stops: PathStop[]): P
 
 const straight = (stops: PathStop[]): [number, number][] => stops.map((s) => [s.lon, s.lat]);
 
-export async function roadPath(sql: Sql, baselineId: number, stops: PathStop[], avoid?: Avoid): Promise<RoadPath> {
+export async function roadPath(
+  sql: Sql,
+  baselineId: number,
+  stops: PathStop[],
+  avoid?: Avoid,
+): Promise<RoadPath> {
   if (avoid) {
     const around = await routedAround(stops, avoid);
     if (around) return { coords: around, method: 'roads' };
@@ -319,11 +376,20 @@ export async function linePath(
 ): Promise<RoadPath> {
   if (!options.follow) return { coords: straight(stops), method: 'straight' };
   if (ROAD_MODES.has(modeId)) return roadPath(sql, baselineId, stops, options.avoid);
-  const found = await trackPath(sql, baselineId, modeId, stops.map((s) => ({ lon: s.lon, lat: s.lat, stationId: s.stationId ?? s.id })));
+  const found = await trackPath(
+    sql,
+    baselineId,
+    modeId,
+    stops.map((s) => ({ lon: s.lon, lat: s.lat, stationId: s.stationId ?? s.id })),
+  );
   if (found.found === 0) return { coords: straight(stops), method: 'straight' };
   const water = modeId === 'ferry';
   const all = found.found === found.stretches;
-  return { coords: found.coords, at: found.at, method: water ? (all ? 'water' : 'water_partly') : all ? 'track' : 'track_partly' };
+  return {
+    coords: found.coords,
+    at: found.at,
+    method: water ? (all ? 'water' : 'water_partly') : all ? 'track' : 'track_partly',
+  };
 }
 
 const DESCRIPTIONS: Record<PathMethod, string> = {
@@ -339,4 +405,12 @@ const DESCRIPTIONS: Record<PathMethod, string> = {
 export const describeMethod = (method: PathMethod) => DESCRIPTIONS[method];
 
 /** Weakest first: when a path is found by several methods, it is described by the weakest of them. */
-export const METHOD_STRENGTH: PathMethod[] = ['straight', 'bus_paths', 'water_partly', 'track_partly', 'water', 'track', 'roads'];
+export const METHOD_STRENGTH: PathMethod[] = [
+  'straight',
+  'bus_paths',
+  'water_partly',
+  'track_partly',
+  'water',
+  'track',
+  'roads',
+];

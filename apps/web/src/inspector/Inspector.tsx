@@ -31,7 +31,9 @@ export function Inspector() {
       <div className="inspector-body">
         {selection.kind === 'route' && <RoutePanel key={selection.id} routeId={selection.id} />}
         {selection.kind === 'trip' && <TripPanel key={selection.id} tripId={selection.id} />}
-        {selection.kind === 'vehicleDay' && <VehicleDayPanel key={selection.id} vehicleDayId={selection.id} />}
+        {selection.kind === 'vehicleDay' && (
+          <VehicleDayPanel key={selection.id} vehicleDayId={selection.id} />
+        )}
         {selection.kind === 'routeList' && <RouteListPanel ids={selection.ids} />}
         {selection.kind === 'station' && <StationPanel key={selection.id} stopId={selection.id} />}
       </div>

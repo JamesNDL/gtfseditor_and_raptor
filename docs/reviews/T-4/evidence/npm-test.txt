@@ -1,0 +1,14 @@
+2026-11-23T09:00:58+11:00
+
+> test
+> vitest run
+
+
+ RUN  v5.1.0 C:/Programming Projects/GTFS Editor/.claude/worktrees/agent-a1cf53318e8d2732b
+
+
+ Test Files  4 passed (4)
+      Tests  61 passed (61)
+   Start at  09:00:59
+   Duration  436ms (transform 58%, import 24%, tests 12%, worker 6%)
+

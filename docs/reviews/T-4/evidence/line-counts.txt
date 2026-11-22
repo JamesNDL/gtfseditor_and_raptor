@@ -1,0 +1,6 @@
+  1139 apps/api/src/sim-results.ts
+   371 apps/web/src/FleetPanel.tsx
+   221 apps/web/src/inspector/TripEditTools.tsx
+   293 apps/web/src/scenario.ts
+   311 docs/architecture/system.md
+  2335 total

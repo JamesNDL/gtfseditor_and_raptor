@@ -1,0 +1,24 @@
+Scratch apps/api/src/zz-review-scratch.ts:
+import { Described } from './schedule.ts';
+export const reviewScratch = (d: Described): string => d.label;
+$ npm run typecheck -w @gtfs-editor/api
+
+> @gtfs-editor/api@0.0.0 typecheck
+> tsc --noEmit
+
+exit=0
+$ node apps/api/src/zz-review-scratch.ts
+file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a0bf4385e62035c13/apps/api/src/zz-review-scratch.ts:1
+import { Described } from './schedule.ts';
+         ^^^^^^^^^
+SyntaxError: The requested module './schedule.ts' does not provide an export named 'Described'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:463:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:561:5)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5)
+
+Node.js v26.13.0
+exit=1
+$ npx oxlint apps/api/src/zz-review-scratch.ts
+apps/api/src/zz-review-scratch.ts:1:1: warning typescript(consistent-type-imports): All imports in the declaration are only used as types. Use `import type`. help: Replace the `import` declaration with `import type`. For example, change `import { Type } from 'module'` would become `import type { Type } from 'module'`.
+exit=0

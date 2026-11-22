@@ -6,11 +6,11 @@ services:
       POSTGRES_PASSWORD: gtfs
       POSTGRES_DB: gtfs_editor
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gtfs -d gtfs_editor"]
+      test: ['CMD-SHELL', 'pg_isready -U gtfs -d gtfs_editor']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -19,12 +19,12 @@ services:
   # use `docker compose --profile router up -d router`.
   router:
     build: ./services/router
-    profiles: ["router"]
+    profiles: ['router']
     environment:
-      ROUTER_PORT: "3002"
+      ROUTER_PORT: '3002'
       ROUTER_DATA: /data/router
     ports:
-      - "3002:3002"
+      - '3002:3002'
     volumes:
       - ./data/router:/data/router
       # The editor's exports, so a timetable can be loaded by path: /data/exports/check/export.zip

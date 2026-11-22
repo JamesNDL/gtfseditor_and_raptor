@@ -1,0 +1,186 @@
+commit 2f920761a5d4d8826a7729f885fa3056f9aacd28
+Author: James Willcox <james@newydatalab.com.au>
+Date:   Mon Nov 23 07:48:32 2026 +1100
+
+    Type-check every workspace; pin duckdb
+    
+    Only the web app had a tsconfig, so the API, core and gtfs had never
+    been type-checked. They now share tsconfig.base.json (strict, noEmit,
+    erasable syntax only), and `npm run typecheck` at the root checks all
+    four workspaces.
+    
+    - Add tsconfig.base.json and a tsconfig.json for api, core and gtfs;
+      web now extends the base with the same settings as before.
+    - Fix 50 errors, with no change in behaviour: row types on queries
+      (describe, platforms, vehicle days, the run library, playback stop
+      times), a looser type for the who= query helper, @types/yauzl, and
+      an await on the duckdb rows in export-check.
+    - Pin @duckdb/node-api to 2.0.0-r.1, the version installed.
+    - CLAUDE.md and /verify use the root typecheck.
+    
+    Tests: npm run typecheck, npm test (61 passed), npm run lint,
+    prettier --check (end-of-line auto) passed; e2e suites not run.
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/apps/api/src/scenarios.ts b/apps/api/src/scenarios.ts
+index 43009a4..3e3b594 100644
+--- a/apps/api/src/scenarios.ts
++++ b/apps/api/src/scenarios.ts
+@@ -40 +40,7 @@ import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timin
+-import { bestFree, platformChoices, scheduleEdits, scheduleRoutes } from './schedule.ts';
++import {
++  bestFree,
++  platformChoices,
++  scheduleEdits,
++  scheduleRoutes,
++  type Described,
++} from './schedule.ts';
+@@ -84,0 +91,15 @@ type Tx = Sql;
++/** The row `describe` reads, before it adds the label. */
++type DescribeRow = Omit<Described, 'label'> & {
++  from: string;
++  to: string;
++  scenario_id: number | null;
++};
++
++/** One stop time as the playback pack reads it. */
++interface PackStopRow {
++  trip_id: number;
++  arr: number;
++  dep: number;
++  dist: number;
++}
++
+@@ -204 +225 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
+-    const [t] = await tx`
++    const [t] = await tx<DescribeRow[]>`
+@@ -2071 +2092 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
+-      ? await sql`
++      ? await sql<PackStopRow[]>`
+@@ -2075 +2096 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
+-    const byTrip = new Map<number, typeof stops>();
++    const byTrip = new Map<number, PackStopRow[]>();
+@@ -2078 +2099 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
+-      if (!list) byTrip.set(s.trip_id, (list = [] as unknown as typeof stops));
++      if (!list) byTrip.set(s.trip_id, (list = []));
+diff --git a/apps/api/src/schedule.ts b/apps/api/src/schedule.ts
+index 93f05e3..0ebc793 100644
+--- a/apps/api/src/schedule.ts
++++ b/apps/api/src/schedule.ts
+@@ -13 +13 @@ const fail = (statusCode: number, message: string) =>
+-interface Described {
++export interface Described {
+diff --git a/apps/api/src/server.ts b/apps/api/src/server.ts
+index 7784d99..258c1fe 100644
+--- a/apps/api/src/server.ts
++++ b/apps/api/src/server.ts
+@@ -434 +434 @@ app.get('/api/patterns/:id/stringline', async (req) => {
+-  const tripsWhere = async (which: ReturnType<typeof sql>): Promise<StringTrip[]> => {
++  const tripsWhere = async (which: ReturnType<typeof visible>): Promise<StringTrip[]> => {
+@@ -565 +565,3 @@ app.get('/api/stations/:id/summary', async (req) => {
+-  const platformRows = await sql`
++  const platformRows = await sql<
++    { id: number; name: string; platformCode: string | null; calls: number }[]
++  >`
+@@ -614 +616,11 @@ app.get('/api/routes/:id/vehicles', async (req) => {
+-  const days = await sql`
++  const days = await sql<
++    {
++      id: number;
++      label: string;
++      source: string;
++      startSecs: number;
++      endSecs: number;
++      gapCount: number;
++      isNew: boolean;
++    }[]
++  >`
+diff --git a/apps/api/src/sim-results.ts b/apps/api/src/sim-results.ts
+index 8fce075..8204d9c 100644
+--- a/apps/api/src/sim-results.ts
++++ b/apps/api/src/sim-results.ts
+@@ -712,2 +712,3 @@ export function registerSimResultRoutes(app: FastifyInstance, sql: Sql) {
+-    const sqlOne = (strings: TemplateStringsArray, ...values: never[]) =>
+-      [sql(strings, ...values)] as [ReturnType<typeof sql>];
++    // Values are anything a query takes (text, numbers, arrays, fragments); postgres.js checks them.
++    const sqlOne = (strings: TemplateStringsArray, ...values: unknown[]) =>
++      [sql(strings, ...(values as never[]))] as [ReturnType<typeof sql>];
+diff --git a/apps/api/src/sim.ts b/apps/api/src/sim.ts
+index 1779161..59108e9 100644
+--- a/apps/api/src/sim.ts
++++ b/apps/api/src/sim.ts
+@@ -186,0 +187,47 @@ async function router(
++/** A run as the library query reads it, before the figures are worked out. */
++interface SimRunRow {
++  id: number;
++  name: string;
++  kind: string;
++  baselineId: number | null;
++  scenarioId: number | null;
++  scenarioName: string | null;
++  demandSetId: number | null;
++  demandSetName: string | null;
++  bauRunId: number | null;
++  bauRunName: string | null;
++  madeUp: boolean | null;
++  plansRunId: number | null;
++  capacity: boolean;
++  settings: Record<string, unknown>;
++  state: string;
++  progress: Record<string, unknown>;
++  error: string | null;
++  folderId: number | null;
++  madeBy: string | null;
++  createdAt: Date;
++  startedAt: Date | null;
++  finishedAt: Date | null;
++  resultRows: number;
++  archived: boolean;
++  timetableId: string;
++  timetable_version: string;
++  plan_version: string;
++  /** The box: the four sides are all set or all null. */
++  area_name: string | null;
++  area_south: number | null;
++  area_west: number | null;
++  area_north: number | null;
++  area_east: number | null;
++  /** The router's summary of the run; only the parts read here are named. */
++  summary: {
++    work?: { journeysPlannedPerSecond?: number };
++    capacities?: unknown;
++    people?: unknown;
++  } | null;
++  scenarioRuns: number;
++  capacityRuns: number;
++  scenario_head: number | null;
++  scenario_now: number | null;
++}
++
+@@ -1134 +1181 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
+-    const rows = await sql`
++    const rows = await sql<SimRunRow[]>`
+@@ -1163 +1210 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
+-    for (const row of rows as Record<string, any>[]) {
++    for (const row of rows) {
+@@ -1187 +1234 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
+-              run.baselineId,
++              run.baselineId!, // not null: a run without one is gone
+@@ -1189 +1236 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
+-                ? { id: run.scenarioId, baselineId: run.baselineId, head: scenario_head }
++                ? { id: run.scenarioId, baselineId: run.baselineId!, head: scenario_head! }
+@@ -1208,3 +1255,3 @@ export function registerSimRoutes(app: FastifyInstance, sql: Sql) {
+-                west: area_west,
+-                north: area_north,
+-                east: area_east,
++                west: area_west!,
++                north: area_north!,
++                east: area_east!,
+diff --git a/packages/gtfs/src/export-check.ts b/packages/gtfs/src/export-check.ts
+index 78b674c..b5a769f 100644
+--- a/packages/gtfs/src/export-check.ts
++++ b/packages/gtfs/src/export-check.ts
+@@ -69 +69 @@ const q = async (sql: string) =>
+-  (await db.run(sql)).getRowObjectsJson() as Record<string, string | number | null>[];
++  (await (await db.run(sql)).getRowObjectsJson()) as Record<string, string | number | null>[];

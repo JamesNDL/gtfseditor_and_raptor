@@ -1,0 +1,15 @@
+$ npm test
+
+> test
+> vitest run
+
+
+ RUN  v5.1.0 C:/Programming Projects/GTFS Editor/.claude/worktrees/agent-a0bf4385e62035c13
+
+
+ Test Files  4 passed (4)
+      Tests  61 passed (61)
+   Start at  08:48:44
+   Duration  585ms (transform 58%, import 23%, tests 12%, worker 7%)
+
+exit=0

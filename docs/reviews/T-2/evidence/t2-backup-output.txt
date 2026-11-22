@@ -1,0 +1,159 @@
+== Mon, Nov 23, 2026  8:49:48 AM setup
+NOTICE:  database "gtfs_review_bk" does not exist, skipping
+DROP DATABASE
+CREATE DATABASE
+INSERT 0 1
+  source: 1 scenario(s), 491 trips
+
+### T2-B01 backup a throwaway database
+Backing up gtfs_review_bk ...
+Wrote C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0849.dump (261 kB)
+  exit=0
+total 256
+drwxr-xr-x 1 james 197609      0 Nov 23 08:49 .
+drwxr-xr-x 1 james 197609      0 Nov 23 08:49 ..
+-rw-r--r-- 1 james 197609 260935 Nov 23 08:49 gtfs_review_bk-20261123-0849.dump
+
+### T2-B02 restore into a new database
+Creating database gtfs_review_rs ...
+Restoring C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0849.dump (261 kB) into gtfs_review_rs ...
+Restored into gtfs_review_rs
+  exit=0
+  restored: review scenario ü 🚆, 491 trips
+INSERT 0 1
+
+### T2-B03 restore again over the now-populated database (should replace it)
+Restoring C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0849.dump (261 kB) into gtfs_review_rs ...
+Restored into gtfs_review_rs
+  exit=0
+  after: review scenario ü 🚆, 491 trips
+
+### T2-B04 restore into the DATABASE_URL database without --yes (expect refusal)
+gtfs_review_rs is the database DATABASE_URL names. Restoring replaces what is in it. Add --yes to go ahead, or use --db to restore into another database.
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B05 same, but naming it with --db (expect refusal)
+gtfs_review_rs is the database DATABASE_URL names. Restoring replaces what is in it. Add --yes to go ahead, or use --db to restore into another database.
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B06 same with --yes (expect restore)
+Restoring C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0849.dump (261 kB) into gtfs_review_rs ...
+Restored into gtfs_review_rs
+  exit=0
+
+### T2-B07 --db naming a protected-looking database while DATABASE_URL names another, missing file (is a name other than DATABASE_URL's protected?)
+No such file: C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\374048cb-ce97-4120-bcab-adb39d216d89\scratchpad\t2bk\missing.dump
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B08 missing file
+No such file: C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\374048cb-ce97-4120-bcab-adb39d216d89\scratchpad\t2bk\missing.dump
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B09 odd database name
+Database names may use only letters, digits and _: x; drop database gtfs_review_bk
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B10 empty --db
+Database names may use only letters, digits and _: 
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B11 --db with no value
+--db needs a database name
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B12 unknown command
+Unexpected arguments: bakcup
+Usage: npm run db:backup [-- --db <name>]
+       npm run db:restore -- <file> [--db <name>] [--yes]
+  exit=1
+
+### T2-B13 backup of a database that does not exist (is a partial file left?)
+Backing up gtfs_review_nope ...
+pg_dump: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  database "gtfs_review_nope" does not exist
+pg_dump in the db container exited with code 1
+  exit=1
+total 256
+drwxr-xr-x 1 james 197609      0 Nov 23 08:50 .
+drwxr-xr-x 1 james 197609      0 Nov 23 08:49 ..
+-rw-r--r-- 1 james 197609 260935 Nov 23 08:49 gtfs_review_bk-20261123-0849.dump
+
+### T2-B14 restore a file that is not a dump
+Creating database gtfs_review_bad ...
+Restoring C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\374048cb-ce97-4120-bcab-adb39d216d89\scratchpad\t2bk\bad.dump (0 kB) into gtfs_review_bad ...
+pg_restore: error: input file does not appear to be a valid archive (too short?)
+pg_restore in the db container exited with code 1
+  exit=1
+  databases: gtfs_review_bad gtfs_review_bk gtfs_review_rs
+
+### T2-B15 two backups in the same minute
+Backing up gtfs_review_bk ...
+Wrote C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0850.dump (261 kB)
+  exit=0
+total 512
+drwxr-xr-x 1 james 197609      0 2026-11-23 08:50:11.156212400 +1100 .
+drwxr-xr-x 1 james 197609      0 2026-11-23 08:49:52.399641400 +1100 ..
+-rw-r--r-- 1 james 197609 260935 2026-11-23 08:49:53.137041400 +1100 gtfs_review_bk-20261123-0849.dump
+-rw-r--r-- 1 james 197609 260935 2026-11-23 08:50:11.683268000 +1100 gtfs_review_bk-20261123-0850.dump
+
+### T2-B16 container not reachable (compose project with no db running)
+Backing up gtfs_review_bk ...
+service "db" is not running
+pg_dump in the db container exited with code 1
+  exit=1
+total 256
+drwxr-xr-x 1 james 197609      0 Nov 23 08:50 .
+drwxr-xr-x 1 james 197609      0 Nov 23 08:49 ..
+-rw-r--r-- 1 james 197609 260935 Nov 23 08:49 gtfs_review_bk-20261123-0849.dump
+
+### T2-B17 docker not on PATH
+Backing up gtfs_review_bk ...
+spawn docker ENOENT
+  exit=1
+total 256
+drwxr-xr-x 1 james 197609      0 Nov 23 08:50 .
+drwxr-xr-x 1 james 197609      0 Nov 23 08:49 ..
+-rw-r--r-- 1 james 197609 260935 Nov 23 08:49 gtfs_review_bk-20261123-0849.dump
+
+### T2-B18 the npm script form (as documented), against a throwaway database
+> db:backup
+> node --env-file-if-exists=.env packages/gtfs/src/backup-cli.ts backup
+
+.env not found. Continuing without it.
+Backing up gtfs_review_bk ...
+Wrote C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\data\backups\gtfs_review_bk-20261123-0850.dump (261 kB)
+  exit=0
+
+== Mon, Nov 23, 2026  8:50:14 AM teardown
+DROP DATABASE
+DROP DATABASE
+DROP DATABASE
+NOTICE:  database "gtfs_review_nope" does not exist, skipping
+DROP DATABASE
+  databases: 
+apps
+CLAUDE.md
+docker-compose.yml
+docs
+node_modules
+package.json
+package-lock.json
+packages
+PLAN.md
+README.md
+services
+tsconfig.base.json
+vitest.config.ts

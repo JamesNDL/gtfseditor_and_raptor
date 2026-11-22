@@ -37,8 +37,12 @@ export function RoutePanel({ routeId }: { routeId: number }) {
 
   const chart = useMemo(() => {
     if (!r || r.hourly.length === 0) return null;
-    const hours: [number, number] = [Math.min(...r.hourly.map((h) => h.hour)), Math.max(...r.hourly.map((h) => h.hour))];
-    const value = (h: { trips: number; seated: number; standing: number }) => (metric === 'trips' ? h.trips : h.seated + h.standing);
+    const hours: [number, number] = [
+      Math.min(...r.hourly.map((h) => h.hour)),
+      Math.max(...r.hourly.map((h) => h.hour)),
+    ];
+    const value = (h: { trips: number; seated: number; standing: number }) =>
+      metric === 'trips' ? h.trips : h.seated + h.standing;
     const peak = Math.max(1, ...r.hourly.map(value), ...(r.before?.hourly.map(value) ?? []));
     // Round the axis top up to a tidy number.
     const magnitude = 10 ** Math.floor(Math.log10(peak));
@@ -66,11 +70,22 @@ export function RoutePanel({ routeId }: { routeId: number }) {
       </div>
 
       <div className="tiles">
-        <Tile value={fmt(r.tripCount)} label={r.before && r.before.tripCount !== r.tripCount ? `trips (was ${fmt(r.before.tripCount)})` : 'trips'} />
+        <Tile
+          value={fmt(r.tripCount)}
+          label={
+            r.before && r.before.tripCount !== r.tripCount
+              ? `trips (was ${fmt(r.before.tripCount)})`
+              : 'trips'
+          }
+        />
         <Tile
           value={fmt(r.vehicleDays)}
           label={`${inferred ? 'vehicles (est.)' : 'vehicles'}${r.before && r.before.vehicleDays !== r.vehicleDays ? ` (was ${fmt(r.before.vehicleDays)})` : ''}`}
-          note={inferred ? 'Inferred by chaining trips; not the operator roster' : 'From train run numbers in the feed'}
+          note={
+            inferred
+              ? 'Inferred by chaining trips; not the operator roster'
+              : 'From train run numbers in the feed'
+          }
         />
         <Tile value={formatSecs(r.firstDeparture)} label="first departure" />
         <Tile value={formatSecs(r.lastArrival)} label="last arrival" />
@@ -78,7 +93,10 @@ export function RoutePanel({ routeId }: { routeId: number }) {
       </div>
 
       <div className="actions">
-        <button className="button" onClick={() => openTimeline({ tab: 'stringline', routeId: r.id })}>
+        <button
+          className="button"
+          onClick={() => openTimeline({ tab: 'stringline', routeId: r.id })}
+        >
           Trip diagram
         </button>
         <button className="button" onClick={() => openTimeline({ tab: 'vehicles', routeId: r.id })}>
@@ -88,36 +106,58 @@ export function RoutePanel({ routeId }: { routeId: number }) {
           <button
             className="button"
             title="Extend the line, cut it short, send it a different way, or add and remove stops"
-            onClick={() => void startReshape({ id: r.id, name: r.shortName ?? r.longName ?? 'Line', modeId: r.modeId, color: r.color }, r.patterns[0].id)}
+            onClick={() =>
+              void startReshape(
+                {
+                  id: r.id,
+                  name: r.shortName ?? r.longName ?? 'Line',
+                  modeId: r.modeId,
+                  color: r.color,
+                },
+                r.patterns[0].id,
+              )
+            }
           >
             Change route
           </button>
         )}
-        {editing && r.tripCount > 0 && (confirmDelete ? (
-          <>
+        {editing &&
+          r.tripCount > 0 &&
+          (confirmDelete ? (
+            <>
+              <button
+                className="button danger"
+                disabled={busy}
+                title="Takes every trip of this line out of the scenario. Ctrl+Z brings it back."
+                onClick={async () => {
+                  await applyEdit({ kind: 'deleteLine', routeId: r.id });
+                  setConfirmDelete(false);
+                }}
+              >
+                Delete all {fmt(r.tripCount)} trips
+              </button>
+              <button className="button" onClick={() => setConfirmDelete(false)}>
+                Keep
+              </button>
+            </>
+          ) : (
             <button
-              className="button danger"
-              disabled={busy}
-              title="Takes every trip of this line out of the scenario. Ctrl+Z brings it back."
-              onClick={async () => {
-                await applyEdit({ kind: 'deleteLine', routeId: r.id });
-                setConfirmDelete(false);
-              }}
+              className="button"
+              title="Take this line out of the scenario: every trip, in both directions"
+              onClick={() => setConfirmDelete(true)}
             >
-              Delete all {fmt(r.tripCount)} trips
+              Delete line
             </button>
-            <button className="button" onClick={() => setConfirmDelete(false)}>
-              Keep
-            </button>
-          </>
-        ) : (
-          <button className="button" title="Take this line out of the scenario: every trip, in both directions" onClick={() => setConfirmDelete(true)}>
-            Delete line
-          </button>
-        ))}
+          ))}
       </div>
       {r.tripCount === 0 && (
-        <p className="note">This line has no trips in this scenario{r.before && r.before.tripCount > 0 ? `: all ${fmt(r.before.tripCount)} were deleted. Undo (Ctrl+Z) brings them back` : ''}.</p>
+        <p className="note">
+          This line has no trips in this scenario
+          {r.before && r.before.tripCount > 0
+            ? `: all ${fmt(r.before.tripCount)} were deleted. Undo (Ctrl+Z) brings them back`
+            : ''}
+          .
+        </p>
       )}
 
       <RoutePassengers routeId={r.id} places={r.hourly} directions={r.directions} />
@@ -132,7 +172,11 @@ export function RoutePanel({ routeId }: { routeId: number }) {
               <button className={metric === 'trips' ? 'on' : ''} onClick={() => setMetric('trips')}>
                 Departures
               </button>
-              <button className={metric === 'places' ? 'on' : ''} onClick={() => setMetric('places')} title="Seated plus standing capacity leaving each hour">
+              <button
+                className={metric === 'places' ? 'on' : ''}
+                onClick={() => setMetric('places')}
+                title="Seated plus standing capacity leaving each hour"
+              >
                 Capacity
               </button>
             </div>
@@ -160,7 +204,14 @@ export function RoutePanel({ routeId }: { routeId: number }) {
 
       <section>
         <h3>Vehicles used</h3>
-        {editing && <VehicleTypePicker scope="route" id={r.id} modeId={r.modeId} label="Run the whole line with" />}
+        {editing && (
+          <VehicleTypePicker
+            scope="route"
+            id={r.id}
+            modeId={r.modeId}
+            label="Run the whole line with"
+          />
+        )}
         {editing && (
           <div className="edit-row">
             <button
@@ -181,12 +232,18 @@ export function RoutePanel({ routeId }: { routeId: number }) {
                 <div className="muted">
                   {fmt(v.seated)} seated + {fmt(v.standing)} standing
                   {v.capacityIsPlaceholder && (
-                    <Tag kind="warn" title="Round-number placeholder. Not a sourced capacity figure.">
+                    <Tag
+                      kind="warn"
+                      title="Round-number placeholder. Not a sourced capacity figure."
+                    >
                       placeholder
                     </Tag>
                   )}
                   {v.assumed && (
-                    <Tag kind="info" title="The feed does not say which vehicle runs these trips; this is the default for the mode.">
+                    <Tag
+                      kind="info"
+                      title="The feed does not say which vehicle runs these trips; this is the default for the mode."
+                    >
                       assumed
                     </Tag>
                   )}
@@ -212,11 +269,18 @@ export function RoutePanel({ routeId }: { routeId: number }) {
           <>
             {r.directions.length > 1 && (
               <div className="chips">
-                <button className={direction === 'all' ? 'on' : ''} onClick={() => setDirection('all')}>
+                <button
+                  className={direction === 'all' ? 'on' : ''}
+                  onClick={() => setDirection('all')}
+                >
                   All
                 </button>
                 {r.directions.map((d) => (
-                  <button key={d.direction} className={direction === d.direction ? 'on' : ''} onClick={() => setDirection(d.direction)}>
+                  <button
+                    key={d.direction}
+                    className={direction === d.direction ? 'on' : ''}
+                    onClick={() => setDirection(d.direction)}
+                  >
                     To {d.headsign ?? `direction ${d.direction}`}
                   </button>
                 ))}
@@ -225,9 +289,20 @@ export function RoutePanel({ routeId }: { routeId: number }) {
             {editing && (
               <div className="edit-row">
                 <span className="muted small">Add a trip at</span>
-                <input className="day-select" type="time" value={newTripAt} onChange={(e) => setNewTripAt(e.target.value)} aria-label="Departure time of the new trip" />
+                <input
+                  className="day-select"
+                  type="time"
+                  value={newTripAt}
+                  onChange={(e) => setNewTripAt(e.target.value)}
+                  aria-label="Departure time of the new trip"
+                />
                 {r.directions.length > 1 && (
-                  <select className="day-select" value={newTripWay} onChange={(e) => setNewTripWay(Number(e.target.value))} aria-label="Direction of the new trip">
+                  <select
+                    className="day-select"
+                    value={newTripWay}
+                    onChange={(e) => setNewTripWay(Number(e.target.value))}
+                    aria-label="Direction of the new trip"
+                  >
                     {r.directions.map((d) => (
                       <option key={d.direction} value={d.direction}>
                         to {d.headsign ?? `direction ${d.direction}`}
@@ -241,8 +316,15 @@ export function RoutePanel({ routeId }: { routeId: number }) {
                   title="Adds a trip timed like the nearest one in that direction, and finds it a vehicle"
                   onClick={async () => {
                     const [h, m] = newTripAt.split(':').map(Number);
-                    const way = r.directions.some((d) => d.direction === newTripWay) ? newTripWay : (r.directions[0]?.direction ?? 0);
-                    const done = await applyEdit({ kind: 'addTrip', routeId: r.id, direction: way, startSecs: h * 3600 + m * 60 });
+                    const way = r.directions.some((d) => d.direction === newTripWay)
+                      ? newTripWay
+                      : (r.directions[0]?.direction ?? 0);
+                    const done = await applyEdit({
+                      kind: 'addTrip',
+                      routeId: r.id,
+                      direction: way,
+                      startSecs: h * 3600 + m * 60,
+                    });
                     if (done?.focusTripId) open({ kind: 'trip', id: done.focusTripId });
                   }}
                 >

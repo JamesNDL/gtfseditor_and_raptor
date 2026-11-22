@@ -22,8 +22,17 @@ const BOTTOM = 16;
 const TOP = 6;
 
 /** Departures per hour for one direction. One series, so the title names it and there is no legend. */
-export function HourlyChart({ title, rows, before, hours, yMax, capacityIsPlaceholder, metric = 'trips' }: Props) {
-  const value = (r: HourlyRow | undefined) => (!r ? 0 : metric === 'trips' ? r.trips : r.seated + r.standing);
+export function HourlyChart({
+  title,
+  rows,
+  before,
+  hours,
+  yMax,
+  capacityIsPlaceholder,
+  metric = 'trips',
+}: Props) {
+  const value = (r: HourlyRow | undefined) =>
+    !r ? 0 : metric === 'trips' ? r.trips : r.seated + r.standing;
   const [hover, setHover] = useState<number | null>(null);
   const [h0, h1] = hours;
   const n = h1 - h0 + 1;
@@ -39,7 +48,12 @@ export function HourlyChart({ title, rows, before, hours, yMax, capacityIsPlaceh
     <figure className="chart">
       <figcaption>{title}</figcaption>
       <div className="chart-plot">
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${title}: ${metric === 'trips' ? 'departures' : 'places'} per hour`}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          width="100%"
+          role="img"
+          aria-label={`${title}: ${metric === 'trips' ? 'departures' : 'places'} per hour`}
+        >
           <line x1={LEFT} x2={W} y1={y(yMax)} y2={y(yMax)} className="chart-grid" />
           <line x1={LEFT} x2={W} y1={y(0)} y2={y(0)} className="chart-axis" />
           <text x={LEFT - 4} y={y(yMax) + 3} textAnchor="end" className="chart-label">
@@ -76,7 +90,12 @@ export function HourlyChart({ title, rows, before, hours, yMax, capacityIsPlaceh
                   />
                 )}
                 {hour % 3 === 0 && (
-                  <text x={LEFT + i * slot + slot / 2} y={H - 4} textAnchor="middle" className="chart-label">
+                  <text
+                    x={LEFT + i * slot + slot / 2}
+                    y={H - 4}
+                    textAnchor="middle"
+                    className="chart-label"
+                  >
                     {String(hour % 24).padStart(2, '0')}
                   </text>
                 )}
@@ -85,18 +104,28 @@ export function HourlyChart({ title, rows, before, hours, yMax, capacityIsPlaceh
           })}
         </svg>
         {hover !== null && (
-          <div className="chart-tooltip" style={{ left: `${((LEFT + (hover - h0 + 0.5) * slot) / W) * 100}%` }}>
+          <div
+            className="chart-tooltip"
+            style={{ left: `${((LEFT + (hover - h0 + 0.5) * slot) / W) * 100}%` }}
+          >
             <strong>
-              {String(hover % 24).padStart(2, '0')}:00 to {String((hover + 1) % 24).padStart(2, '0')}:00
+              {String(hover % 24).padStart(2, '0')}:00 to{' '}
+              {String((hover + 1) % 24).padStart(2, '0')}:00
             </strong>
             <span>
               {hovered ? `${hovered.trips} departures` : 'No departures'}
-              {beforeByHour && (beforeByHour.get(hover)?.trips ?? 0) !== (hovered?.trips ?? 0) && ` (published: ${beforeByHour.get(hover)?.trips ?? 0})`}
+              {beforeByHour &&
+                (beforeByHour.get(hover)?.trips ?? 0) !== (hovered?.trips ?? 0) &&
+                ` (published: ${beforeByHour.get(hover)?.trips ?? 0})`}
             </span>
             {hovered && (
               <span>
-                {fmt(hovered.seated + hovered.standing)} places{capacityIsPlaceholder ? ' (placeholder)' : ''}
-                {beforeByHour && metric === 'places' && value(beforeByHour.get(hover)) !== value(hovered) && ` (published: ${fmt(value(beforeByHour.get(hover)))})`}
+                {fmt(hovered.seated + hovered.standing)} places
+                {capacityIsPlaceholder ? ' (placeholder)' : ''}
+                {beforeByHour &&
+                  metric === 'places' &&
+                  value(beforeByHour.get(hover)) !== value(hovered) &&
+                  ` (published: ${fmt(value(beforeByHour.get(hover)))})`}
               </span>
             )}
           </div>

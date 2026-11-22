@@ -1,0 +1,46 @@
+$ node strip-compare.mjs pre t1files <six files>   (pre = 34fd027, t1files = 2f92076)
+== apps/api/src/scenarios.ts: 3 JS lines only before, 10 only after
+  - import { bestFree, platformChoices, scheduleEdits, scheduleRoutes } from './schedule.ts';
+  - const [t] = await tx`
+  - if (!list) byTrip.set(s.trip_id, (list = [] ));
+  + bestFree,
+  + platformChoices,
+  + scheduleEdits,
+  + scheduleRoutes,
+  + } from './schedule.ts';
+  + /** The row `describe` reads, before it adds the label. */
+  + /** One stop time as the playback pack reads it. */
+  + const [t] = await tx `
+  + ? await sql `
+  + if (!list) byTrip.set(s.trip_id, (list = []));
+== apps/api/src/schedule.ts: 0 JS lines only before, 0 only after
+== apps/api/src/server.ts: 2 JS lines only before, 4 only after
+  - const platformRows = await sql`
+  - const days = await sql`
+  + const platformRows = await sql
+  + `
+  + const days = await sql
+  + `
+== apps/api/src/sim-results.ts: 1 JS lines only before, 2 only after
+  - [sql(strings, ...values)] ;
+  + // Values are anything a query takes (text, numbers, arrays, fragments); postgres.js checks them.
+  + [sql(strings, ...(values ))] ;
+== apps/api/src/sim.ts: 6 JS lines only before, 7 only after
+  - for (const row of rows ) {
+  - run.baselineId,
+  - ? { id: run.scenarioId, baselineId: run.baselineId, head: scenario_head }
+  - west: area_west,
+  - north: area_north,
+  - east: area_east,
+  + /** A run as the library query reads it, before the figures are worked out. */
+  + const rows = await sql `
+  + run.baselineId , // not null: a run without one is gone
+  + ? { id: run.scenarioId, baselineId: run.baselineId , head: scenario_head }
+  + west: area_west ,
+  + north: area_north ,
+  + east: area_east ,
+== packages/gtfs/src/export-check.ts: 1 JS lines only before, 1 only after
+  - (await db.run(sql)).getRowObjectsJson() ;
+  + (await (await db.run(sql)).getRowObjectsJson()) ;
+(node:40788) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

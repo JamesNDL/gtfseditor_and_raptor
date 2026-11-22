@@ -1,0 +1,7 @@
+data/
+dist/
+services/
+package-lock.json
+*.md
+*.sql
+docs/reviews/

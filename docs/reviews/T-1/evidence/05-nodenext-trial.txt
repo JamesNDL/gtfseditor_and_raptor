@@ -1,0 +1,5 @@
+=== apps/api with module/moduleResolution nodenext
+exit=0
+=== same extensionless-import scratch, api with nodenext
+src/zz-review-scratch.ts(1,25): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './scenarios.js'?
+exit=1

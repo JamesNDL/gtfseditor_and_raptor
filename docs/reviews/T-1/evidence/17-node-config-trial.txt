@@ -1,0 +1,10 @@
+Trial: module/moduleResolution nodenext + verbatimModuleSyntax (scratch tsconfig.review-node.json in each Node workspace)
+=== api, with the scratch type-import file still present
+src/zz-review-scratch.ts(1,10): error TS1484: 'Described' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+exit=1
+=== apps/api, real code only
+exit=0
+=== packages/core, real code only
+exit=0
+=== packages/gtfs, real code only
+exit=0

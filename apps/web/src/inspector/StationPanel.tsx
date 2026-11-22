@@ -17,8 +17,23 @@ interface StationSummary {
   /** Set when the open scenario has deleted it. */
   deleted: Deletion | null;
   calls: number;
-  platforms: { id: number; name: string; platformCode: string | null; calls: number; deleted: Deletion | null }[];
-  lines: { routeId: number; shortName: string | null; longName: string | null; color: string; modeName: string; calls: number; first: number; last: number }[];
+  platforms: {
+    id: number;
+    name: string;
+    platformCode: string | null;
+    calls: number;
+    deleted: Deletion | null;
+  }[];
+  lines: {
+    routeId: number;
+    shortName: string | null;
+    longName: string | null;
+    color: string;
+    modeName: string;
+    calls: number;
+    first: number;
+    last: number;
+  }[];
   hourly: { hour: number; calls: number }[];
 }
 
@@ -36,12 +51,16 @@ export function StationPanel({ stopId }: { stopId: number }) {
   if (!s) return <Loading error={station.error} />;
 
   const live = s.platforms.filter((p) => !p.deleted);
-  const platformName = (p: StationSummary['platforms'][number]) => (p.platformCode ? `Platform ${p.platformCode}` : p.name.replace(/^.*, /, ''));
+  const platformName = (p: StationSummary['platforms'][number]) =>
+    p.platformCode ? `Platform ${p.platformCode}` : p.name.replace(/^.*, /, '');
   // A bus stop's 'station' is only the feed's grouping, so it is called a stop.
   const whole = s.rail || live.length > 1 ? 'station' : 'stop';
 
   const peak = Math.max(1, ...s.hourly.map((h) => h.calls));
-  const busiest = s.hourly.reduce((best, h) => (h.calls > best.calls ? h : best), { hour: 0, calls: 0 });
+  const busiest = s.hourly.reduce((best, h) => (h.calls > best.calls ? h : best), {
+    hour: 0,
+    calls: 0,
+  });
   const chart = (focusStopId: number | null) => {
     openTimeline({ tab: 'platforms', stationId: s.id, focusStopId });
     setView(Math.max(0, clock.secs - 1800), clock.secs + 5400);
@@ -57,18 +76,27 @@ export function StationPanel({ stopId }: { stopId: number }) {
             {s.deleted && <Tag kind="warn">deleted in this scenario</Tag>}
           </h2>
           <div className="muted">
-            {s.isStation ? `${live.length} platform${live.length === 1 ? '' : 's'}` : 'Stop'} · {s.lines.length} line{s.lines.length === 1 ? '' : 's'}
+            {s.isStation ? `${live.length} platform${live.length === 1 ? '' : 's'}` : 'Stop'} ·{' '}
+            {s.lines.length} line{s.lines.length === 1 ? '' : 's'}
           </div>
         </div>
       </div>
 
       <div className="tiles">
         <Tile value={fmt(s.calls)} label="calls a day" />
-        <Tile value={s.calls ? `${String(busiest.hour % 24).padStart(2, '0')}:00` : 'none'} label="busiest hour" note={s.calls ? `${fmt(busiest.calls)} calls` : undefined} />
+        <Tile
+          value={s.calls ? `${String(busiest.hour % 24).padStart(2, '0')}:00` : 'none'}
+          label="busiest hour"
+          note={s.calls ? `${fmt(busiest.calls)} calls` : undefined}
+        />
       </div>
 
       <div className="actions">
-        <button className="button" onClick={() => chart(s.isStation ? null : s.id)} title="Every call at each platform through the day, with clashes marked">
+        <button
+          className="button"
+          onClick={() => chart(s.isStation ? null : s.id)}
+          title="Every call at each platform through the day, with clashes marked"
+        >
           Platform chart
         </button>
         {editing && !s.deleted && !deleting && (
@@ -92,9 +120,18 @@ export function StationPanel({ stopId }: { stopId: number }) {
           <h3>Calls per hour</h3>
           <div className="station-hours" role="img" aria-label="Calls in each hour of the day">
             {s.hourly.map((h) => (
-              <div key={h.hour} className="station-hour" title={`${String(h.hour % 24).padStart(2, '0')}:00, ${h.calls} calls`}>
-                <div className="station-bar" style={{ height: `${Math.max(3, (h.calls / peak) * 100)}%` }} />
-                <span className="muted">{h.hour % 3 === 0 ? String(h.hour % 24).padStart(2, '0') : ''}</span>
+              <div
+                key={h.hour}
+                className="station-hour"
+                title={`${String(h.hour % 24).padStart(2, '0')}:00, ${h.calls} calls`}
+              >
+                <div
+                  className="station-bar"
+                  style={{ height: `${Math.max(3, (h.calls / peak) * 100)}%` }}
+                />
+                <span className="muted">
+                  {h.hour % 3 === 0 ? String(h.hour % 24).padStart(2, '0') : ''}
+                </span>
               </div>
             ))}
           </div>
@@ -107,9 +144,16 @@ export function StationPanel({ stopId }: { stopId: number }) {
           <ul className="rows clickable">
             {s.platforms.map((p) => (
               <li key={p.id} className="platform-row">
-                <button className="row" onClick={() => chart(p.id)} disabled={!!p.deleted} title={p.deleted ? p.deleted.summary : 'Show this platform in the platform chart'}>
+                <button
+                  className="row"
+                  onClick={() => chart(p.id)}
+                  disabled={!!p.deleted}
+                  title={p.deleted ? p.deleted.summary : 'Show this platform in the platform chart'}
+                >
                   <div className={`grow${p.deleted ? ' struck' : ''}`}>{platformName(p)}</div>
-                  <div className="row-end">{p.deleted ? 'deleted' : p.calls ? `${fmt(p.calls)} calls` : 'not used'}</div>
+                  <div className="row-end">
+                    {p.deleted ? 'deleted' : p.calls ? `${fmt(p.calls)} calls` : 'not used'}
+                  </div>
                 </button>
                 {editing && !p.deleted && !s.deleted && live.length > 1 && (
                   <button

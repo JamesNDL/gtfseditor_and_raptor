@@ -60,17 +60,61 @@ export interface Coverage {
   noService: { stops: number; journeyEnds: number; withAnotherNear: number };
 }
 
-export type RunState = 'queued' | 'preparing' | 'running' | 'importing' | 'done' | 'failed' | 'stopped';
+export type RunState =
+  'queued' | 'preparing' | 'running' | 'importing' | 'done' | 'failed' | 'stopped';
 
 /** The figures of a finished run, as the simulator wrote them. Only what the panels read is typed. */
 export interface SimSummary {
   capacity: boolean;
-  demand: { rowsInFile: number; rowsRefused: number; leftOutWhollyOutsideArea: number; leftOutOneEndInsideArea: number; rows: number; people: number; users: number };
+  demand: {
+    rowsInFile: number;
+    rowsRefused: number;
+    leftOutWhollyOutsideArea: number;
+    leftOutOneEndInsideArea: number;
+    rows: number;
+    people: number;
+    users: number;
+  };
   people: { ok: number; noJourney: number; gaveUp: number; stranded: number };
-  journeys: { medianMinutes: number; percentile90Minutes: number; meanMinutes: number; meanWaitMinutes: number; meanWalkMinutes: number; meanRides: number; meanVehiclesBoarded: number; boardings: number };
-  stops: { changedAtOrigin: number; changedAtDestination: number; becauseTheirStopWasGone: number; becauseAnotherWasBetter: number };
-  againstBau?: { compared: number; sooner: number; later: number; within1Minute: number; meanMinutesSooner: number; meanMinutesLater: number; gaveUp: number; newlyAbleToTravel: number; noLongerAbleToTravel: number };
-  plannedLoads: { tripsPlannedOverCapacity: number; departuresPlannedOverCapacity: number; furthestOver: { trip: string; line: string; plannedLoad: number; limit: number; firstOverAt: string; stop: string }[] };
+  journeys: {
+    medianMinutes: number;
+    percentile90Minutes: number;
+    meanMinutes: number;
+    meanWaitMinutes: number;
+    meanWalkMinutes: number;
+    meanRides: number;
+    meanVehiclesBoarded: number;
+    boardings: number;
+  };
+  stops: {
+    changedAtOrigin: number;
+    changedAtDestination: number;
+    becauseTheirStopWasGone: number;
+    becauseAnotherWasBetter: number;
+  };
+  againstBau?: {
+    compared: number;
+    sooner: number;
+    later: number;
+    within1Minute: number;
+    meanMinutesSooner: number;
+    meanMinutesLater: number;
+    gaveUp: number;
+    newlyAbleToTravel: number;
+    noLongerAbleToTravel: number;
+  };
+  plannedLoads: {
+    tripsPlannedOverCapacity: number;
+    departuresPlannedOverCapacity: number;
+    furthestOver: {
+      trip: string;
+      line: string;
+      plannedLoad: number;
+      limit: number;
+      firstOverAt: string;
+      stop: string;
+    }[];
+  };
   capacityResults?: {
     replayRan: boolean;
     timesLeftBehind: number;
@@ -166,7 +210,8 @@ export interface SimJourney {
 }
 
 /** What is said wherever a run shows as out of date. */
-export const OUT_OF_DATE = 'Out of date: the timetable has been edited, or the router\'s rules for walks and changes have changed, since this run was made.';
+export const OUT_OF_DATE =
+  "Out of date: the timetable has been edited, or the router's rules for walks and changes have changed, since this run was made.";
 
 /** The limits of a run's area, in words; empty for a run of the whole network. */
 export function areaText(area: SimBox | null): string {
@@ -182,21 +227,29 @@ export function areaText(area: SimBox | null): string {
  */
 export function walkText(metres: number): string {
   const walked = Math.round((metres * 1.3) / 10) * 10;
-  return metres < 20 ? `${metres.toLocaleString('en-AU')} m` : `about ${walked.toLocaleString('en-AU')} m (${metres.toLocaleString('en-AU')} m in a straight line)`;
+  return metres < 20
+    ? `${metres.toLocaleString('en-AU')} m`
+    : `about ${walked.toLocaleString('en-AU')} m (${metres.toLocaleString('en-AU')} m in a straight line)`;
 }
 
 export const ACTIVE: RunState[] = ['queued', 'preparing', 'running', 'importing'];
 export const isActive = (run: SimRun) => ACTIVE.includes(run.state);
 
 /** Sends a change. Answers the body, or throws with the API's own words. */
-export async function send<T = unknown>(method: string, url: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+export async function send<T = unknown>(
+  method: string,
+  url: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
   const res = await fetch(url, {
     method,
     headers: headers ?? (body === undefined ? {} : { 'content-type': 'application/json' }),
     body: body === undefined ? undefined : headers ? (body as BodyInit) : JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as { message?: string }).message ?? `Request failed (${res.status})`);
+  if (!res.ok)
+    throw new Error((json as { message?: string }).message ?? `Request failed (${res.status})`);
   return json as T;
 }
 
@@ -212,7 +265,9 @@ export async function refreshRuns(): Promise<SimRun[]> {
 /** What a run is doing, in a few words. */
 export function progressText(run: SimRun): string {
   const p = run.progress ?? {};
-  const count = p.total ? `${(p.done ?? 0).toLocaleString('en-AU')} of ${p.total.toLocaleString('en-AU')}` : '';
+  const count = p.total
+    ? `${(p.done ?? 0).toLocaleString('en-AU')} of ${p.total.toLocaleString('en-AU')}`
+    : '';
   switch (run.state) {
     case 'queued':
       return 'Waiting to start';
@@ -221,7 +276,10 @@ export function progressText(run: SimRun): string {
     case 'importing':
       return 'Copying the results in';
     case 'running':
-      if (p.stage === 'queued') return p.runsAhead ? `Waiting behind ${p.runsAhead} other run${p.runsAhead === 1 ? '' : 's'}` : 'Starting';
+      if (p.stage === 'queued')
+        return p.runsAhead
+          ? `Waiting behind ${p.runsAhead} other run${p.runsAhead === 1 ? '' : 's'}`
+          : 'Starting';
       if (p.stage === 'plan') return `Planning journeys: ${count}`;
       if (p.stage === 'replay') return `Putting passengers on vehicles: ${count}`;
       if (p.stage === 'write') return 'Writing the results';
@@ -251,7 +309,13 @@ export const madeBy = {
 };
 
 export const bytes = (n: number) =>
-  n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : n > 0 ? `${Math.max(1, Math.round(n / 1e3))} kB` : 'nothing';
+  n >= 1e9
+    ? `${(n / 1e9).toFixed(1)} GB`
+    : n >= 1e6
+      ? `${Math.round(n / 1e6)} MB`
+      : n > 0
+        ? `${Math.max(1, Math.round(n / 1e3))} kB`
+        : 'nothing';
 
 /** The part of the map on screen, kept up to date by the map itself. */
 export const mapView: { bounds: SimBox | null } = { bounds: null };

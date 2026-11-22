@@ -9,7 +9,6 @@
 // - Each trip still leaves the first stop it shares with the old line at the same time.
 import {
   distanceM,
-  distanceToPathM,
   keptIndexes,
   locateStops,
   mirrorStops,
@@ -22,12 +21,21 @@ import {
   maxSpeedMs,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { describeMethod, entersAvoid, linePath,METHOD_STRENGTH, ROAD_MODES, type Avoid, type PathMethod } from './roads.ts';
+import {
+  describeMethod,
+  entersAvoid,
+  linePath,
+  METHOD_STRENGTH,
+  ROAD_MODES,
+  type Avoid,
+  type PathMethod,
+} from './roads.ts';
 import { visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 export { ROAD_MODES };
 
@@ -38,7 +46,13 @@ export interface ReshapeDeps {
     seq: number,
     tripIds: number[],
     delta: number,
-    options: { pinnedIds?: number[]; replace: boolean; keepVehicle: boolean; stopTimes?: boolean; tag?: string },
+    options: {
+      pinnedIds?: number[];
+      replace: boolean;
+      keepVehicle: boolean;
+      stopTimes?: boolean;
+      tag?: string;
+    },
   ) => Promise<Record<number, number>>;
   /** Per mode: fallback speed (m/s) and time spent at a stop. */
   newLine: Record<string, { speed: number; dwell: number }>;
@@ -110,7 +124,12 @@ export interface ReshapePlan {
 
 const tidyName = (name: string) => name.replace(/,.*$/, '').replace(/ Station$/, '');
 
-async function loadStops(tx: Sql, sc: Scenario | null, baselineId: number, ids: number[]): Promise<Map<number, StopRow>> {
+async function loadStops(
+  tx: Sql,
+  sc: Scenario | null,
+  baselineId: number,
+  ids: number[],
+): Promise<Map<number, StopRow>> {
   const rows = await tx`
     select s.id, s.name, s.location_type as "locationType", s.parent_id as "parentId", ST_X(s.geom) as lon, ST_Y(s.geom) as lat
     from stops s where s.id = any(${ids}) and s.baseline_id = ${baselineId} and ${stopVisible(tx, 's', sc)}`;
@@ -141,7 +160,11 @@ export async function acrossTheRoad(tx: Sql, stopId: number) {
 }
 
 /** How long published trips take from one stop to a later one: how many do, and their median time. */
-export async function publishedRunSecs(tx: Sql, fromStopId: number, toStopId: number): Promise<{ n: number; median: number }> {
+export async function publishedRunSecs(
+  tx: Sql,
+  fromStopId: number,
+  toStopId: number,
+): Promise<{ n: number; median: number }> {
   const [seen] = await tx`
     select count(*)::int as n, percentile_cont(0.5) within group (order by b.arr - a.dep) as median
     from stop_times a
@@ -155,7 +178,15 @@ export async function publishedRunSecs(tx: Sql, fromStopId: number, toStopId: nu
  * The platform a line should use at a station: the one its trips in this direction already use
  * most, otherwise the first or second in platform order depending on direction.
  */
-async function pickPlatform(tx: Sql, sc: Scenario | null, stationId: number, routeId: number, direction: number | null, index: number, avoid = -1): Promise<number | null> {
+async function pickPlatform(
+  tx: Sql,
+  sc: Scenario | null,
+  stationId: number,
+  routeId: number,
+  direction: number | null,
+  index: number,
+  avoid = -1,
+): Promise<number | null> {
   const rows = await tx`
     select c.id,
            (select count(*)::int from patterns p
@@ -187,12 +218,14 @@ export async function planReshape(
     from patterns p join routes r on r.id = p.route_id join modes m on m.id = r.mode_id
     where p.id = ${patternId}`;
   if (!pattern) throw fail(404, 'Stop pattern not found');
-  if (sc && sc.baselineId !== pattern.baseline_id) throw fail(400, 'That line belongs to a different day');
+  if (sc && sc.baselineId !== pattern.baseline_id)
+    throw fail(400, 'That line belongs to a different day');
   const baselineId: number = pattern.baseline_id;
   const model = deps.newLine[pattern.mode_id];
   if (!model) throw fail(400, 'Unknown mode');
 
-  const trips = await tx`select t.id from trips t where t.pattern_id = ${patternId} and ${visible(tx, 't', sc)} order by t.start_secs, t.id`;
+  const trips =
+    await tx`select t.id from trips t where t.pattern_id = ${patternId} and ${visible(tx, 't', sc)} order by t.start_secs, t.id`;
   if (!trips.length) throw fail(400, 'No trips use that stop pattern any more');
   const tripIds = trips.map((t) => t.id as number);
 
@@ -212,15 +245,34 @@ export async function planReshape(
       newIds.push(id);
       continue;
     }
-    const platform = await pickPlatform(tx, sc, id, pattern.route_id, pattern.direction_id, options.platformIndex);
+    const platform = await pickPlatform(
+      tx,
+      sc,
+      id,
+      pattern.route_id,
+      pattern.direction_id,
+      options.platformIndex,
+    );
     if (platform === null) throw fail(400, `${stop.name} has no platforms to stop at`);
     newIds.push(platform);
   }
-  for (const [id, row] of await loadStops(tx, sc, baselineId, newIds.filter((id) => !known.has(id)))) known.set(id, row);
+  for (const [id, row] of await loadStops(
+    tx,
+    sc,
+    baselineId,
+    newIds.filter((id) => !known.has(id)),
+  ))
+    known.set(id, row);
   for (let i = 1; i < newIds.length; i++) {
-    if (newIds[i] === newIds[i - 1]) throw fail(400, `${known.get(newIds[i])!.name} is listed twice in a row`);
+    if (newIds[i] === newIds[i - 1])
+      throw fail(400, `${known.get(newIds[i])!.name} is listed twice in a row`);
   }
-  if (!options.avoid && newIds.length === oldIds.length && newIds.every((id, i) => id === oldIds[i])) throw fail(400, 'Nothing has changed yet');
+  if (
+    !options.avoid &&
+    newIds.length === oldIds.length &&
+    newIds.every((id, i) => id === oldIds[i])
+  )
+    throw fail(400, 'Nothing has changed yet');
 
   const oldStops = oldIds.map((id) => known.get(id)!);
   const stops = newIds.map((id) => known.get(id)!);
@@ -239,17 +291,24 @@ export async function planReshape(
     if (shape) {
       oldCoords = (shape.lon as number[]).map((lon, i) => [lon, (shape.lat as number[])[i]]);
       const stored = shape.dists as number[] | null;
-      const calls = await tx`select st.dist from stop_times st where st.trip_id = ${tripIds[0]} order by st.seq`;
+      const calls =
+        await tx`select st.dist from stop_times st where st.trip_id = ${tripIds[0]} order by st.seq`;
       const callDist = calls.map((c) => c.dist as number | null);
       const usable =
-        stored !== null && stored.length === oldCoords.length && callDist.length === oldIds.length && callDist.every((d, i) => d !== null && (i === 0 || d >= callDist[i - 1]!));
+        stored !== null &&
+        stored.length === oldCoords.length &&
+        callDist.length === oldIds.length &&
+        callDist.every((d, i) => d !== null && (i === 0 || d >= callDist[i - 1]!));
       if (usable) {
         oldDists = stored!;
         oldStopDist = callDist as number[];
       } else if (oldCoords.length >= 2) {
         // No usable distances in the feed: measure the path and place the stops on it.
         oldDists = pathDistances(oldCoords);
-        oldStopDist = locateStops(oldCoords, oldStops.map((s) => [s.lon, s.lat])).map((k) => oldDists[k]);
+        oldStopDist = locateStops(
+          oldCoords,
+          oldStops.map((s) => [s.lon, s.lat]),
+        ).map((k) => oldDists[k]);
       }
     }
   }
@@ -272,7 +331,8 @@ export async function planReshape(
     const a1 = keptAt[i];
     return hasOldPath && a0 >= 0 && a1 > a0 && oldStopDist[a1] >= oldStopDist[a0];
   };
-  const oldPiece = (i: number) => slicePath(oldCoords, oldDists, oldStopDist[keptAt[i - 1]], oldStopDist[keptAt[i]]);
+  const oldPiece = (i: number) =>
+    slicePath(oldCoords, oldDists, oldStopDist[keptAt[i - 1]], oldStopDist[keptAt[i]]);
   const reusable = (i: number) => {
     if (!inOrder(i) || (keptAt[i] !== keptAt[i - 1] + 1 && direct)) return false;
     // A stretch that runs into a closed area cannot be used as it is.
@@ -283,7 +343,7 @@ export async function planReshape(
   let pathMethod: PathMethod | null = null;
   let rerouted = 0;
   let blocked = false;
-  for (let i = 1; i < stops.length; ) {
+  for (let i = 1; i < stops.length;) {
     if (reusable(i)) {
       const base = pushPiece(oldPiece(i));
       if (i === 1) stopVertex[0] = base;
@@ -298,15 +358,30 @@ export async function planReshape(
     const run = stops.slice(i - 1, end + 1);
     // A stretch between two stops the line keeps, sent another way because of a closure.
     const detour = avoid !== undefined && !options.joinAcross && run.length === 2 && inOrder(i);
-    const found = await linePath(tx, baselineId, pattern.mode_id, run.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat, stationId: s.parentId })), {
-      follow: options.followRoads || avoid !== undefined,
-      avoid,
-    });
+    const found = await linePath(
+      tx,
+      baselineId,
+      pattern.mode_id,
+      run.map((s) => ({ id: s.id, lon: s.lon, lat: s.lat, stationId: s.parentId })),
+      {
+        follow: options.followRoads || avoid !== undefined,
+        avoid,
+      },
+    );
     const piece: Coord[] = found.coords;
     const method = found.method;
     if (found.blocked) blocked = true;
-    if (pathMethod === null || METHOD_STRENGTH.indexOf(method) < METHOD_STRENGTH.indexOf(pathMethod)) pathMethod = method;
-    const at = found.at ?? locateStops(piece, run.map((s) => [s.lon, s.lat]));
+    if (
+      pathMethod === null ||
+      METHOD_STRENGTH.indexOf(method) < METHOD_STRENGTH.indexOf(pathMethod)
+    )
+      pathMethod = method;
+    const at =
+      found.at ??
+      locateStops(
+        piece,
+        run.map((s) => [s.lon, s.lat]),
+      );
     const base = pushPiece(piece);
     if (i === 1) stopVertex[0] = base;
     for (let k = 1; k < run.length; k++) stopVertex.push(base + at[k]);
@@ -318,7 +393,14 @@ export async function planReshape(
       const factor = was > 0 ? length / was : 1;
       // No upper limit on the factor (it was 6 until 20 Nov): a way round ten times as long takes
       // that much longer. The lengths and speeds let each trip be timed no faster than it can go.
-      sections.push({ kind: 'detour', factor: Math.max(0.5, factor), lengthM: length, extraM: length - was, speed: model.speed, maxSpeed: maxSpeedMs(pattern.mode_id) });
+      sections.push({
+        kind: 'detour',
+        factor: Math.max(0.5, factor),
+        lengthM: length,
+        extraM: length - was,
+        speed: model.speed,
+        maxSpeed: maxSpeedMs(pattern.mode_id),
+      });
     } else {
       for (let k = 1; k < run.length; k++) sections.push({ kind: 'new', secs: 0 });
     }
@@ -334,10 +416,18 @@ export async function planReshape(
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i];
     if (section.kind !== 'new') continue;
-    const run = await sectionTime(tx, baselineId, pattern.mode_id, stops[i], stops[i + 1], stopDist[i + 1] - stopDist[i], {
-      speed: model.speed,
-      dwellAtTo: dwellSecs,
-    });
+    const run = await sectionTime(
+      tx,
+      baselineId,
+      pattern.mode_id,
+      stops[i],
+      stops[i + 1],
+      stopDist[i + 1] - stopDist[i],
+      {
+        speed: model.speed,
+        dwellAtTo: dwellSecs,
+      },
+    );
     section.byBand = run.byBand;
     section.secs = run.byBand[2];
     timed.push(run);
@@ -399,7 +489,10 @@ async function loadCalls(tx: Sql, tripIds: number[]): Promise<Map<number, OldRow
   return byTrip;
 }
 
-const timing = (plan: ReshapePlan) => ({ dwellSecs: plan.dwellSecs, skipPenaltySecs: plan.skipPenaltySecs });
+const timing = (plan: ReshapePlan) => ({
+  dwellSecs: plan.dwellSecs,
+  skipPenaltySecs: plan.skipPenaltySecs,
+});
 
 /** How much longer (or shorter) a typical trip becomes, in seconds, judged from the middle trip of the day. */
 export async function typicalChange(tx: Sql, plan: ReshapePlan): Promise<number> {
@@ -443,7 +536,11 @@ export async function applyReshape(
 
   const calls = await loadCalls(tx, plan.tripIds);
   for (const id of plan.tripIds) {
-    if ((calls.get(id)?.length ?? 0) !== plan.oldStops.length) throw fail(409, 'A trip on this line does not match its stop pattern, so the line cannot be reshaped');
+    if ((calls.get(id)?.length ?? 0) !== plan.oldStops.length)
+      throw fail(
+        409,
+        'A trip on this line does not match its stop pattern, so the line cannot be reshaped',
+      );
   }
   const idMap = await deps.cloneTrips(tx, sc, seq, plan.tripIds, 0, {
     replace: true,
@@ -453,8 +550,16 @@ export async function applyReshape(
   });
 
   const col = {
-    trip: [] as number[], seq: [] as number[], stop: [] as number[], arr: [] as number[], dep: [] as number[], dist: [] as number[],
-    pickup: [] as number[], dropOff: [] as number[], oldTrip: [] as number[], oldSeq: [] as number[],
+    trip: [] as number[],
+    seq: [] as number[],
+    stop: [] as number[],
+    arr: [] as number[],
+    dep: [] as number[],
+    dist: [] as number[],
+    pickup: [] as number[],
+    dropOff: [] as number[],
+    oldTrip: [] as number[],
+    oldSeq: [] as number[],
   };
   const ids: number[] = [];
   const starts: number[] = [];
@@ -521,7 +626,9 @@ export async function planOtherWay(
   ).filter((q) => q.trips > 0);
   if (!candidates.length) return null;
 
-  const stopRows = await loadStops(tx, sc, plan.baselineId, [...new Set(candidates.flatMap((q) => q.stop_ids as number[]))]);
+  const stopRows = await loadStops(tx, sc, plan.baselineId, [
+    ...new Set(candidates.flatMap((q) => q.stop_ids as number[])),
+  ]);
   const station = (s: StopRow) => s.parentId ?? s.id;
   /** Where an old stop's counterpart sits in a candidate: same station first, otherwise the nearest stop within 150 m. */
   const matchIn = (a: StopRow, ids: number[]): number | null => {
@@ -535,11 +642,13 @@ export async function planOtherWay(
     }
     return near ? near.j : null;
   };
-  let best: { q: (typeof candidates)[number]; match: (number | null)[]; score: number } | null = null;
+  let best: { q: (typeof candidates)[number]; match: (number | null)[]; score: number } | null =
+    null;
   for (const q of candidates) {
     const match = plan.oldStops.map((a) => matchIn(a, q.stop_ids as number[]));
     const score = match.filter((j) => j !== null).length;
-    if (!best || score > best.score || (score === best.score && q.trips > best.q.trips)) best = { q, match, score };
+    if (!best || score > best.score || (score === best.score && q.trips > best.q.trips))
+      best = { q, match, score };
   }
   const opposite = best!.q.stop_ids as number[];
   if (best!.score < Math.max(2, Math.ceil(Math.min(plan.oldStops.length, opposite.length) / 2))) {
@@ -551,17 +660,32 @@ export async function planOtherWay(
   for (let i = 0; i < plan.stops.length; i++) {
     const s = plan.stops[i];
     if (plan.keptAt[i] >= 0) counterpart.push(s.id);
-    else if (ROAD_MODES.has(plan.modeId)) counterpart.push(((await acrossTheRoad(tx, s.id))?.id as number | undefined) ?? s.id);
-    else if (s.parentId !== null) counterpart.push((await pickPlatform(tx, sc, s.parentId, plan.routeId, best!.q.direction_id, 1, s.id)) ?? s.id);
+    else if (ROAD_MODES.has(plan.modeId))
+      counterpart.push(((await acrossTheRoad(tx, s.id))?.id as number | undefined) ?? s.id);
+    else if (s.parentId !== null)
+      counterpart.push(
+        (await pickPlatform(tx, sc, s.parentId, plan.routeId, best!.q.direction_id, 1, s.id)) ??
+          s.id,
+      );
     else counterpart.push(s.id);
   }
-  const mirrored = mirrorStops({ keptAt: plan.keptAt, matchOld: best!.match, counterpart, opposite });
-  if (!mirrored || mirrored.length < 2) return { reason: 'the change could not be matched to its stops' };
-  if (mirrored.length === opposite.length && mirrored.every((id, i) => id === opposite[i])) return { same: true };
+  const mirrored = mirrorStops({
+    keptAt: plan.keptAt,
+    matchOld: best!.match,
+    counterpart,
+    opposite,
+  });
+  if (!mirrored || mirrored.length < 2)
+    return { reason: 'the change could not be matched to its stops' };
+  if (mirrored.length === opposite.length && mirrored.every((id, i) => id === opposite[i]))
+    return { same: true };
   try {
-    return { plan: await planReshape(tx, sc, best!.q.id, mirrored, { ...options, platformIndex: 1 }, deps) };
+    return {
+      plan: await planReshape(tx, sc, best!.q.id, mirrored, { ...options, platformIndex: 1 }, deps),
+    };
   } catch (err) {
-    if ((err as { statusCode?: number }).statusCode === 400) return { reason: (err as Error).message.toLowerCase() };
+    if ((err as { statusCode?: number }).statusCode === 400)
+      return { reason: (err as Error).message.toLowerCase() };
     throw err;
   }
 }
@@ -570,7 +694,12 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** "2 stops added, 1 removed" */
 export const describeStops = (plan: { added: number; removed: number }) =>
-  [plan.added ? `${count(plan.added, 'stop')} added` : '', plan.removed ? `${plan.removed}${plan.added ? '' : ` stop${plan.removed === 1 ? '' : 's'}`} removed` : '']
+  [
+    plan.added ? `${count(plan.added, 'stop')} added` : '',
+    plan.removed
+      ? `${plan.removed}${plan.added ? '' : ` stop${plan.removed === 1 ? '' : 's'}`} removed`
+      : '',
+  ]
     .filter(Boolean)
     .join(', ') || 'stops reordered';
 

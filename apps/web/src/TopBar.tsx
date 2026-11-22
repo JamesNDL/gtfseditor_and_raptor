@@ -35,7 +35,9 @@ export function TopBar() {
       if (score >= 0) scored.push({ score: score * 10 + (modeRank.get(r.modeId) ?? 9), id: r.id });
     }
     return scored
-      .sort((a, b) => a.score - b.score || routes.get(b.id)!.tripCount - routes.get(a.id)!.tripCount)
+      .sort(
+        (a, b) => a.score - b.score || routes.get(b.id)!.tripCount - routes.get(a.id)!.tripCount,
+      )
       .slice(0, 8)
       .map((s) => routes.get(s.id)!);
   }, [query, routes, modes]);
@@ -65,13 +67,19 @@ export function TopBar() {
         >
           Timelines
         </button>
-        <button className="button small-button" onClick={() => set({ fleetOpen: true })} title="Vehicle types, capacities and fleet sizes">
+        <button
+          className="button small-button"
+          onClick={() => set({ fleetOpen: true })}
+          title="Vehicle types, capacities and fleet sizes"
+        >
           Fleet
         </button>
         <button
           className="button small-button"
           title={theme === 'dark' ? 'Switch to the light version' : 'Switch to the dark version'}
-          aria-label={theme === 'dark' ? 'Switch to the light version' : 'Switch to the dark version'}
+          aria-label={
+            theme === 'dark' ? 'Switch to the light version' : 'Switch to the dark version'
+          }
           onClick={() => {
             const next = theme === 'dark' ? 'light' : 'dark';
             set({ theme: next });

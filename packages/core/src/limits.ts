@@ -22,4 +22,5 @@ export const SAME_PLACE_M: Record<string, number> = { rail: 800, ferry: 400, roa
 export const maxSpeedMs = (modeId: string): number => (MODE_MAX_KMH[modeId] ?? 100) / 3.6;
 
 /** The least time a vehicle of this mode needs to cover a distance, in whole seconds. */
-export const minRunSecs = (modeId: string, metres: number): number => (metres > 0 ? Math.ceil(metres / maxSpeedMs(modeId)) : 0);
+export const minRunSecs = (modeId: string, metres: number): number =>
+  metres > 0 ? Math.ceil(metres / maxSpeedMs(modeId)) : 0;

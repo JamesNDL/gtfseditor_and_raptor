@@ -4,7 +4,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { scenarioOf, visible } from './scenarios.ts';
 
-const fail = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+const fail = (statusCode: number, message: string) =>
+  Object.assign(new Error(message), { statusCode });
 
 interface TypeBody {
   name?: string;
@@ -16,13 +17,19 @@ interface TypeBody {
   capacityIsPlaceholder?: boolean;
 }
 
-const wholeNumber = (value: unknown, label: string, max: number, allowNull = false): number | null => {
+const wholeNumber = (
+  value: unknown,
+  label: string,
+  max: number,
+  allowNull = false,
+): number | null => {
   if (value === null || value === undefined || value === '') {
     if (allowNull) return null;
     throw fail(400, `${label} is required`);
   }
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 0 || n > max) throw fail(400, `${label} must be a whole number from 0 to ${max}`);
+  if (!Number.isInteger(n) || n < 0 || n > max)
+    throw fail(400, `${label} must be a whole number from 0 to ${max}`);
   return n;
 };
 
@@ -70,11 +77,14 @@ export function registerFleetRoutes(app: FastifyInstance, sql: Sql) {
     if (!current) throw fail(404, 'Vehicle type not found');
     const name = body.name !== undefined ? body.name.trim().slice(0, 80) : current.name;
     if (!name) throw fail(400, 'Give the vehicle type a name');
-    const seated = body.seated !== undefined ? wholeNumber(body.seated, 'Seated', 5000) : current.seated;
-    const standing = body.standing !== undefined ? wholeNumber(body.standing, 'Standing', 5000) : current.standing;
+    const seated =
+      body.seated !== undefined ? wholeNumber(body.seated, 'Seated', 5000) : current.seated;
+    const standing =
+      body.standing !== undefined ? wholeNumber(body.standing, 'Standing', 5000) : current.standing;
     // Typing in a capacity means someone has sourced it, unless they say otherwise.
     const capacityChanged = seated !== current.seated || standing !== current.standing;
-    const placeholder = body.capacityIsPlaceholder ?? (capacityChanged ? false : current.capacity_is_placeholder);
+    const placeholder =
+      body.capacityIsPlaceholder ?? (capacityChanged ? false : current.capacity_is_placeholder);
     await sql`
       update vehicle_types set
         name = ${name},

@@ -102,7 +102,12 @@ interface AppState {
   editBusy: boolean;
   editError: string | null;
   /** A change the server has worked out but not applied, because it adds many vehicles: waiting for a yes or no. */
-  editConfirm: { edit: { kind: string; [key: string]: unknown }; added: number; message: string; summary: string } | null;
+  editConfirm: {
+    edit: { kind: string; [key: string]: unknown };
+    added: number;
+    message: string;
+    summary: string;
+  } | null;
   /** The panel folded out of the rail on the left, or null when all are folded away. */
   leftPane: LeftPane | null;
   /** The vehicle catalogue screen. */
@@ -135,7 +140,11 @@ interface AppState {
     };
   } | null;
   /** The path the line being drawn would take, once worked out. */
-  builderPath: { coords: [number, number][]; description: string; otherCoords?: [number, number][] | null } | null;
+  builderPath: {
+    coords: [number, number][];
+    description: string;
+    otherCoords?: [number, number][] | null;
+  } | null;
   /** A road or line being closed, or null. */
   closing: Closing | null;
   /** What the closure being set up would do, for the map. */
@@ -146,7 +155,12 @@ interface AppState {
     /** The part of each split line on each side, kept or dropped, and the stops where vehicles turn back. */
     parts: { side: string; kept: boolean; coords: [number, number][]; routeIds: number[] }[];
     /** Each line the closure crosses: its name, which side is kept, and its parts. */
-    lines: { routeId: number; name: string; keep: string; parts: { side: string; kept: boolean }[] }[];
+    lines: {
+      routeId: number;
+      name: string;
+      keep: string;
+      parts: { side: string; kept: boolean }[];
+    }[];
     turns: { name: string; lon: number; lat: number; side: string; kept: boolean }[];
     /** The two sides, in the order of their colours. */
     sides: string[];
@@ -171,7 +185,11 @@ interface AppState {
   /** The area of the run being set up, drawn on the map. */
   simBox: SimBox | null;
   /** One person's journeys in the chosen run, drawn on the map. */
-  simPerson: { user: string; journeys: SimJourney[]; /** The same journeys in the run compared with, drawn underneath. */ before?: SimJourney[] } | null;
+  simPerson: {
+    user: string;
+    journeys: SimJourney[];
+    /** The same journeys in the run compared with, drawn underneath. */ before?: SimJourney[];
+  } | null;
   /** The results window of the chosen run: what it shows and what the run is set against. */
   simResults: SimResultsState;
   /** What the results draw on the map. */
@@ -258,7 +276,15 @@ export const useStore = create<AppState>((set) => ({
   simDrawing: false,
   simBox: null,
   simPerson: null,
-  simResults: { open: false, small: false, tab: 'overview', vs: null, band: null, lineId: null, who: null },
+  simResults: {
+    open: false,
+    small: false,
+    tab: 'overview',
+    vs: null,
+    band: null,
+    lineId: null,
+    who: null,
+  },
   simMap: { layer: 'none', flow: 'change', by: 'stop', end: 'origin', side: 'b' },
   simTripColours: false,
   simMapDrawn: 0,
@@ -266,11 +292,14 @@ export const useStore = create<AppState>((set) => ({
   view: [6 * 3600, 10 * 3600],
 
   set: (partial) => set(partial),
-  toggleMode: (id) => set((s) => ({ enabledModes: { ...s.enabledModes, [id]: !s.enabledModes[id] } })),
+  toggleMode: (id) =>
+    set((s) => ({ enabledModes: { ...s.enabledModes, [id]: !s.enabledModes[id] } })),
   open: (selection, options) =>
     set((s) => ({
       history: options?.replace ? [selection] : [...s.history, selection],
-      ...(selection.kind === 'route' ? { highlightRouteId: selection.id, highlightTripId: null } : {}),
+      ...(selection.kind === 'route'
+        ? { highlightRouteId: selection.id, highlightTripId: null }
+        : {}),
       ...(selection.kind === 'trip' ? { highlightTripId: selection.id } : {}),
     })),
   back: () => set((s) => ({ history: s.history.slice(0, -1) })),
@@ -279,15 +308,21 @@ export const useStore = create<AppState>((set) => ({
     set((s) => {
       const next = { ...s.timeline, ...partial, open: true };
       // A different line has different stopping patterns.
-      if (partial?.routeId !== undefined && partial.routeId !== s.timeline.routeId && partial.patternId === undefined) {
+      if (
+        partial?.routeId !== undefined &&
+        partial.routeId !== s.timeline.routeId &&
+        partial.patternId === undefined
+      ) {
         next.patternId = null;
       }
       // Choosing a station without naming a platform clears any earlier platform focus.
-      if (partial?.stationId !== undefined && partial.focusStopId === undefined) next.focusStopId = null;
+      if (partial?.stationId !== undefined && partial.focusStopId === undefined)
+        next.focusStopId = null;
       return { timeline: next };
     }),
   closeTimeline: () => set((s) => ({ timeline: { ...s.timeline, open: false } })),
   setView: (start, end) => set({ view: [start, end] }),
 }));
 
-export const currentSelection = (s: AppState): Selection | null => s.history[s.history.length - 1] ?? null;
+export const currentSelection = (s: AppState): Selection | null =>
+  s.history[s.history.length - 1] ?? null;

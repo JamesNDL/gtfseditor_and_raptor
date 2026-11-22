@@ -1,0 +1,9 @@
+Mon, Nov 23, 2026  8:54:41 AM
+mutation: guard condition changed to 'scenarios < 0' (never refuses)
+67:  if (scenarios < 0 && !options.replace) {
+
+ Test Files  4 passed (4)
+      Tests  61 passed (61)
+   Start at  08:54:43
+   Duration  373ms (import 39%, transform 25%, tests 22%, worker 13%, environment 1%)
+

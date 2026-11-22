@@ -32,7 +32,9 @@ const LOAD_ORDER = ['train', 'metro', 'light_rail', 'ferry', 'coach', 'bus', 'sc
 export function App() {
   const baselineId = useStore((s) => s.baselineId);
   const set = useStore((s) => s.set);
-  const inspectorOpen = useStore((s) => s.history.length > 0 || s.builder !== null || s.closing !== null);
+  const inspectorOpen = useStore(
+    (s) => s.history.length > 0 || s.builder !== null || s.closing !== null,
+  );
   const timelineOpen = useStore((s) => s.timeline.open);
   const theme = useStore((s) => s.theme);
 
@@ -40,14 +42,16 @@ export function App() {
   useMemo(() => applyTheme(theme), [theme]);
 
   useEffect(() => {
-    Promise.all([getJson<Baseline[]>('/api/baselines'), getJson<Mode[]>('/api/modes')]).then(([baselines, modes]) => {
-      set({
-        baselines,
-        modes,
-        enabledModes: Object.fromEntries(modes.map((m) => [m.id, true])),
-        baselineId: baselines[0]?.id ?? null,
-      });
-    });
+    Promise.all([getJson<Baseline[]>('/api/baselines'), getJson<Mode[]>('/api/modes')]).then(
+      ([baselines, modes]) => {
+        set({
+          baselines,
+          modes,
+          enabledModes: Object.fromEntries(modes.map((m) => [m.id, true])),
+          baselineId: baselines[0]?.id ?? null,
+        });
+      },
+    );
   }, [set]);
 
   useEffect(() => {
@@ -74,7 +78,13 @@ export function App() {
       simRunId: null,
       simPerson: null,
       simBox: null,
-      simResults: { ...useStore.getState().simResults, open: false, vs: null, lineId: null, who: null },
+      simResults: {
+        ...useStore.getState().simResults,
+        open: false,
+        vs: null,
+        lineId: null,
+        who: null,
+      },
       simMap: { ...useStore.getState().simMap, layer: 'none' },
     });
     loadScenarios(baselineId).catch((err) => console.error('Failed to load scenarios', err));
@@ -88,9 +98,12 @@ export function App() {
       // Optional extras: tl=stringline|platforms|vehicles, station=<id>, view=<start>-<end> in seconds.
       const params = new URLSearchParams(initialHash.slice(1));
       const linkedScenario = Number(params.get('scenario'));
-      if (linkedScenario > 0) await selectScenario(linkedScenario).catch(() => selectScenario(null));
+      if (linkedScenario > 0)
+        await selectScenario(linkedScenario).catch(() => selectScenario(null));
       if (cancelled) return;
-      const kind = (['route', 'trip', 'vehicleDay', 'station'] as const).find((k) => Number(params.get(k)) > 0);
+      const kind = (['route', 'trip', 'vehicleDay', 'station'] as const).find(
+        (k) => Number(params.get(k)) > 0,
+      );
       if (kind) useStore.getState().open({ kind, id: Number(params.get(kind)) }, { replace: true });
       if (Number(params.get('t')) > 0) clock.set(Number(params.get('t')));
       if (params.get('fleet')) useStore.getState().set({ fleetOpen: true });
@@ -99,7 +112,9 @@ export function App() {
         useStore.getState().set({
           simRunId: Number(params.get('sim')),
           // &results=1 opens the results window on that run.
-          ...(params.get('results') ? { simResults: { ...useStore.getState().simResults, open: true } } : {}),
+          ...(params.get('results')
+            ? { simResults: { ...useStore.getState().simResults, open: true } }
+            : {}),
         });
       }
       const tab = params.get('tl');
@@ -132,12 +147,22 @@ export function App() {
   useEffect(
     () =>
       useStore.subscribe((state, previous) => {
-        if (state.history === previous.history && state.simRunId === previous.simRunId && state.simResults.open === previous.simResults.open) return;
+        if (
+          state.history === previous.history &&
+          state.simRunId === previous.simRunId &&
+          state.simResults.open === previous.simResults.open
+        )
+          return;
         const current = state.history[state.history.length - 1];
-        const shown = current && current.kind !== 'routeList' ? `${current.kind}=${current.id}` : '';
-        const sim = state.simRunId !== null ? `sim=${state.simRunId}${state.simResults.open ? '&results=1' : ''}` : '';
+        const shown =
+          current && current.kind !== 'routeList' ? `${current.kind}=${current.id}` : '';
+        const sim =
+          state.simRunId !== null
+            ? `sim=${state.simRunId}${state.simResults.open ? '&results=1' : ''}`
+            : '';
         const hash = shown || sim ? `#${[shown, sim].filter(Boolean).join('&')}` : '';
-        if (hash !== location.hash) history.replaceState(null, '', location.pathname + location.search + hash);
+        if (hash !== location.hash)
+          history.replaceState(null, '', location.pathname + location.search + hash);
       }),
     [],
   );
@@ -164,10 +189,15 @@ export function App() {
   }, []);
 
   const paneOpen = useStore((s) => s.leftPane !== null);
-  const onVehicleCount = useCallback((count: number, waiting: number) => liveStats.setVehicles(count, waiting), []);
+  const onVehicleCount = useCallback(
+    (count: number, waiting: number) => liveStats.setVehicles(count, waiting),
+    [],
+  );
 
   return (
-    <div className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}${paneOpen ? ' pane-open' : ''}`}>
+    <div
+      className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}${paneOpen ? ' pane-open' : ''}`}
+    >
       {/* The map and the charts draw their own colours, so they are rebuilt when the theme changes. */}
       <MapView key={`map-${theme}`} onVehicleCount={onVehicleCount} />
       <TopBar />

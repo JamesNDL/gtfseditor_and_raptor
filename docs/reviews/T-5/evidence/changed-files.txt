@@ -1,0 +1,8 @@
+cba0c06 Write down where code goes; record decisions D8 and D9
+
+ CLAUDE.md                   |   9 ++++
+ docs/architecture/system.md |   3 ++
+ docs/codebase-map.md        | 104 +++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 115 insertions(+), 1 deletion(-)
+Checking formatting...
+All matched files use Prettier code style!

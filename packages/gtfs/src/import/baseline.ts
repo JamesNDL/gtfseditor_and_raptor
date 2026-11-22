@@ -46,7 +46,9 @@ export async function importBaseline(
     select string_agg(distinct route_type, ', ') types from staging.routes
     where route_type::int not in (select route_type from route_type_modes)`;
   if (unmapped.types) {
-    throw new Error(`Feed has route types with no mode mapping: ${unmapped.types}. Add them to route_type_modes.`);
+    throw new Error(
+      `Feed has route types with no mode mapping: ${unmapped.types}. Add them to route_type_modes.`,
+    );
   }
 
   await sql`delete from baselines where feed_id = ${feed.id} and service_date = ${iso}`;
@@ -61,7 +63,9 @@ export async function importBaseline(
     // until analysed, and it then picks nested loops over hundreds of thousands of rows.
     const inserted = /^\s*(?:with[\s\S]*?\)\s*)?insert into (\w+)/i.exec(statement);
     if (inserted) await sql.unsafe(`analyze ${inserted[1]}`);
-    log(`  ${name}: ${(result.count ?? 0).toLocaleString()} rows in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    log(
+      `  ${name}: ${(result.count ?? 0).toLocaleString()} rows in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+    );
   };
 
   // `b`, `date` and `weekday` are validated above, so they are safe to inline.
@@ -151,7 +155,9 @@ export async function importBaseline(
      join trips t on t.baseline_id = ${b} and t.gtfs_id = st.trip_id
      join stops s on s.baseline_id = ${b} and s.gtfs_id = st.stop_id`,
   );
-  await sql.unsafe(`analyze trips; analyze stop_times; analyze stops; analyze shapes; analyze routes`);
+  await sql.unsafe(
+    `analyze trips; analyze stop_times; analyze stops; analyze shapes; analyze routes`,
+  );
 
   await sql.unsafe(`drop table if exists staging.day_seq`);
   await step(
@@ -282,7 +288,10 @@ export async function importBaseline(
   return { id: b, label };
 }
 
-export async function finishBaseline(sql: Sql, baselineId: number): Promise<Record<string, unknown>> {
+export async function finishBaseline(
+  sql: Sql,
+  baselineId: number,
+): Promise<Record<string, unknown>> {
   const [{ stats }] = await sql`
     select jsonb_build_object(
       'trips', (select count(*) from trips where baseline_id = ${baselineId}),

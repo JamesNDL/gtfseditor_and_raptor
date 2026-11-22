@@ -1,0 +1,21 @@
+2026-11-23T09:01:03+11:00
+
+> typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @gtfs-editor/api@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/web@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/core@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/gtfs@0.0.0 typecheck
+> tsc --noEmit
+

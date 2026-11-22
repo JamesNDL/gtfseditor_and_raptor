@@ -1,0 +1,6 @@
+apps/web/src/api.ts:83:  /** The published timetable's numbers, sent only while a scenario is open. */
+apps/web/src/api.ts:213: * Requests are made for the scenario being edited, and repeated after every edit; the previous
+apps/web/src/FleetPanel.tsx:323:/** "Run this with ..." control, shown while a scenario is being edited. */
+apps/web/src/MapView.tsx:1145:  // background: grey and faint, with its vehicles barely there. What is being edited keeps its colours.
+apps/web/src/store.ts:90:  /** Scenarios for the chosen day, and the one being edited (null means the read-only baseline). */
+apps/web/src/theme.ts:34:  /** Network lines while something else is being edited. */
