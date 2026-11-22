@@ -1,11 +1,11 @@
 // Backs up and restores a whole database, using pg_dump and pg_restore inside the db container.
 // The whole database, because scenario rows refer to baseline rows: a partial dump can't be restored alone.
 // Usage:
-//   npm run db:backup [-- --db <name>]                    writes data/backups/<db>-<YYYYMMDD-HHMM>.dump
-//   npm run db:restore -- <file> [--db <name>] [--yes]    --yes is needed to restore into DATABASE_URL's database
+//   npm run db:backup [-- --db <name>]                    writes data/backups/<db>-<YYYYMMDD-HHMMSS>.dump
+//   npm run db:restore -- <file> [--db <name>] [--yes]    --yes is needed for gtfs_editor and DATABASE_URL's database
 import { spawn } from 'node:child_process';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rm, stat } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, open, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DATABASE_URL } from './db.ts';
@@ -13,6 +13,8 @@ import { DEFAULT_DATABASE_URL } from './db.ts';
 // docker compose finds the db service from the repo root.
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const USER = 'gtfs';
+// The owner's database: a restore never replaces it without --yes, whatever DATABASE_URL names.
+const OWNER_DB = 'gtfs_editor';
 
 const urlDb = decodeURIComponent(
   new URL(process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL).pathname.slice(1),
@@ -57,7 +59,7 @@ function inDb(
 
 function stamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
 function size(bytes: number): string {
@@ -68,12 +70,23 @@ function size(bytes: number): string {
       : `${(bytes / 1e3).toFixed(0)} kB`;
 }
 
+/**
+ * Dumps the whole database to a new file under data/backups. Never overwrites a file; a failed
+ * dump removes its partial file.
+ */
 async function backup(db: string): Promise<void> {
   const dir = path.join(ROOT, 'data', 'backups');
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, `${db}-${stamp(new Date())}.dump`);
+  // 'wx' fails if the file is already there, so an earlier backup is never replaced.
+  const handle = await open(file, 'wx').catch((err: unknown) => {
+    if (err instanceof Error && 'code' in err && err.code === 'EEXIST') {
+      throw new Error(`${file} already exists, so it was left alone. Try again in a second.`);
+    }
+    throw err;
+  });
   console.log(`Backing up ${db} ...`);
-  const out = createWriteStream(file);
+  const out = handle.createWriteStream();
   try {
     await inDb(['pg_dump', '-U', USER, '-Fc', db], { output: out });
     await new Promise((resolve) => out.end(resolve));
@@ -85,10 +98,16 @@ async function backup(db: string): Promise<void> {
   console.log(`Wrote ${file} (${size((await stat(file)).size)})`);
 }
 
+/**
+ * Restores a dump into `db`, creating the database if it doesn't exist. The restore is one
+ * transaction, so if it fails an existing database is left as it was, and a database this run
+ * created is dropped again.
+ */
 async function restore(file: string, db: string, yes: boolean): Promise<void> {
-  if (db === urlDb && !yes) {
+  if ((db === urlDb || db === OWNER_DB) && !yes) {
+    const which = db === OWNER_DB ? "the editor's own database" : 'the database DATABASE_URL names';
     usage(
-      `${db} is the database DATABASE_URL names. Restoring replaces what is in it. ` +
+      `${db} is ${which}. Restoring replaces what is in it. ` +
         'Add --yes to go ahead, or use --db to restore into another database.',
     );
   }
@@ -105,18 +124,34 @@ async function restore(file: string, db: string, yes: boolean): Promise<void> {
     '-tAc',
     `select 1 from pg_database where datname = '${db}'`,
   ]);
-  if (found.trim() !== '1') {
-    console.log(`Creating database ${db} ...`);
-    await inDb(['createdb', '-U', USER, db]);
-    await inDb(['psql', '-U', USER, '-d', db, '-c', 'create extension if not exists postgis']);
+  const existed = found.trim() === '1';
+  try {
+    if (!existed) {
+      console.log(`Creating database ${db} ...`);
+      await inDb(['createdb', '-U', USER, db]);
+      await inDb(['psql', '-U', USER, '-d', db, '-c', 'create extension if not exists postgis']);
+    }
+    console.log(`Restoring ${file} (${size(bytes)}) into ${db} ...`);
+    await inDb(
+      ['pg_restore', '-U', USER, '-d', db, '--clean', '--if-exists', '--single-transaction'],
+      {
+        input: createReadStream(file),
+      },
+    );
+  } catch (err) {
+    if (existed) console.error(`The restore failed; ${db} is as it was.`);
+    else {
+      console.error(`The restore failed; dropping ${db}, which this run created.`);
+      await inDb(['dropdb', '-U', USER, '--if-exists', db]).catch((dropErr: unknown) =>
+        console.error(
+          `Could not drop ${db}: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
+        ),
+      );
+    }
+    throw err;
   }
-  console.log(`Restoring ${file} (${size(bytes)}) into ${db} ...`);
-  await inDb(['pg_restore', '-U', USER, '-d', db, '--clean', '--if-exists'], {
-    input: createReadStream(file),
-  });
   console.log(`Restored into ${db}`);
 }
-
 const [command, ...rest] = process.argv.slice(2);
 let db: string | undefined;
 let yes = false;
@@ -134,6 +169,6 @@ try {
     await restore(path.resolve(positional[0]), target, yes);
   else usage(`Unexpected arguments: ${[command, ...rest].join(' ')}`);
 } catch (err) {
-  console.error((err as Error).message);
+  console.error(err instanceof Error ? err.message : String(err));
   process.exitCode = 1;
 }
