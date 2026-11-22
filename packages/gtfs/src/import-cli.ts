@@ -1,10 +1,11 @@
 // Imports one or more service days from the current TfNSW feed as baselines.
 // Usage: npm run import [-- YYYYMMDD ...] [--replace]   (defaults to the first Tuesday the feed covers)
 // A day that already has scenarios is refused unless --replace is given, as re-importing deletes them.
+// FEED_PATH=<folder or zip> imports a feed already on disk instead, with no API key.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { connect, migrate } from './db.ts';
-import { ensureFeed, type FeedVersion } from './feed-cache.ts';
+import { ensureFeed, localFeed, type FeedVersion } from './feed-cache.ts';
 import {
   countScenariosOnDay,
   finishBaseline,
@@ -17,8 +18,11 @@ import { stageFeed } from './import/stage.ts';
 import { importVehicleDays } from './import/vehicle-days.ts';
 
 const apiKey = process.env.API_KEY;
-if (!apiKey) {
-  console.error('API_KEY is not set. Add it to .env (see .env.example).');
+const feedPath = process.env.FEED_PATH;
+if (!apiKey && !feedPath) {
+  console.error(
+    'API_KEY is not set. Add it to .env (see .env.example), or set FEED_PATH to a feed on disk.',
+  );
   process.exit(1);
 }
 
@@ -45,7 +49,9 @@ try {
 
   // Check the named days before fetching and staging the feed, so a refusal comes at once.
   // importBaseline checks again against the feed actually used.
-  const cachedFeedId = dates.length > 0 && !replace ? await latestCachedFeedId() : undefined;
+  // A feed from FEED_PATH has no cached id to check against; importBaseline still checks it.
+  const cachedFeedId =
+    dates.length > 0 && !replace && !feedPath ? await latestCachedFeedId() : undefined;
   if (cachedFeedId) {
     const refusals: string[] = [];
     for (const date of dates) {
@@ -59,7 +65,9 @@ try {
   }
 
   if (!process.exitCode) {
-    const feed = await ensureFeed({ apiKey, log });
+    const feed = feedPath
+      ? await localFeed(feedPath, log)
+      : await ensureFeed({ apiKey: apiKey!, log });
     await stageFeed(sql, feed, log);
 
     if (dates.length === 0) {

@@ -7,7 +7,14 @@ import type { Sql } from '../db.ts';
 /** Shape detail kept for animation. Vehicles are dots, so a few metres of error is invisible. */
 const SIMPLIFY_TOLERANCE_M = 8;
 
-export function packsDir(baselineId: number, root = 'data/packs'): string {
+/**
+ * Where a baseline's packs go: under PACKS_DIR when set (as the API reads it), otherwise the repo's
+ * data/packs, wherever the importer is started from.
+ */
+export function packsDir(
+  baselineId: number,
+  root = process.env.PACKS_DIR ?? path.resolve(import.meta.dirname, '../../../../data/packs'),
+): string {
   return path.resolve(root, String(baselineId));
 }
 
