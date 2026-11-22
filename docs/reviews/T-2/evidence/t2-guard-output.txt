@@ -1,0 +1,100 @@
+== Mon, Nov 23, 2026  8:48:23 AM setup
+DROP DATABASE
+NOTICE:  database "gtfs_review_t2" does not exist, skipping
+CREATE DATABASE
+
+### T2-01 first import of the default day from FEED_PATH
+  trip start, end and terminals: 491 rows in 0.0s
+  stay-aboard links: 43 rows in 0.0s
+Baseline 1 ready: Tuesday 6 Jan 2026 in 0s
+{
+}
+  exit=0
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb] scenarios=[]
+INSERT 0 1
+INSERT 0 1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+  default day = 20260106
+
+### T2-02 default day again, no --replace (FEED_PATH)
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-db8d96a2fb)
+Raw feed local-mini-feed-db8d96a2fb is already staged
+Importing 20260106 ...
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-03 named day, no --replace (FEED_PATH)
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-db8d96a2fb)
+Raw feed local-mini-feed-db8d96a2fb is already staged
+Importing 20260106 ...
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-04 two days, the first without scenarios (20260707), the second with (FEED_PATH)
+Baseline 2 ready: Tuesday 7 July 2026 in 1s
+{
+}
+Importing 20260106 ...
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-05 malformed date (FEED_PATH)
+    at isoDate (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/import/baseline.ts:32:36)
+    at importBaseline (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/import/baseline.ts:65:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v26.13.0
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-06 misspelt flag --Replace (FEED_PATH)
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-db8d96a2fb)
+Raw feed local-mini-feed-db8d96a2fb is already staged
+Importing 20260106 ...
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-07 up-front: named day with scenarios, no FEED_PATH (must not fetch)
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-08 up-front: several days, only the last has scenarios
+2026-01-06 has 2 scenarios. Re-importing the day deletes them. Run `npm run db:backup` first, then add --replace.
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-10 up-front: malformed date
+    at countScenariosOnDay (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/import/baseline.ts:40:56)
+    at file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/import-cli.ts:58:23
+
+Node.js v26.13.0
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-11 up-front: impossible date 20261340
+  routine: 'DateTimeParseError'
+}
+
+Node.js v26.13.0
+  exit=1
+  state: baselines=[1:2026-01-06:local-mini-feed-db8d96a2fb 2:2026-07-07:local-mini-feed-db8d96a2fb] scenarios=[1->b1 2->b1]
+
+### T2-12 --replace first, named day (FEED_PATH)
+  trip start, end and terminals: 491 rows in 0.0s
+  stay-aboard links: 43 rows in 0.0s
+Baseline 3 ready: Tuesday 6 Jan 2026 in 1s
+{
+}
+  exit=0
+  state: baselines=[2:2026-07-07:local-mini-feed-db8d96a2fb 3:2026-01-06:local-mini-feed-db8d96a2fb] scenarios=[]
+
+== Mon, Nov 23, 2026  8:48:45 AM teardown
+DROP DATABASE
+1
+2
+3

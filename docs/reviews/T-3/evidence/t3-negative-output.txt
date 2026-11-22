@@ -1,0 +1,68 @@
+
+### T3-N01 E2E_DB names the owner's database (expect refusal before connecting) (09:00:21)
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5)
+
+Node.js v26.13.0
+  exit=1
+
+### T3-N02 E2E_DB with SQL in it (09:00:22)
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5)
+
+Node.js v26.13.0
+  exit=1
+
+### T3-N03 E2E_DB upper case (09:00:22)
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5)
+
+Node.js v26.13.0
+  exit=1
+
+### T3-N04 an HTTP server already on port 3110 (expect refusal, and nothing created)
+    at file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/apps/api/test/run-e2e-fixture.mjs:90:19
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[fixture 0s] failed; cleaned up
+  exit=1
+== Mon, Nov 23, 2026  9:00:23 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 1
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0
+
+### T3-N05 a non-HTTP listener on port 3111 (the busy check cannot see it)
+[fixture 2s] starting the API on http://localhost:3111
+API listening on http://localhost:3111
+[fixture 62s] Error: the API did not answer on http://localhost:3111 within a minute
+    at waitForApi (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/apps/api/test/run-e2e-fixture.mjs:62:9)
+    at async file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/apps/api/test/run-e2e-fixture.mjs:108:3
+[fixture 62s] failed; cleaned up
+  exit=1
+== Mon, Nov 23, 2026  9:01:28 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 1
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0
+
+### T3-N06 the database cannot be reached (wrong port) (09:01:31)
+[fixture 0s] AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1492:18)
+    at afterConnectMultiple (node:net:2161:7)
+could not drop gtfs_e2e: 
+[fixture 0s] failed; cleaned up
+  exit=1
+== Mon, Nov 23, 2026  9:01:33 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 1
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 1

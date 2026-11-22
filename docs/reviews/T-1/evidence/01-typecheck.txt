@@ -1,0 +1,23 @@
+Version 7.0.2
+$ npm run typecheck
+
+> typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @gtfs-editor/api@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/web@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/core@0.0.0 typecheck
+> tsc --noEmit
+
+
+> @gtfs-editor/gtfs@0.0.0 typecheck
+> tsc --noEmit
+
+exit=0

@@ -1,0 +1,38 @@
+# Added lines in 2f92076 (*.ts) containing any / non-null ! / as / @ts- / unknown
++/** One stop time as the playback pack reads it. */
++    const sqlOne = (strings: TemplateStringsArray, ...values: unknown[]) =>
++      [sql(strings, ...(values as never[]))] as [ReturnType<typeof sql>];
++/** A run as the library query reads it, before the figures are worked out. */
++  settings: Record<string, unknown>;
++  progress: Record<string, unknown>;
++    capacities?: unknown;
++    people?: unknown;
++  (await (await db.run(sql)).getRowObjectsJson()) as Record<string, string | number | null>[];
+
+# Removed lines containing any / as
+-      if (!list) byTrip.set(s.trip_id, (list = [] as unknown as typeof stops));
+-      [sql(strings, ...values)] as [ReturnType<typeof sql>];
+-    for (const row of rows as Record<string, any>[]) {
+-  (await db.run(sql)).getRowObjectsJson() as Record<string, string | number | null>[];
+
+# Added lines with a non-null assertion (identifier followed by !, not !=)
++              run.baselineId!, // not null: a run without one is gone
++                ? { id: run.scenarioId, baselineId: run.baselineId!, head: scenario_head! }
++                west: area_west!,
++                north: area_north!,
++                east: area_east!,
+# Pre-existing type escapes still in the six changed source files at 2f92076 (counts: 'as any' / ': any' / 'any[]' / 'as never' / '@ts-')
+apps/api/src/scenarios.ts any=30 as-never=6 ts-comment=0
+apps/api/src/schedule.ts any=4 as-never=2 ts-comment=0
+apps/api/src/server.ts any=23 as-never=0 ts-comment=0
+apps/api/src/sim-results.ts any=13 as-never=1 ts-comment=0
+apps/api/src/sim.ts any=11 as-never=14 ts-comment=0
+packages/gtfs/src/export-check.ts any=0 as-never=1 ts-comment=0
+
+# same, before T-1 (34fd027)
+apps/api/src/scenarios.ts any=30 as-never=6 ts-comment=0
+apps/api/src/schedule.ts any=4 as-never=2 ts-comment=0
+apps/api/src/server.ts any=23 as-never=0 ts-comment=0
+apps/api/src/sim-results.ts any=13 as-never=0 ts-comment=0
+apps/api/src/sim.ts any=12 as-never=14 ts-comment=0
+packages/gtfs/src/export-check.ts any=0 as-never=1 ts-comment=0

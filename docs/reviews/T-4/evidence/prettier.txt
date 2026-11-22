@@ -1,0 +1,19 @@
+2026-11-23T09:01:17+11:00
+Checking formatting...
+All matched files use Prettier code style!
+exit 0
+Checking formatting...
+[[33mwarn[39m] apps/web/index.html
+[[33mwarn[39m] apps/web/package.json
+[[33mwarn[39m] apps/web/src/clock.ts
+[[33mwarn[39m] apps/web/src/inspector/RouteListPanel.tsx
+[[33mwarn[39m] apps/web/src/liveStats.ts
+[[33mwarn[39m] apps/web/src/main.tsx
+[[33mwarn[39m] apps/web/src/ModePanel.tsx
+[[33mwarn[39m] apps/web/src/theme.ts
+[[33mwarn[39m] apps/web/vite.config.ts
+[[33mwarn[39m] packages/core/src/index.ts
+[[33mwarn[39m] packages/core/src/time.ts
+[[33mwarn[39m] packages/gtfs/src/fetch-cli.ts
+[[33mwarn[39m] packages/gtfs/src/unzip.ts
+[[33mwarn[39m] Code style issues found in 13 files. Run Prettier with --write to fix.

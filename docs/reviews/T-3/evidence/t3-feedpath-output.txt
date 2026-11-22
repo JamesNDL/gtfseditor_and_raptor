@@ -1,0 +1,80 @@
+== Mon, Nov 23, 2026  8:53:22 AM setup
+DROP DATABASE
+NOTICE:  database "gtfs_review_t3" does not exist, skipping
+CREATE DATABASE
+total 68
+drwxr-xr-x 1 james 197609     0 Nov 23 08:53 .
+drwxr-xr-x 1 james 197609     0 Nov 23 08:53 ..
+-rw-r--r-- 1 james 197609 68333 Nov 23 08:53 mini feed.zip
+  temp feeds before: 
+
+### T3-F01 FEED_PATH is a zip (name with a space), no API_KEY, PACKS_DIR set
+Staged trips: 491 rows in 0.1s
+Importing 20260106 ...
+Baseline 1 ready: Tuesday 6 Jan 2026 in 1s
+{
+}
+  exit=0
+  baselines=[1:2026-01-06:local-mini-feed-5864fe5a7c] staged=[local-mini-feed-5864fe5a7c]
+  packs: 1
+  temp feeds after: local-mini-feed-5864fe5a7c
+
+### T3-F02 the same zip again (cached extraction, already staged)
+Raw feed local-mini-feed-5864fe5a7c is already staged
+Importing 20260707 ...
+Baseline 2 ready: Tuesday 7 July 2026 in 1s
+{
+}
+  exit=0
+  baselines=[1:2026-01-06:local-mini-feed-5864fe5a7c 2:2026-07-07:local-mini-feed-5864fe5a7c] staged=[local-mini-feed-5864fe5a7c]
+
+### T3-F03 FEED_PATH does not exist
+
+Error: FEED_PATH C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\374048cb-ce97-4120-bcab-adb39d216d89\scratchpad\t3fp\nope does not exist
+    at localFeed (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/feed-cache.ts:66:20)
+
+Node.js v26.13.0
+  exit=1
+
+### T3-F04 FEED_PATH is a file that is not a zip
+    at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\node_modules\yauzl\index.js:914:5
+    at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\node_modules\yauzl\fd-slicer.js:28:7
+    at FSReqCallback.wrapper [as oncomplete] (node:fs:932:5)
+
+Node.js v26.13.0
+  exit=1
+  temp feeds now: local-mini-feed-5864fe5a7c
+
+### T3-F05 FEED_PATH folder missing most files
+
+Error: Feed is missing calendar.txt
+    at stageFeed (file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/packages/gtfs/src/import/stage.ts:54:43)
+
+Node.js v26.13.0
+  exit=1
+
+### T3-F06 FEED_PATH is an empty string and no API_KEY
+API_KEY is not set. Add it to .env (see .env.example), or set FEED_PATH to a feed on disk.
+  exit=1
+
+### T3-F07 no FEED_PATH and no API_KEY
+API_KEY is not set. Add it to .env (see .env.example), or set FEED_PATH to a feed on disk.
+  exit=1
+
+### T3-F08 a copy of the same feed (new file times): same day again
+Staged trips: 491 rows in 0.1s
+Importing 20260707 ...
+Baseline 3 ready: Tuesday 7 July 2026 in 1s
+{
+}
+  exit=0
+  baselines=[1:2026-01-06:local-mini-feed-5864fe5a7c 2:2026-07-07:local-mini-feed-5864fe5a7c 3:2026-07-07:local-copy-of-mini-feed-2786b78446] staged=[local-copy-of-mini-feed-2786b78446]
+
+### T3-F09 no PACKS_DIR, started from another folder: packs should go to <repo>/data/packs
+  exit=0
+  repo data/packs: 4
+  elsewhere: 
+
+== Mon, Nov 23, 2026  8:53:37 AM teardown
+DROP DATABASE
+  temp feeds left behind by the importer (not removed by it): local-mini-feed-5864fe5a7c

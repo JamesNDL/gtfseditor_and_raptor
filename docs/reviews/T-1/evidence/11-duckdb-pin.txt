@@ -1,0 +1,16 @@
+$ grep duckdb packages/gtfs/package.json
+7:    "@duckdb/node-api": "2.0.0-r.1",
+$ npm ls @duckdb/node-api
+gtfs-editor@ C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a0bf4385e62035c13
+└─┬ @gtfs-editor/gtfs@0.0.0 -> .\packages\gtfs
+  └── @duckdb/node-api@2.0.0-r.1
+
+$ lockfile entries
+121:    "node_modules/@duckdb/node-api": {
+122-      "version": "2.0.0-r.1",
+123-      "resolved": "https://registry.npmjs.org/@duckdb/node-api/-/node-api-2.0.0-r.1.tgz",
+3877:        "@duckdb/node-api": "2.0.0-r.1",
+$ npm install --dry-run
+
+60 packages are looking for funding
+  run `npm fund` for details

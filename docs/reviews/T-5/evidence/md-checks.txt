@@ -1,0 +1,24 @@
+== Layout blocks: plan has 3, map has 3 ==
+-- block 1: differs
+--- plan
++++ map
+@@ -2,8 +2,8 @@
+   main.tsx
+   app/              the shell: App.tsx, TopBar.tsx, LeftRail.tsx, TimeBar.tsx, store.ts, theme.ts, base.css
+   shared/           used everywhere, owns nothing: api-client.ts (the one fetch wrapper: useApi()
+-                    and getJson() from today's api.ts, and send() from scenario.ts; the response types go to packages/core/src/api/
+-                    in stage 4), clock.ts,
++                    and getJson() from today's api.ts, and send() from scenario.ts; the response
++                    types go to packages/core/src/api/ in stage 4), clock.ts,
+                     live-stats.ts, ui/ (today's inspector/parts.tsx and other small pieces)
+   map/              MapView.tsx (later split into hooks here, stage 5), ModePanel.tsx (show or hide
+                     each mode's lines), map.css
+-- block 2: identical
+-- block 3: identical
+
+== CLAUDE.md: 0 fence lines (even, closed) ==
+  table check done
+== docs/codebase-map.md: 6 fence lines (even, closed) ==
+  table check done
+== docs/architecture/system.md: 8 fence lines (even, closed) ==
+  table check done

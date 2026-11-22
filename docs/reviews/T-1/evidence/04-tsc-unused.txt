@@ -1,0 +1,12 @@
+=== apps/api: npx tsc --noEmit -p apps/api/tsconfig.review-unused.json
+exit=0
+=== packages/core: npx tsc --noEmit -p packages/core/tsconfig.review-unused.json
+exit=0
+=== packages/gtfs: npx tsc --noEmit -p packages/gtfs/tsconfig.review-unused.json
+exit=0
+=== apps/web: npx tsc --noEmit -p apps/web/tsconfig.review-unused.json
+exit=0
+=== control: scratch file with an unused import and parameter in packages/core/src
+src/zz-review-scratch.ts(1,10): error TS6133: 'readFile' is declared but its value is never read.
+src/zz-review-scratch.ts(2,19): error TS6133: 'unusedParam' is declared but its value is never read.
+exit=1

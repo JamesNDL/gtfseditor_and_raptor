@@ -1,0 +1,6 @@
+Mon, Nov 23, 2026  8:47:11 AM
+
+> @gtfs-editor/gtfs@0.0.0 typecheck
+> tsc --noEmit
+
+exit 0

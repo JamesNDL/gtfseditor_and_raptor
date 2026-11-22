@@ -1,0 +1,79 @@
+[fixture 0s] creating database gtfs_e2e
+[fixture 0s] importing the test feed
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-d34a88d8ce)
+Staged agency: 3 rows in 0.1s
+Staged calendar: 1 rows in 0.1s
+Staged calendar_dates: 1 rows in 0.1s
+Staged pathways: 1 rows in 0.1s
+Staged routes: 5 rows in 0.1s
+Staged shapes: 2,268 rows in 0.1s
+Staged stops: 107 rows in 0.1s
+Staged stop_times: 5,572 rows in 0.1s
+Staged trips: 491 rows in 0.1s
+Importing 20260106 ...
+  trips running on the day: 491 rows in 0.0s
+  routes: 5 rows in 0.0s
+  stops: 107 rows in 0.0s
+  stop parents: 24 rows in 0.0s
+  shapes: 10 rows in 0.0s
+  trips: 491 rows in 0.0s
+  stop times: 5,572 rows in 0.1s
+  trip stop sequences: 491 rows in 0.0s
+  trip start, end and terminals: 491 rows in 0.0s
+  trips with no stop times removed: 0 rows in 0.0s
+  patterns: 12 rows in 0.0s
+  trip patterns: 491 rows in 0.0s
+  map lines: 10 rows in 0.0s
+  route trip counts: 5 rows in 0.0s
+  modes calling at each stop: 92 rows in 0.0s
+  modes calling at each station: 13 rows in 0.0s
+  vehicle types seen in the feed: 2 rows in 0.0s
+  trip vehicle types from the feed: 158 rows in 0.0s
+  stay-aboard links: 43 rows in 0.0s
+  pathways: 1 rows in 0.0s
+  platform and wharf overlaps already in the feed: 0 rows in 0.0s
+  vehicle days: 19 (4 from train run numbers, 15 inferred) in 0.1s
+  shapes simplified: 10 shapes, 2,268 points down to 100 in 0.0s
+  pack bus: 288 trips, 0.1 MB in 0.0s
+  pack train: 158 trips, 0.0 MB in 0.0s
+  pack ferry: 45 trips, 0.0 MB in 0.0s
+Baseline 1 ready: Tuesday 6 Jan 2026 in 1s
+{
+  "trips": 491,
+  "patterns": 12,
+  "stopTimes": 5572,
+  "lastArrival": 90780,
+  "vehicleDays": 19,
+  "routesRunning": 5,
+  "firstDeparture": 18000,
+  "baselineConflicts": 0,
+  "vehicleDaysInferred": 15,
+  "tripsWithAssumedVehicle": 333
+}
+[fixture 3s] starting the API on http://localhost:3101
+API listening on http://localhost:3101
+[fixture 4s] running the scenario checks
+ok  new scenario matches the baseline
+ok  retime replaces the trip in the scenario only
+ok  conflict found: Run 101: next trip leaves before it arrives
+ok  one-click fix clears it
+ok  undo and redo
+ok  skip stop: T1 05:00 Redfern to Chatswood now skips North Sydney Station Platform 1, saving 1.3 min (estimated)
+ok  editing after undo discards the redo history
+ok  new trip got a vehicle: New vehicle 1 (added)
+ok  a trip can be put on its own new vehicle
+ok  duplicate and delete
+ok  headway: T1: every 10 min from 10:00 to 12:00 (12 trips, replacing 8); 8 new vehicles, 4 trips on vehicles with spare time
+ok  impact: 158 to 162 trips, 4 to 12 vehicles
+ok  undoing everything returns trips and vehicles to the published numbers
+ok  whole-line frequency: T1: new frequency in 1 time band, both directions (16 trips, replacing 16); 2 new vehicles, 8 trips on vehicles with spare time
+ok  run times by time of day: 36 min in the morning peak, 30 min in the middle of the day
+ok  the way back uses 3 of 3 stops from the other side of the road
+ok  vehicles stay on the drawn path both ways (82 positions checked, furthest 3 m off)
+ok  new line: New line X99: 3 stops, every 20 min from 06:00 to 22:00 (96 trips), following existing bus routes where they run; run times: 4 sections from published trips; end to end 36 min in the morning peak, 30 min at the quietest time; the way back uses the stop across the road at 3 of 3 stops; 4 new vehicles
+ok  undo removes the new line and redo brings it back
+ok  cut short: 333 towards Bondi Rd at Watson St: 2 stops removed on 48 trips, trip times about 4 min shorter. The other direction changed to match: 2 stops removed, 48 trips, trip times about 4 min shorter
+ok  extended: 333 towards Bondi Beach: 2 stops added on 48 trips, trip times about 4 min longer; new path following existing bus routes where they run; run times: 2 sections from published trips; the new stretches take 5 min all day
+ok  vehicles follow the reshaped path (furthest 3 m off)
+ok  stop added: 333 towards Bondi Beach: 1 stop added on 48 trips, trip times about 1 min longer; new path drawn straight between stops; run times: 1 section from the speed of services nearby, 1 section at the typical speed for this mode; the new stretches take 3 min all day
+ok  undo restores the published line and redo reshapes it again

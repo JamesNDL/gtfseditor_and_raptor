@@ -1,0 +1,86 @@
+== Mon, Nov 23, 2026  8:57:10 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 0
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0
+== start 08:57:11 env: 
+
+> test:e2e:fixture
+> node apps/api/test/run-e2e-fixture.mjs
+
+[fixture 0s] creating database gtfs_e2e
+[fixture 0s] importing the test feed
+Using the feed at C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-a6c4cd0548cb98b10\packages\gtfs\test\fixtures\mini-feed (local-mini-feed-062b290cb7)
+Staged agency: 3 rows in 0.1s
+Staged calendar: 1 rows in 0.0s
+Staged calendar_dates: 1 rows in 0.1s
+Staged pathways: 1 rows in 0.1s
+Staged routes: 5 rows in 0.1s
+Staged shapes: 2,268 rows in 0.0s
+Staged stops: 107 rows in 0.1s
+Staged stop_times: 5,572 rows in 0.1s
+Staged trips: 491 rows in 0.1s
+Importing 20260106 ...
+  trips running on the day: 491 rows in 0.0s
+  routes: 5 rows in 0.0s
+  stops: 107 rows in 0.0s
+  stop parents: 24 rows in 0.0s
+  shapes: 10 rows in 0.0s
+  trips: 491 rows in 0.0s
+  stop times: 5,572 rows in 0.1s
+  trip stop sequences: 491 rows in 0.0s
+  trip start, end and terminals: 491 rows in 0.0s
+  trips with no stop times removed: 0 rows in 0.0s
+  patterns: 12 rows in 0.0s
+  trip patterns: 491 rows in 0.0s
+  map lines: 10 rows in 0.0s
+  route trip counts: 5 rows in 0.0s
+  modes calling at each stop: 92 rows in 0.0s
+  modes calling at each station: 13 rows in 0.0s
+  vehicle types seen in the feed: 2 rows in 0.0s
+  trip vehicle types from the feed: 158 rows in 0.0s
+  stay-aboard links: 43 rows in 0.0s
+  pathways: 1 rows in 0.0s
+  platform and wharf overlaps already in the feed: 0 rows in 0.0s
+  vehicle days: 19 (4 from train run numbers, 15 inferred) in 0.1s
+  shapes simplified: 10 shapes, 2,268 points down to 100 in 0.0s
+  pack bus: 288 trips, 0.1 MB in 0.0s
+  pack train: 158 trips, 0.0 MB in 0.0s
+  pack ferry: 45 trips, 0.0 MB in 0.0s
+Baseline 1 ready: Tuesday 6 Jan 2026 in 0s
+{
+  "trips": 491,
+  "patterns": 12,
+  "stopTimes": 5572,
+  "lastArrival": 90780,
+  "vehicleDays": 19,
+  "routesRunning": 5,
+  "firstDeparture": 18000,
+  "baselineConflicts": 0,
+  "vehicleDaysInferred": 15,
+  "tripsWithAssumedVehicle": 333
+}
+[fixture 2s] starting the API on http://localhost:3101
+API listening on http://localhost:3101
+[fixture 3s] running the scenario checks
+file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/apps/api/test/scenarios.e2e.mjs:24
+const before = await get(`/api/routes/${t1.id}`);
+                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at file:///C:/Programming%20Projects/GTFS%20Editor/.claude/worktrees/agent-a6c4cd0548cb98b10/apps/api/test/scenarios.e2e.mjs:24:44
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v26.13.0
+[fixture 4s] the scenario checks failed (code 1)
+[fixture 4s] failed; cleaned up
+== exit=1 end 08:57:16 took 6s
+== Mon, Nov 23, 2026  8:57:17 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 0
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0

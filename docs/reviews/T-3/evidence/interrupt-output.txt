@@ -1,0 +1,34 @@
+== Mon, Nov 23, 2026  8:57:36 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 0
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0
+== 08:57:37 start the runner in the background
+== 08:57:45 the runner is running the checks; stopping it (taskkill, Windows pid 35332)
+SUCCESS: The process with PID 35332 has been terminated.
+ok  vehicles follow the reshaped path (furthest 3 m off)
+ok  stop added: 333 towards Bondi Beach: 1 stop added on 48 trips, trip times about 1 min longer; new path drawn straight between stops; run times: 1 section from the speed of services nearby, 1 section at the typical speed for this mode; the new stretches take 3 min all day
+ok  undo restores the published line and redo reshapes it again
+== Mon, Nov 23, 2026  8:57:48 AM state
+  e2e databases: [gtfs_e2e]
+  listening on 3101: 0
+  temp packs folders: 1
+  temp extracted feeds: 1
+  data/ in checkout: none
+  node processes: 0
+  what holds 3101:
+== 08:57:49 run again straight after
+ok  a stop the scenario added is deleted: Deleted E2E Gone: 48 trips that started or ended there are cut short to the next or previous stop, at the times they already had. Nothing is re-routed and vehicles stay on their trips; the number of vehicles does not change; 4 vehicles now start or end a trip short of there. The scenario has no clashes.
+ok  deletions undone: the scenario is the published timetable again
+all scenario checks passed
+[fixture 132s] passed; cleaned up
+  exit=0
+== Mon, Nov 23, 2026  9:00:02 AM state
+  e2e databases: []
+  listening on 3101: 0
+  temp packs folders: 1
+  temp extracted feeds: 1
+  data/ in checkout: data
+  node processes: 0

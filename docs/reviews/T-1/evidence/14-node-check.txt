@@ -1,0 +1,12 @@
+$ node --check apps/api/src/scenarios.ts
+exit=0
+$ node --check apps/api/src/schedule.ts
+exit=0
+$ node --check apps/api/src/server.ts
+exit=0
+$ node --check apps/api/src/sim-results.ts
+exit=0
+$ node --check apps/api/src/sim.ts
+exit=0
+$ node --check packages/gtfs/src/export-check.ts
+exit=0
