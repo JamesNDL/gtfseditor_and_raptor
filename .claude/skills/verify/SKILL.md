@@ -7,6 +7,7 @@ Work out what changed: `git status --short` and `git diff --name-only master...H
 
 | Changed | Run |
 |---|---|
+| any TS/JS/CSS/JSON | `npm run lint` and `npm run format:check` (lint warnings are not failures, but mention new ones in changed files) |
 | `packages/**` or `apps/api/**` | `npm test` |
 | `apps/web/**` or `packages/core/**` | `npm run typecheck -w @gtfs-editor/web` |
 | `services/router/**` | `npm run router:test` (javac warnings fail the build, so read them) |
