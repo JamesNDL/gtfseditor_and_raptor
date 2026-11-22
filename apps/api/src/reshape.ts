@@ -29,10 +29,10 @@ import {
   ROAD_MODES,
   type Avoid,
   type PathMethod,
-} from './roads.ts';
+} from './routing/roads.ts';
 import { visible, type Scenario } from './scenarios.ts';
 import { stopVisible } from './stops.ts';
-import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
+import { describeTimes, sectionTime, stopDwell, type SectionTime } from './routing/timings.ts';
 import { fail } from './http.ts';
 
 export { ROAD_MODES };

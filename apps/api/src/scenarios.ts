@@ -35,8 +35,8 @@ import {
 } from './reshape.ts';
 import { closureRoutes, editClose } from './closures.ts';
 import { deleteStopRoutes, editDeleteStop } from './delete-stop.ts';
-import { describeMethod, linePath, type PathMethod } from './roads.ts';
-import { describeTimes, sectionTime, stopDwell, type SectionTime } from './timings.ts';
+import { describeMethod, linePath, type PathMethod } from './routing/roads.ts';
+import { describeTimes, sectionTime, stopDwell, type SectionTime } from './routing/timings.ts';
 import {
   bestFree,
   platformChoices,

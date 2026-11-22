@@ -3,7 +3,7 @@
 // "Draw a new line" and "Change route" in the same way as published stops.
 import { distanceM } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { nearestRoad } from './roads.ts';
+import { nearestRoad } from './routing/roads.ts';
 import type { Scenario } from './scenarios.ts';
 import { fail } from './http.ts';
 

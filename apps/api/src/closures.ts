@@ -30,9 +30,9 @@ import {
   type ReshapeDeps,
   type ReshapePlan,
 } from './reshape.ts';
-import { entersAvoid, ROAD_MODES, type Avoid } from './roads.ts';
+import { entersAvoid, ROAD_MODES, type Avoid } from './routing/roads.ts';
 import { scenarioOf, visible, type Scenario } from './scenarios.ts';
-import { trackPath } from './tracks.ts';
+import { trackPath } from './routing/tracks.ts';
 import { fail } from './http.ts';
 
 export interface ClosureDeps extends ReshapeDeps {
