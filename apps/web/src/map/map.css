@@ -1,0 +1,88 @@
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+.map-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  pointer-events: none;
+  z-index: 5;
+  max-width: 260px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------------- modes */
+
+.modes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  width: 190px;
+}
+
+.mode {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 9px;
+}
+
+.mode:hover {
+  background: var(--surface-2);
+}
+
+.mode.off {
+  opacity: 0.42;
+}
+
+.mode-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.mode-name {
+  flex: 1;
+}
+
+.mode-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* map controls sit above the time bar's corner */
+.maplibregl-ctrl-bottom-left {
+  bottom: 8px;
+}
+
+.maplibregl-ctrl-bottom-right {
+  bottom: 90px;
+}
+
+/* The mode list would sit under the timeline on short screens; tuck the map attribution away too. */
+.app.timeline-open .maplibregl-ctrl-bottom-right,
+.app.timeline-open .maplibregl-ctrl-bottom-left {
+  display: none;
+}
+
+/* On a short window the list of modes gives way before the tools do. */
+/* On a short window the scenario panel gives way first, down to its tools; only then does the list of modes. */
+.modes {
+  flex: 0 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+}

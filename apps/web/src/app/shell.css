@@ -1,0 +1,207 @@
+/* ------------------------------------------------------------------ top bar */
+.topbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px 9px 16px;
+}
+
+.brand-name {
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.search {
+  position: relative;
+  width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 11px 14px;
+  outline: none;
+}
+
+.search-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.search-results button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.search-results button:hover {
+  background: var(--surface-2);
+}
+
+.search-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats {
+  margin-left: auto;
+  display: flex;
+  gap: 22px;
+  padding: 8px 18px;
+}
+
+/* ----------------------------------------------------------------- time bar */
+.timebar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 10;
+  transform: translateX(-50%);
+  width: min(1040px, calc(100% - 140px));
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 20px 12px 14px;
+}
+
+.play {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.play:hover {
+  filter: brightness(1.1);
+}
+
+.clock {
+  flex: none;
+  width: 104px;
+  display: flex;
+  flex-direction: column;
+}
+
+.clock-time {
+  font-size: 32px;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.clock-day {
+  font-size: 11px;
+  color: var(--warn);
+  visibility: hidden;
+}
+
+.timeline {
+  flex: 1;
+  min-width: 120px;
+}
+
+.track {
+  position: relative;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.track-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--playhead);
+  box-shadow: 0 0 8px var(--playhead);
+  pointer-events: none;
+}
+
+.ticks {
+  position: relative;
+  height: 15px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.ticks span:first-child {
+  transform: none;
+}
+
+.moving {
+  flex: none;
+  width: 98px;
+  text-align: right;
+}
+
+.moving-count {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.moving-label {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--muted);
+}

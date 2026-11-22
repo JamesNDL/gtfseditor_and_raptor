@@ -29,6 +29,9 @@ import {
 } from '../results.ts';
 import { OUT_OF_DATE, areaText, type SimRun } from '../sim-api.ts';
 import { PatternsTab, PeopleTab, followPeople } from './SimResultsPeople.tsx';
+import './results.css';
+import './results-charts.css';
+import './results-tabs.css';
 
 const TABS: { id: ResultsTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },

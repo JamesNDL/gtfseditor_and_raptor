@@ -9,6 +9,7 @@ import { useStore, type TimelineTab } from '../app/store.ts';
 import { PlatformView } from './PlatformView.tsx';
 import { StringlineView } from './StringlineView.tsx';
 import { VehicleView } from './VehicleView.tsx';
+import './timeline.css';
 
 const TABS: { id: TimelineTab; label: string }[] = [
   { id: 'stringline', label: 'Trip diagram' },

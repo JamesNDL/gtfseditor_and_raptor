@@ -17,6 +17,7 @@ import {
   type SimFolder,
   type SimRun,
 } from '../sim-api.ts';
+import './wizard.css';
 
 /** What was chosen last time, so that repeating a run after an edit is two clicks. */
 interface Remembered {

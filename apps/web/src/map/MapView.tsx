@@ -41,6 +41,7 @@ import {
   vehicleFrames,
   waitingUntil,
 } from '../vehicles/vehicles.ts';
+import './map.css';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 

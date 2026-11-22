@@ -1,0 +1,83 @@
+/* -------------------------------------------------------------------- fleet */
+
+.fleet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fleet-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.fleet-table .n {
+  text-align: right;
+}
+
+.fleet-table tfoot td {
+  padding-top: 10px;
+  border-bottom: 0;
+}
+
+.cell {
+  width: 76px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell.wide {
+  width: 250px;
+  text-align: left;
+}
+
+.cell:hover {
+  border-color: var(--border);
+}
+
+.cell:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+tfoot .cell {
+  border-color: var(--border);
+}
+
+select.cell {
+  width: 110px;
+  background: var(--surface-2);
+}
+
+.tag-button {
+  cursor: pointer;
+  background: none;
+}
+
+.picker {
+  flex: 1;
+  min-width: 120px;
+}
+.fleet-limits-note {
+  color: var(--text);
+}

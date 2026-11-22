@@ -12,6 +12,7 @@ import {
   whoPhrase,
   type SimMapState,
 } from './results.ts';
+import './sim.css';
 
 /** Filled in by the map as it draws, so that the key can say what the widths and sizes stand for. */
 export const mapScale: {

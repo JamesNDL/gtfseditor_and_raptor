@@ -1,0 +1,212 @@
+/* ---------------------------------------------------------------- scenarios */
+.scenario {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The chooser and the tool buttons never scroll out of sight. */
+.scenario-tools {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.scenario-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.scenario {
+  flex: 0 1000 auto;
+  min-height: 168px;
+}
+
+.scenario-head,
+.scenario-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.scenario-hint,
+.scenario-note {
+  margin: 0;
+}
+
+.scenario-delta {
+  font-size: 11px;
+}
+
+.scenario-ripple {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scenario-ripple .speeds {
+  align-self: flex-start;
+}
+
+.conflicts,
+.edits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conflicts li {
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--warn);
+}
+
+.conflict-title {
+  display: flex;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.conflict-title:hover {
+  color: var(--accent);
+}
+
+.conflict-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--on-warn);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 16px;
+  margin-top: 1px;
+}
+
+.fix {
+  margin-top: 6px;
+  white-space: normal;
+}
+
+.edits li {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.edits li.undone {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.scenario-actions {
+  flex-wrap: wrap;
+}
+
+.scenario-actions .grow {
+  white-space: nowrap;
+}
+
+.impact {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.impact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.impact-row:hover {
+  outline: 1px solid var(--accent);
+}
+
+.impact-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-link {
+  text-align: center;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.howto {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+}
+
+/* Managing scenarios, and the run on show. */
+.scenario-manager {
+  width: min(760px, 100%);
+}
+
+.scenario-manager .fleet-scroll {
+  padding: 0 14px 14px;
+}
+
+.scenario-rename {
+  width: 100%;
+}
+
+/* ---------- Asking before a change that adds many vehicles ---------- */
+.edit-confirm {
+  width: min(520px, calc(100vw - 32px));
+  padding: 18px 20px;
+  margin: 18vh auto 0;
+}
+.edit-confirm h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.edit-confirm p {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+.edit-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.export-warning {
+  margin: 6px 0 0;
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}

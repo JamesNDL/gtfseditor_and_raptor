@@ -14,6 +14,7 @@ import {
   type SimFolder,
   type SimRun,
 } from '../sim-api.ts';
+import './library.css';
 
 type Where = 'all' | 'unfiled' | number;
 

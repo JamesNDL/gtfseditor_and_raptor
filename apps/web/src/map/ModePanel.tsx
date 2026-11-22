@@ -1,4 +1,5 @@
 import { useStore } from '../app/store.ts';
+import './map.css';
 
 export function ModePanel() {
   const modes = useStore((s) => s.modes);

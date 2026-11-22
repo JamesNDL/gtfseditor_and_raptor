@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NewStopTool } from '../NewStopTool.tsx';
 import { applyEdit } from '../../scenarios/scenario-client.ts';
 import { useStore } from '../../app/store.ts';
+import '../editing.css';
 
 /** Shown while a new line is being drawn: its settings and the stops picked so far. */
 export function NewLinePanel() {

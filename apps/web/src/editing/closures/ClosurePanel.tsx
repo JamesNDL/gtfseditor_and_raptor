@@ -4,6 +4,7 @@ import { Badge, fmt } from '../../shared/ui/parts.tsx';
 import { togglePart } from '../builder.ts';
 import { applyEdit } from '../../scenarios/scenario-client.ts';
 import { SIDE_COLORS, useStore, type Closing } from '../../app/store.ts';
+import '../editing.css';
 
 type Action =
   'detour' | 'shortened' | 'split' | 'joined' | 'removed' | 'blocked' | 'failed' | 'left';

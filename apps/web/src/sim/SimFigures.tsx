@@ -4,6 +4,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import { useApi, type HourlyRow } from '../shared/api-client.ts';
 import { fmt, Tag, Tile } from '../shared/ui/parts.tsx';
 import { useStore } from '../app/store.ts';
+import './sim.css';
 
 /**
  * The chosen run, if its figures belong on what is on screen: it has finished, and it was made on

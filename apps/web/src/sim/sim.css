@@ -1,0 +1,270 @@
+/* ---------------------------------------------------------------- simulator */
+/* The Simulate panel sits under the scenario panel and gives way before the tools above it do. */
+.sim-panel {
+  flex: 0 2 auto;
+  min-height: 46px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sim-panel.open {
+  flex: 0 1 auto;
+  min-height: 150px;
+}
+
+.sim-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.sim-title {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.sim-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sim-going {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sim-going .grow {
+  min-width: 0;
+}
+
+.sim-progress {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.sim-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.sim-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-summary p {
+  margin: 0;
+}
+
+.sim-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.sim-line span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-person {
+  display: flex;
+  gap: 6px;
+}
+
+.sim-person .day-select {
+  min-width: 0;
+}
+
+.sim-journeys {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sim-limits ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+/* Passenger figures in the line, trip and station panels. */
+.sim-figures h3 .tag {
+  margin-left: 4px;
+}
+
+.sim-hours {
+  height: 72px;
+}
+
+.sim-places {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  border: 1px solid var(--before);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+}
+
+.station-bar.sim-over,
+.sim-load-bar .sim-over {
+  background: var(--warn);
+}
+
+.sim-pair-bars {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.station-bar.sim-off,
+.sim-legend-off {
+  background: var(--before);
+}
+
+.sim-legend-off {
+  border: 0;
+}
+
+.sim-loads {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-loads li {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 70px 34px 78px;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.sim-load-bar {
+  position: relative;
+  height: 8px;
+  background: var(--hairline);
+  border-radius: 2px;
+}
+
+.sim-load-bar span {
+  display: block;
+  height: 100%;
+  background: var(--series-1);
+  border-radius: 2px;
+}
+
+/* Where the vehicle is full. */
+.sim-load-bar i {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text);
+}
+
+.sim-load-n {
+  text-align: right;
+}
+
+/* The key to what the results draw on the map. */
+.map-key {
+  position: absolute;
+  left: 328px;
+  bottom: 118px;
+  z-index: 9;
+  width: 300px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-key .chips {
+  margin: 0;
+}
+
+.map-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-key-row .day-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-key-wrap {
+  gap: 4px 12px;
+}
+
+.map-key-swatches {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.map-key-swatches i {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.app.timeline-open .map-key {
+  display: none;
+}
+
+.map-key-end {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.map-key-end.from {
+  background: #30d5c8;
+}
+
+.map-key-end.to {
+  background: #ff9f0a;
+}
+
+.map-key .check {
+  margin: 0;
+}

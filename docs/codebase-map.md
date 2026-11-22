@@ -38,7 +38,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `src/inspector/` | The right-hand panel: route, trip (with `TripEditTools`), vehicle day, station, delete stop, frequency editor. Its small shared pieces are in `src/shared/ui/parts.tsx`. | `useApi`, `applyEdit` | `Inspector.tsx` | ui-smoke |
 | `src/timeline/` | Canvas charts: trip diagram (`StringlineView`), platforms, vehicles. Dragging is handled in one place, `TimelineCanvas.tsx`. | `/api/patterns/:id/stringline`, `/api/stations/:id/platforms`, `/api/routes/:id/vehicles` | `TimelineCanvas.tsx` | ui-smoke |
 | `src/sim/` | The simulator interface: Simulate pane, `sim-api.ts`, and the results parts other features use (`results.ts` state, `loads.ts` colouring by how full, `SimFigures.tsx` passenger figures, `SimMapKey.tsx`) at the top; `wizard/` (four steps), `library/`, and `results/` (the results window with five tabs) | `/api/sim-*`, `/api/demand*` | `SimPanel.tsx`, `results.ts` | ui-smoke 1b and 18 |
-| `src/app/theme.ts`, `src/app/styles.css` | Light and dark theme: CSS variables under `:root[data-theme='light']`, plus colours for the map and timelines | | | ui-smoke 15 |
+| `src/app/theme.ts`, `src/app/base.css` | Light and dark theme: CSS variables under `:root[data-theme='light']`, plus colours for the map and timelines. `base.css` also holds the resets and the classes many features share; each feature's own styles are in its CSS file beside its components | | | ui-smoke 15 |
 | `test/ui-smoke.mjs` | Headless Edge or Chrome over CDP, about 20 steps through the whole interface | needs `npm run dev` | | n/a |
 
 ### apps/api: HTTP API, edit engine, simulator back end
@@ -113,7 +113,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 - **Map layers:** `apps/web/src/map/MapView.tsx`. Tiles come from `server.ts` `/tiles`.
 - **Vehicle animation:** `apps/web/src/vehicles/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
 - **Timeline dragging:** `apps/web/src/timeline/TimelineCanvas.tsx`.
-- **Theme:** `apps/web/src/app/theme.ts`, and `app/styles.css` line 32.
+- **Theme:** `apps/web/src/app/theme.ts`, and `app/base.css` line 32.
 - **URL deep links and keyboard shortcuts:** `apps/web/src/app/App.tsx`.
 - **How the API talks to the router:** `apps/api/src/sim.ts` (`ensureTimetable`, `drive`, `importResults`).
 - **Router endpoints:** `services/router/router-server/.../RouterServer.java` (around lines 89-106), and `services/router/README.md`.
@@ -138,7 +138,7 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 - **File names.** React components are `PascalCase.tsx`. Everything else is `kebab-case.ts` (`live-stats.ts`, `sim-api.ts`), as in the API and packages already. Older camelCase names (`liveStats.ts`, `simApi.ts`) are renamed when their folder moves.
 - **Tests.** Unit tests sit beside the file they cover as `name.test.ts`. End-to-end tests and fixtures live in the package's `test/` folder (as `apps/api/test/` and `apps/web/test/` do now).
 - **One main thing per file.** A component file exports one component, with small private helpers beside it.
-- **Styles beside their component.** `apps/web/src/app/styles.css` is to be split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component. `base.css` loads first.
+- **Styles beside their component.** `app/base.css` holds the variables, both themes, resets and the classes several features share; each feature has its own CSS file beside its components (e.g. `map/map.css`, `sim/results/results.css`), imported by that feature's top component. `base.css` loads first, from `main.tsx`. Vite emits CSS in import order, so moving an `import './x.css'` line can change which rule wins: `app/shell.css` is the first import in `App.tsx` and `app/left-rail.css` the last, because its rules must come after the timeline and simulator ones.
 - **What may import what:**
   - `shared/` imports nothing from features. `app/` (the shell) is not a feature, and `shared/` may read the app store (`app/store.ts`) but nothing else in `app/`.
   - A feature may import `shared/` and the app store. It imports another feature only through files at the top of that feature's folder, never from its subfolders.
@@ -154,12 +154,13 @@ The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, de
 
 ### apps/web/src (moved)
 
-**Status: files moved (T-7).** Every file is in its folder below. Still to come: `styles.css` sits whole in `app/` until T-8 splits it into `app/base.css` and one CSS file per feature; `send()` has not yet moved from `scenario-client.ts` into `api-client.ts`; the response types move in stage 4; `MapView.tsx` is split in stage 5.
+**Status: files moved (T-7).** Every file is in its folder below. The stylesheet is split (T-8): `app/base.css` plus one CSS file per feature. Still to come: `send()` has not yet moved from `scenario-client.ts` into `api-client.ts`; the response types move in stage 4; `MapView.tsx` is split in stage 5.
 
 ```
 apps/web/src/
   main.tsx
-  app/              the shell: App.tsx, TopBar.tsx, LeftRail.tsx, TimeBar.tsx, store.ts, theme.ts, base.css
+  app/              the shell: App.tsx, TopBar.tsx, LeftRail.tsx, TimeBar.tsx, store.ts, theme.ts, base.css,
+                    shell.css (top bar, time bar), left-rail.css (rail and its panes)
   shared/           used everywhere, owns nothing: api-client.ts (the one fetch wrapper: useApi()
                     and getJson() from today's api.ts, and send() from scenario.ts; the response
                     types go to packages/core/src/api/ in stage 4), clock.ts,
@@ -167,21 +168,23 @@ apps/web/src/
   map/              MapView.tsx (later split into hooks here, stage 5), ModePanel.tsx (show or hide
                     each mode's lines), map.css
   vehicles/         vehicles.ts (animation packs and vehicle positions)
-  scenarios/        scenario.ts → scenario-client.ts, ScenarioPanel.tsx, ScenarioManager.tsx, EditConfirm.tsx
-  editing/          the tools that change the network
+  scenarios/        scenario.ts → scenario-client.ts, ScenarioPanel.tsx, ScenarioManager.tsx, EditConfirm.tsx,
+                    scenarios.css
+  editing/          the tools that change the network; editing.css
     builder.ts      picking stops (shared by new-line and reshape)
     NewStopTool.tsx
     new-line/       NewLinePanel.tsx
     reshape/        ReshapePanel.tsx
     closures/       ClosurePanel.tsx
-  inspector/        as now: RoutePanel, TripPanel, StationPanel, DeleteStop, TripEditTools…
-  catalogue/        FleetPanel.tsx → CataloguePanel.tsx (the vehicle catalogue)
-  timeline/         as now
+  inspector/        as now: RoutePanel, TripPanel, StationPanel, DeleteStop, TripEditTools…, inspector.css
+  catalogue/        FleetPanel.tsx → CataloguePanel.tsx (the vehicle catalogue), catalogue.css
+  timeline/         as now, timeline.css
   sim/
-    sim-api.ts, SimPanel.tsx
-    wizard/         SimWizard.tsx
-    library/        SimLibrary.tsx
-    results/        SimResults.tsx, SimResultsPeople.tsx, SimFigures.tsx, SimMapKey.tsx, results.ts, loads.ts
+    sim-api.ts, SimPanel.tsx, sim.css (Simulate pane, passenger figures, map key)
+    wizard/         SimWizard.tsx, wizard.css
+    library/        SimLibrary.tsx, library.css
+    results/        SimResults.tsx, SimResultsPeople.tsx, SimFigures.tsx, SimMapKey.tsx, results.ts, loads.ts,
+                    results.css (the window), results-charts.css, results-tabs.css (Lines, Patterns, People)
 ```
 
 The web import circles (`store.ts` ↔ `api.ts`, `store.ts` ↔ `scenario.ts`) break here: `store.ts` imports only types, and those move to `packages/core/src/api/` (stage 4) or into the feature folder that owns them.

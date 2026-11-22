@@ -1,0 +1,198 @@
+/* The Lines tab: the table, and the line that is open beside it. */
+.results-lines {
+  display: flex;
+  gap: 18px;
+  min-height: 0;
+  flex: 1;
+}
+
+.results-lines-list {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.results-filters .check {
+  margin: 0;
+}
+
+.results-filters input.grow {
+  min-width: 120px;
+}
+
+.results-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.results-line-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.results-line-table tbody tr {
+  cursor: pointer;
+}
+
+.results-line-table tbody tr:hover,
+.results-line-table tbody tr.on {
+  background: var(--surface-2);
+}
+
+.results-line-table .badge {
+  font-size: 12px;
+}
+
+.results-change {
+  width: 34%;
+}
+
+.results-line-card {
+  flex: 0 0 46%;
+  min-width: 0;
+  overflow-y: auto;
+  padding-left: 18px;
+  border-left: 1px solid var(--hairline);
+}
+
+.results-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-along .results-bar-track {
+  height: 10px;
+}
+
+.results-along .results-bar-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+}
+
+/* With a line open beside it, the table keeps to what fits. */
+.results-lines.with-detail .results-line-table th:last-child,
+.results-lines.with-detail .results-line-table td:last-child {
+  display: none;
+}
+
+.results-scroll {
+  overflow-x: hidden;
+}
+
+/* Travel patterns: rows of label, bar, number and change. */
+.results-compare li,
+.results-compare .results-compare-button {
+  grid-template-columns: 150px 1fr 64px;
+}
+
+.results-compare.compared li,
+.results-compare.compared .results-compare-button {
+  grid-template-columns: 150px 1fr 64px 70px;
+}
+
+.results-compare li:has(> .results-compare-button) {
+  display: block;
+}
+
+.results-compare-button {
+  width: 100%;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.results-compare-button:hover,
+.results-clickable:hover {
+  background: var(--surface-2);
+}
+
+.results-clickable {
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.results-compare .results-bar-share {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.results-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 2px 0 10px;
+}
+
+.results-moves {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.results-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+/* People: the list, and one person's journey before and now beside it. */
+.results-find {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.results-find input {
+  width: 110px;
+}
+
+.results-people-table td:first-child {
+  white-space: nowrap;
+}
+
+.results-lines.with-detail .results-people-table th:last-child,
+.results-lines.with-detail .results-people-table td:last-child {
+  display: table-cell;
+}
+
+.results-journeys {
+  margin: 0;
+}
+
+.results-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+}
+
+.results-swatch.now {
+  background: #ff4fa3;
+}
+
+.results-swatch.before {
+  background: #9aa3ae;
+}

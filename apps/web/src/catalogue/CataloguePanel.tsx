@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApi } from '../shared/api-client.ts';
 import { applyEdit } from '../scenarios/scenario-client.ts';
 import { useStore } from '../app/store.ts';
+import './catalogue.css';
 
 export interface VehicleType {
   id: number;
