@@ -1,6 +1,6 @@
 # Codebase map
 
-Read this first, then only the files it points to. It was last checked against commit `c33fbef` on 22 Nov 2026.
+Read this first, then only the files it points to. It was last checked against commit `c33fbef` on 22 Nov 2026. The conventions and the planned layout were added on 23 Nov 2026 (against `58adcf1`).
 
 A GTFS timetable editor and passenger simulator for NSW. It has a React web app, a Fastify API over Postgres and PostGIS, shared TypeScript packages, and a separate Java journey router and simulator.
 - How the parts fit together: `docs/architecture/system.md`
@@ -127,3 +127,105 @@ Status is **existing** for everything listed unless marked otherwise. Open issue
 - Node runs `.ts` directly: use `.ts` import extensions and erasable syntax only.
 - The router never reads the database. It gets everything from GTFS exports and demand files.
 - Names follow `PLAN.md`'s plain English: line (route), vehicle day, stay-aboard, clash (conflict in code), closure, baseline (one service day).
+
+### Folders, file names and imports
+
+The code is moving to these rules in stages (`docs/refactor-plan.md` stage 2, decision D8 in `docs/architecture/system.md`). Until they move, the files listed above stay where they are and keep their names; new code follows the rules now, and each move PR updates this map.
+
+- **Feature folders.** Code is grouped by the part of the product it belongs to (`scenarios/`, `map/`, `sim/`, `timeline/`…), not by kind (`components/`, `hooks/`, `lib/`, `routes/`). Each feature folder holds its own components, logic, styles and types. `shared/` holds what everything uses and owns nothing. A feature folder that grows past about 10 files gets subfolders by sub-feature (e.g. `sim/results/`), not by kind.
+- **File names.** React components are `PascalCase.tsx`. Everything else is `kebab-case.ts` (`live-stats.ts`, `sim-api.ts`), as in the API and packages already. Older camelCase names (`liveStats.ts`, `simApi.ts`) are renamed when their folder moves.
+- **Tests.** Unit tests sit beside the file they cover as `name.test.ts`. End-to-end tests and fixtures live in the package's `test/` folder (as `apps/api/test/` and `apps/web/test/` do now).
+- **One main thing per file.** A component file exports one component, with small private helpers beside it.
+- **Styles beside their component.** `apps/web/src/styles.css` is to be split into `app/base.css` (variables, themes, resets) and one CSS file per feature, imported by that feature's top component. `base.css` loads first.
+- **What may import what:**
+  - `shared/` imports nothing from features.
+  - A feature may import `shared/` and the app store. It imports another feature only through that feature's main file, not its internals.
+  - In the API, `scenarios/engine.ts` imports no edit kinds. Edit kinds import the engine; the registry imports the edit kinds.
+  - No import circles. oxlint's `import/no-cycle` rule will enforce this once the API circles are broken (stage 3); until then, don't add new ones.
+- **No barrel files** (an `index.ts` that only re-exports), except each package's public entry, such as `packages/core/src/index.ts`. Barrels hide circles and slow Vite's reload.
+- **Shared web and API types** go in `packages/core/src/api/` and are imported by both sides (decision D9; the folder is created in stage 4). Don't hand-copy a response type into the web app.
+- **Folder names use the glossary terms** once `docs/glossary.md` exists.
+
+## Planned layout
+
+**Status: planned, not built.** This is the target from `docs/refactor-plan.md` §2.3–2.5. Files move into it one PR at a time; until a file has moved, the tables above say where it is. `→` means the file is renamed when it moves.
+
+### apps/web/src (planned)
+
+```
+apps/web/src/
+  main.tsx
+  app/              the shell: App.tsx, TopBar.tsx, LeftRail.tsx, TimeBar.tsx, store.ts, theme.ts, base.css
+  shared/           used everywhere, owns nothing: api-client.ts (the one fetch wrapper: useApi()
+                    and getJson() from today's api.ts, and send() from scenario.ts; the response
+                    types go to packages/core/src/api/ in stage 4), clock.ts,
+                    live-stats.ts, ui/ (today's inspector/parts.tsx and other small pieces)
+  map/              MapView.tsx (later split into hooks here, stage 5), ModePanel.tsx (show or hide
+                    each mode's lines), map.css
+  vehicles/         vehicles.ts (animation packs and vehicle positions)
+  scenarios/        scenario.ts → scenario-client.ts, ScenarioPanel.tsx, ScenarioManager.tsx, EditConfirm.tsx
+  editing/          the tools that change the network
+    builder.ts      picking stops (shared by new-line and reshape)
+    NewStopTool.tsx
+    new-line/       NewLinePanel.tsx
+    reshape/        ReshapePanel.tsx
+    closures/       ClosurePanel.tsx
+  inspector/        as now: RoutePanel, TripPanel, StationPanel, DeleteStop, TripEditTools…
+  catalogue/        FleetPanel.tsx → CataloguePanel.tsx (the vehicle catalogue)
+  timeline/         as now
+  sim/
+    sim-api.ts, SimPanel.tsx
+    wizard/         SimWizard.tsx
+    library/        SimLibrary.tsx
+    results/        SimResults.tsx, SimResultsPeople.tsx, SimFigures.tsx, SimMapKey.tsx, results.ts, loads.ts
+```
+
+The web import circles (`store.ts` ↔ `api.ts`, `store.ts` ↔ `scenario.ts`) break here: `store.ts` imports only types, and those move to `packages/core/src/api/` (stage 4) or into the feature folder that owns them.
+
+### apps/api/src (planned)
+
+```
+apps/api/src/
+  server.ts         start-up and plugin wiring only
+  http.ts           fail(), the small number and id parsers (replaces ten copies)
+  network/          routes for the baseline: lines, stops, shapes (moved out of server.ts)
+  routing/          finding paths and run times: roads.ts, tracks.ts, timings.ts
+  scenarios/
+    routes.ts       list, create, rename, delete, undo, redo, the edits endpoint, pack
+    engine.ts       visible(), scenarioOf(), applyEdit(), cloning and removing trips
+    clashes.ts      the clash rules
+    vehicles.ts     assigning vehicles to trips, fleet and day figures
+    stops-visible.ts  stopVisible(), stopDeleted() (from stops.ts)
+    edits/
+      registry.ts   edit kind → its function
+      create-line.ts, line-frequency.ts, reshape.ts, set-vehicle.ts, set-vehicle-type.ts,
+      shift.ts, delete.ts, delete-line.ts, duplicate.ts, skip-stop.ts, headway.ts,
+      add-stop.ts (from stops.ts), delete-stop.ts, closure.ts (from closures.ts),
+      and one file per kind now in schedule.ts
+  catalogue/        the vehicle catalogue routes (today's fleet.ts)
+  export/           export.ts
+  sim/              routes.ts, timetables.ts, runner.ts, router-client.ts, results-import.ts,
+                    results-read.ts (today's sim-results.ts)
+```
+
+The API import circles break when `engine.ts` comes out of `scenarios.ts` (stage 3). Stage 2 moves only the files outside the circle, plus `http.ts`, `network/`, `routing/`, `catalogue/` and `export/`.
+
+### packages (planned)
+
+```
+packages/core/src/
+  index.ts          public entry
+  api/              the shared request and response types (stage 4)
+  time.ts, limits.ts, simplify.ts, pack.ts, waits.ts, vehicle-days.ts
+  edits/            reshape.ts, delete-stop.ts (the pure parts of edit kinds), with tests
+  core.test.ts      split into a test beside each file it covers
+
+packages/gtfs/
+  sql/              schema.sql (later migrations/, stage 6)
+  src/
+    db.ts
+    feed/           feed-cache.ts, unzip.ts, audit.ts, audit-db.ts
+    import/         as now
+    cli/            fetch.ts, import.ts, packs.ts, export-check.ts (the npm scripts point here)
+  test/fixtures/    the small test feed (stage 1.4)
+```

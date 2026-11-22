@@ -18,6 +18,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Times are seconds since the start of the service day and can go past 24:00.
 - Put logic that needs no database in `packages/core`, with unit tests beside it (`*.test.ts`).
 
+## Where code goes
+
+The code is moving to this layout in stages (`docs/refactor-plan.md` stage 2), so older files may not follow it yet. New code should. Details and the target folders are in `docs/codebase-map.md`.
+
+- One folder per part of the product (`scenarios/`, `map/`, `sim/`…), each holding its own components, logic, styles and types, plus `shared/` for what everything uses. Not `components/`, `hooks/` or `lib/`.
+- File names: React components `PascalCase.tsx`; everything else `kebab-case.ts` (not camelCase). Unit tests beside the file as `name.test.ts`; end-to-end tests and fixtures in the package's `test/` folder. Styles go in the feature's own CSS file beside its components, not in `styles.css`.
+- `shared/` imports nothing from a feature. A feature imports another feature only through its main file, never its internals. No import circles.
+- No barrel files (an `index.ts` that only re-exports), except a package's public entry.
+
 ## Commands
 
 - Start: `npm run db:up`, then `npm run dev` (API + web). The router is separate: `npm run router:dev`.

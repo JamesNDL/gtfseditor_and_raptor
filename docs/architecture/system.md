@@ -242,6 +242,8 @@ flowchart LR
 | D5 | before Nov 2026 | Road paths come from an outside OSRM server | Valhalla with OSM in the database (the original plan); OSRM API | Nothing to host yet. A routing server of our own is still planned. |
 | D6 | 22 Nov 2026 | The vehicle catalogue ships with placeholders, and real NSW vehicle types remain the aim | Placeholders as the design; placeholders for now | Owner: the placeholders are as built and the aim stands |
 | D7 | 22 Nov 2026 | Lint with oxlint, not ESLint | ESLint with typescript-eslint; oxlint; Biome | typescript-eslint does not support TypeScript 7 |
+| D8 | 23 Nov 2026 | Organise code by feature folders: one folder per part of the product, plus `shared/`, with the conventions in `CLAUDE.md` and `docs/codebase-map.md` | By kind (`components/`, `hooks/`, `routes/`…); by feature | What changes together lives together, and it matches how `sim/`, `timeline/` and `inspector/` already work. By kind spreads one feature over five folders. Moved to in stages (`docs/refactor-plan.md` stage 2). |
+| D9 | 23 Nov 2026 | Web and API share request and response types written once in `packages/core/src/api/` (A), with a schema library (B) for request bodies later | A: shared types; B: a schema library (such as Zod); C: a client generated from the API | A needs no new library and no build step. B, checking request bodies when the app runs, can be added route by route before hosting. |
 
 ## 11. Issues and discrepancies
 
@@ -306,3 +308,4 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 |---|---|---|
 | 22 Nov 2026 | First version, written from the code as built | No architecture document existed; requested by the owner. No BRD. |
 | 23 Nov 2026 | I2, I3 and I4 fixed and moved to the resolved table (ticket T-4) | Small known issues from section 11 |
+| 23 Nov 2026 | Added D8 (feature folders) and D9 (shared web and API types) | Decisions taken in `docs/refactor-plan.md`; recorded here before files move (ticket T-5) |
