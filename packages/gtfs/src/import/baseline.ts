@@ -23,14 +23,51 @@ export interface ImportedBaseline {
   label: string;
 }
 
+export interface ImportBaselineOptions {
+  /** Allow re-importing a day that has scenarios. Re-importing deletes them (on delete cascade). */
+  replace?: boolean;
+}
+
+function isoDate(date: string): string {
+  if (!/^\d{8}$/.test(date)) throw new Error(`Date must be YYYYMMDD, got ${date}`);
+  return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+}
+
+/** Counts the scenarios on the baseline that importing `date` (YYYYMMDD) from this feed would delete. */
+export async function countScenariosOnDay(sql: Sql, feedId: string, date: string): Promise<number> {
+  const [{ n }] = await sql`
+    select count(*)::int as n from scenarios s join baselines b on b.id = s.baseline_id
+    where b.feed_id = ${feedId} and b.service_date = ${isoDate(date)}`;
+  return n;
+}
+
+/** Thrown when a day with scenarios is re-imported without `replace`. Nothing has been deleted. */
+export class ReplaceRefusedError extends Error {
+  name = 'ReplaceRefusedError';
+}
+
+/** The message given when a day with scenarios is re-imported without --replace. */
+export function replaceRefusal(date: string, scenarios: number): string {
+  const these = scenarios === 1 ? '1 scenario' : `${scenarios} scenarios`;
+  return (
+    `${isoDate(date)} has ${these}. Re-importing the day deletes ${scenarios === 1 ? 'it' : 'them'}. ` +
+    'Run `npm run db:backup` first, then add --replace.'
+  );
+}
+
 export async function importBaseline(
   sql: Sql,
   feed: FeedVersion,
   date: string,
   log: (m: string) => void,
+  options: ImportBaselineOptions = {},
 ): Promise<ImportedBaseline> {
-  if (!/^\d{8}$/.test(date)) throw new Error(`Date must be YYYYMMDD, got ${date}`);
-  const iso = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  const iso = isoDate(date);
+  const scenarios = await countScenariosOnDay(sql, feed.id, date);
+  if (scenarios > 0 && !options.replace) {
+    throw new ReplaceRefusedError(replaceRefusal(date, scenarios));
+  }
+  if (scenarios > 0) log(`  replacing ${iso}: deleting its ${scenarios} scenario(s)`);
   const jsDate = new Date(`${iso}T00:00:00Z`);
   const weekday = WEEKDAYS[jsDate.getUTCDay()];
   const dayType = weekday === 'saturday' || weekday === 'sunday' ? weekday : 'weekday';

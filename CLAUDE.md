@@ -31,6 +31,7 @@ The code is moving to this layout in stages (`docs/refactor-plan.md` stage 2), s
 
 - Start: `npm run db:up`, then `npm run dev` (API + web). The router is separate: `npm run router:dev`.
 - The dev machine is short on memory. Start the dev servers in their own terminal, and don't run several heavy jobs (Gradle, export, dev servers) at once.
+- Back up the whole database with `npm run db:backup` (to `data/backups/`); restore with `npm run db:restore -- <file> --db <name>` (`--yes` to restore into the main one). `npm run import` refuses a day that has scenarios unless given `--replace`, as re-importing deletes them.
 - Unit tests: `npm test`. Single file: `npx vitest run packages/core/src/reshape.test.ts`, and add `-t "name"` for a single test.
 - Typecheck: `npm run typecheck` checks every workspace (web, API, core, gtfs). One workspace: `npm run typecheck -w @gtfs-editor/api`. Shared settings are in `tsconfig.base.json`; the API, core and gtfs also use `tsconfig.node.json`, which fails on imports Node can't run (a missing `.ts` extension, or a type imported without `type`).
 - Lint: `npm run lint` (oxlint, not ESLint: typescript-eslint doesn't support TypeScript 7). Format: `npm run format` / `npm run format:check` (Prettier). A hook formats each file Claude edits. Markdown, SQL and `services/` aren't formatted.

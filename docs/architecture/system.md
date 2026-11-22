@@ -178,7 +178,7 @@ flowchart LR
 ```
 
 - **Feeds** stay in `data/feeds/` until deleted by hand.
-- **Baselines** live until the same date is imported again. That **deletes the baseline and, by cascade, every scenario on it** (open issue I1).
+- **Baselines** live until the same date is imported again. That **deletes the baseline and, by cascade, every scenario on it**, so the importer refuses a day with scenarios unless given `--replace` (I1, resolved).
 - **Sim results** are kept per run. Archiving a run drops its journey and leg partitions.
 - **The router's own zips and snapshots** are pruned when a newer version replaces them. Snapshots of zips loaded by path are never removed.
 - **The whole `data/` folder** is gitignored and about 4 GB.
@@ -251,7 +251,6 @@ flowchart LR
 
 | # | Found | Where | Who acts |
 |---|---|---|---|
-| I1 | Re-importing a service date deletes that baseline and **all its scenarios** by cascade. PLAN.md (lines 105 and 134) calls a baseline an immutable import loaded once. | `packages/gtfs/src/import/baseline.ts:54`, `schema.sql` `on delete cascade` | Owner to decide; a developer if the code changes. Recorded as risk R2. |
 | I5 | The importer writes packs to `data/packs` relative to the working directory and ignores `PACKS_DIR`, which the API reads. | `packages/gtfs/src/import/packs.ts:10,25` versus `apps/api/src/server.ts:19` | Developer: make them agree |
 
 ### Resolved: fixed in the code
@@ -261,6 +260,7 @@ flowchart LR
 | I2 | The file header said "nothing is written", but `buildLinkLoads` deletes from and inserts into `sim_link_loads`. | 23 Nov 2026 | The header of `apps/api/src/sim-results.ts` now says the file reads results and also writes the link loads. |
 | I3 | Undo and redo did not check `editBusy`, so Ctrl+Z during an edit in flight was not refused. | 23 Nov 2026 | `step` in `apps/web/src/scenario.ts` returns at once while `editBusy` is set, as `applyEdit` does, so the button and the keys send nothing until the edit lands. |
 | I4 | Two strings said vehicle types are picked "while editing a scenario". | 23 Nov 2026 | `TripEditTools.tsx` and `FleetPanel.tsx` now say the pickers are there whenever a day is open, and the first change starts a scenario. |
+| I1 | Re-importing a service date deleted that baseline and all its scenarios by cascade, with no warning. | 23 Nov 2026 | The importer refuses a day that has scenarios unless given `--replace`, and says how many it would delete. `npm run db:backup` and `db:restore` back up and restore the whole database. The cascade itself stays. |
 
 ### Resolved: the docs are stale and the code is right (owner, 22 Nov 2026)
 
@@ -292,7 +292,7 @@ Each line below should be corrected in its document when that document is next e
 | # | Risk | Effect | Mitigation |
 |---|---|---|---|
 | R1 | No authentication, an open bind, no upload limit, and coordinates sent to a public server | Fine locally; unsafe once hosted | Must be designed before any deployment (logins, a routing server of our own) |
-| R2 | Re-import cascades and deletes scenarios (I1) | Loss of work | Back up before re-importing; decide I1 |
+| R2 | Re-import cascades and deletes scenarios (I1) | Loss of work | Mitigated: the importer refuses without `--replace`, and `npm run db:backup` takes a whole-database backup first |
 | R3 | Edits cannot be replayed (D3) | A new feed means scenarios cannot be carried over | Design rebasing when it is needed |
 | R4 | The biggest files carry many concerns: `scenarios.ts` (edit engine, eleven edit kinds and the clash rules), `MapView.tsx` (about 2,000 lines) and `styles.css` (about 3,000 lines) | Changes are slow to review and easy to break | See the suggestions given with this document |
 | R5 | The browser downloads all packs (about 53 MB for a weekday) | Slow first load on a poor connection | Load only the modes shown, or load packs by area (PLAN.md lists shrinking the vehicle data) |
@@ -309,3 +309,4 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 22 Nov 2026 | First version, written from the code as built | No architecture document existed; requested by the owner. No BRD. |
 | 23 Nov 2026 | I2, I3 and I4 fixed and moved to the resolved table (ticket T-4) | Small known issues from section 11 |
 | 23 Nov 2026 | Added D8 (feature folders) and D9 (shared web and API types) | Decisions taken in `docs/refactor-plan.md`; recorded here before files move (ticket T-5) |
+| 23 Nov 2026 | I1 resolved; R2 mitigated | Refactor ticket T-2: import guard and backup scripts |
