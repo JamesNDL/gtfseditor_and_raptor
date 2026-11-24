@@ -7,7 +7,8 @@ A GTFS timetable editor and passenger simulator for NSW. It has a React web app,
 - Status and next steps: `PLAN.md`
 - The router: `docs/router-plan.md` and `services/router/README.md`
 - The simulator: `docs/simulator-plan.md`
-- No glossary or BRDs exist yet (`docs/glossary.md` and `docs/brd/` are planned).
+- What the words mean: `docs/glossary.md`
+- Requirements: `docs/brd/` (one per feature), each with its design in `docs/architecture/<same name>.md`. The first is `trustworthy-edits` (BRD 1.1 and its design approved 23 Nov 2026). Its planned files are listed under "Planned for trustworthy-edits" below.
 
 ## Running, building and testing
 
@@ -240,3 +241,21 @@ packages/gtfs/
 ```
 
 **Built (stage 2, T-6)**, except `core/src/api/` (stage 4) and `migrations/` (stage 6).
+
+## Planned for trustworthy-edits
+
+**Status: planned**, not built. From `docs/architecture/trustworthy-edits.md` §4, which has the full list and the reasons. It is built after refactor stages 3 and 6 (decision D10), so the paths below assume `scenarios.ts` has been split.
+
+| Part | Purpose |
+|---|---|
+| `packages/core/src/changes/` | `trip-diff.ts`: compare one trip's old and new calls. `reasons.ts`: the reason codes for estimates (run time source, platform, vehicle, detour, template trip, new end). |
+| `packages/core/src/edits/` (new files) | `ripple.ts` (soak up a delay), `template.ts` (choose a template trip), `overlap.ts` (the one overlap test), `new-ends.ts` (find new ends) |
+| `packages/core/src/api/changes.ts` | Types for the change list routes, shared by the web app and the API |
+| `apps/api/src/scenarios/changes/` | `read.ts` works out an edit's change list from the rows it tagged; `notes.ts` is the note buffer an edit writes reasons into; `routes.ts` has the four `GET /api/scenarios/:id/edits/:seq/changes…` routes; `new-ends.ts` holds the published ends per day |
+| `scenario_edit_notes`, `scenario_route_vehicle_types`, `modes.min_turnaround_secs` | New tables and a new column, added by migrations after stage 6 |
+| `apps/web/src/scenarios/changes/` | The change list: `ChangeList.tsx`, `ChangeTrip.tsx`, `changes-api.ts`, `changes.css` |
+| `apps/web/src/map/use-change-layers.ts` | Draws one edit on the map |
+| `apps/web/src/editing/NewEndsList.tsx` | The new ends list, used by the delete-stop card and the closure panel |
+| `apps/web/src/catalogue/TurnaroundSettings.tsx` | Minimum turnaround per mode |
+
+Rule this work depends on: **an edit changes only rows it made itself**, apart from the tag that removes an earlier row (`docs/architecture/system.md` §5.3, issue I7).

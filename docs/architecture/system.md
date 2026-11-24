@@ -7,7 +7,7 @@
 | Source of truth for | How the parts fit together. Plans and progress stay in `PLAN.md`, `docs/router-plan.md` and `docs/simulator-plan.md`. |
 | Navigation | `docs/codebase-map.md` |
 
-No BRD exists yet (`docs/brd/` is empty), so this document was written from the code, not from requirements. Where the plans and the code disagree, the code is described here and the disagreement is listed in section 11.
+This document was first written from the code, before any BRD existed. Where the plans and the code disagree, the code is described here and the disagreement is listed in section 11. Since then: BRDs live in `docs/brd/`, with one feature architecture document each in `docs/architecture/` (the first is `trustworthy-edits.md`), and the glossary is `docs/glossary.md`.
 
 ## 1. Purpose, scope and users
 
@@ -140,7 +140,7 @@ The router's own modules are `router-core`, `router-gtfs`, `router-sim`, `router
 | Timetable (router) | An exported day loaded into the router's memory under a named id, with a binary snapshot | Router memory, `data/router/snapshots/` | Router |
 | Load state (router) | Passengers aboard per stop time, in memory, at most 8 per timetable | Router memory | Router |
 
-No glossary exists yet (`docs/glossary.md`). The terms above follow the words the code and `PLAN.md` use. The business-analyst skill should turn them into a glossary.
+The terms above follow `docs/glossary.md` (started 23 Nov 2026), which is the place to look for what each one means.
 
 ### 5.2 Times and identifiers
 
@@ -158,6 +158,7 @@ flowchart LR
 
 - A row is **visible** in scenario S at head h if it is a baseline row not hidden by an edit at or before h, or a row of S with `created_edit <= h` that has not been removed by h. This is `visible()` in `apps/api/src/scenarios/scenarios.ts`.
 - **Undo and redo move `head`.** A new edit after an undo deletes every row with `created_edit > head`, so the redo history is gone.
+- **An edit changes only rows it made itself**, apart from the tag that removes an earlier row (`removed_edit`, or a `scenario_removed` row). An edit that needs to change an earlier row copies it first. The change list (D11) depends on this; see I7.
 - Each edit runs in one transaction with `FOR UPDATE` on the scenario. An edit naming a trip that has since been replaced gets **409**. An edit that would add ten or more vehicles is rolled back and answers `needsConfirm`, and the browser resends it with `confirm: true`.
 - **The stored rows are the source of truth.** `scenario_edits` keeps only each edit's kind and summary, so edits cannot be replayed. Rebasing a scenario onto a new feed is future work that will need its own design (decision D3).
 
@@ -244,6 +245,10 @@ flowchart LR
 | D7 | 22 Nov 2026 | Lint with oxlint, not ESLint | ESLint with typescript-eslint; oxlint; Biome | typescript-eslint does not support TypeScript 7 |
 | D8 | 23 Nov 2026 | Organise code by feature folders: one folder per part of the product, plus `shared/`, with the conventions in `CLAUDE.md` and `docs/codebase-map.md` | By kind (`components/`, `hooks/`, `routes/`…); by feature | What changes together lives together, and it matches how `sim/`, `timeline/` and `inspector/` already work. By kind spreads one feature over five folders. Moved to in stages (`docs/refactor-plan.md` stage 2). |
 | D9 | 23 Nov 2026 | Web and API share request and response types written once in `packages/core/src/api/` (A), with a schema library (B) for request bodies later | A: shared types; B: a schema library (such as Zod); C: a client generated from the API | A needs no new library and no build step. B, checking request bodies when the app runs, can be added route by route before hosting. |
+| D10 | 23 Nov 2026 | Refactor stages 3 (split `scenarios.ts`) and 6 (numbered migrations) are done before the work in BRD `trustworthy-edits` | Split first; fixes first then split; build into today's files | That work lands almost entirely in `scenarios.ts`, and it needs schema changes. Details: `docs/architecture/trustworthy-edits.md` §1. |
+| D11 | 23 Nov 2026 | An edit's change list is worked out on read from the rows the edit tagged (`created_edit`, `removed_edit`, `scenario_removed.edit_seq`, `cloned_from`). Only the reasons for estimates are stored (`scenario_edit_notes`). | Worked out on read; a full record at apply time; each edit kind writing its own | Covers every edit kind at once, adds almost no time to edits and stores no copy of the timetable. It depends on the rule in 5.3 that an edit changes only rows it made. |
+| D12 | 23 Nov 2026 | `import --replace` runs as one database transaction; packs are written after the commit | One transaction; build beside the old day and swap | The smallest change, and Postgres keeps showing the old day to readers until the commit |
+| D13 | 23 Nov 2026 | Coding standards gaps become tickets; all new code meets the standards in section 14 now | Tickets with strict new code; record only; fix all first | Fixes land without a week's delay, and the gaps stop growing |
 
 ## 11. Issues and discrepancies
 
@@ -251,7 +256,8 @@ flowchart LR
 
 | # | Found | Where | Who acts |
 |---|---|---|---|
-| — | No open issues. | | |
+| I6 | Coding standards gaps (section 14): no check for unused variables or parameters; 20 uses of `any` and 32 `as never` casts; 28 files over 300 lines and no file length check. Decided by D13. | `tsconfig.base.json`, `.oxlintrc.json`, `apps/*/src`, `packages/*/src` | Project manager (tickets) |
+| I7 | The copy-on-write rule "an edit changes only rows it made, apart from the tag that removes an earlier row" holds in the code sampled but is not enforced or written down in the code. D11 depends on it. | `apps/api/src/scenarios/` | Developer (a check for every edit kind, BRD `trustworthy-edits` step 3) |
 
 ### Resolved: fixed in the code
 
@@ -313,3 +319,37 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | I1 resolved; R2 mitigated | Refactor ticket T-2: import guard and backup scripts |
 | 23 Nov 2026 | I5 resolved: the importer honours `PACKS_DIR`. The importer also takes a feed on disk (`FEED_PATH`), and `npm run test:e2e:fixture` runs the scenario e2e suite on a small test feed. | Ticket T-3: e2e tests without the real data or the dev servers. |
 | 23 Nov 2026 | File paths updated for the feature-folder moves | Stage 2 of `docs/refactor-plan.md` (tickets T-6, T-7) |
+| 23 Nov 2026 | Added D10 to D13, the copy-on-write rule in 5.3, issues I6 and I7, and section 14 (project structure and coding standards); pointed to the glossary and BRDs | Design of BRD `trustworthy-edits` v1.0 (`docs/architecture/trustworthy-edits.md`) |
+
+## 14. Project structure and coding standards
+
+This section is placed last so that the section numbers other documents cite stay as they are.
+
+**Folder layout and rules.** The layout is by feature (D8). The target tree, the folder rules, the naming rules and what may import what are in `docs/codebase-map.md` ("Conventions that decide where code goes" and "Planned layout"); that is the single copy, kept current with every move. In short:
+- one folder per part of the product, plus `shared/` (web) for what everything uses;
+- a folder over about 10 to 15 files gets subfolders by sub-feature;
+- no catch-all `utils`, `helpers`, `misc` or `common` folders;
+- tests beside the file (`name.test.ts`), end-to-end tests in each package's `test/`;
+- scripts are npm scripts that point at `packages/gtfs/src/cli/` or a package's `test/`, not loose files at the root.
+
+**Where new things go.**
+
+| If you are adding… | Put it in… |
+|---|---|
+| Logic with no database or IO | `packages/core/src/<area>/`, with a `.test.ts` beside it |
+| A type shared by the web app and the API | `packages/core/src/api/` (D9) |
+| An edit kind | `apps/api/src/scenarios/edits/<kind>.ts` and one line in the registry (after stage 3) |
+| A clash rule | `apps/api/src/scenarios/clashes.ts` |
+| An API route | the `routes.ts` of its feature folder under `apps/api/src/` |
+| A schema change | a new numbered file in `packages/gtfs/sql/migrations/` (after stage 6) |
+| A panel or component | its feature folder in `apps/web/src/`, with its CSS beside it |
+| A map layer | a hook `apps/web/src/map/use-<thing>-layers.ts` called from `MapView.tsx` |
+| A CLI | `packages/gtfs/src/cli/`, with an npm script |
+
+**The four standards.** Use whichever is stricter of these and the project's own rules.
+1. **Folders by purpose**, as above. Checked by review against `docs/codebase-map.md`; there is no automatic check.
+2. **Short files.** Aim for under about 200 lines; over 300 is too long and is split by responsibility. Exempt: `schema.sql` and migrations, generated files, lock files and large fixture data. Not enforced yet: there are 28 files over 300 lines (I6), shrinking under refactor stages 3 and 5.
+3. **Strong typing, no `any`.** TypeScript `strict` is on (`tsconfig.base.json`), and `tsconfig.node.json` also rejects imports Node can't run. `any`, `as never` and unexplained casts are not allowed in new code, and request bodies get real types (D9). Not enforced yet: 20 uses of `any` and 32 `as never` (I6). Java compiles with `-Xlint:all -Werror`.
+4. **No unused code.** No unused imports, variables, parameters, functions, files or dependencies, and no commented-out code. Not enforced yet: `noUnusedLocals` and `noUnusedParameters` are off, and oxlint runs only its correctness rules (I6).
+
+**Commands that check them:** `npm run typecheck`, `npm run lint`, `npm run format:check`, and `/verify` before each commit. Per D13, the tickets for I6 add `noUnusedLocals`, `noUnusedParameters`, oxlint's `no-explicit-any` and a file length check to these.
