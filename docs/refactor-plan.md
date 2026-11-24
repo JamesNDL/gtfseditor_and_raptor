@@ -153,7 +153,7 @@ packages/core/src/
   core.test.ts      split into a test beside each file it covers
 
 packages/gtfs/
-  sql/              schema.sql (later migrations/, stage 6)
+  sql/migrations/   0001_initial.sql, then one numbered file per schema change (stage 6)
   src/
     db.ts
     feed/           feed-cache.ts, unzip.ts, audit.ts, audit-db.ts

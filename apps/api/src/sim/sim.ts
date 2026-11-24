@@ -33,7 +33,7 @@ const DEMAND_DIR =
 /** Whether the router reads files where this API wrote them. Set to 0 when it runs on another machine. */
 const SHARED_FILES = process.env.ROUTER_SHARES_FILES !== '0';
 
-/** A run's state, as schema.sql lists them for sim_runs.state. */
+/** A run's state, as migrations/0001_initial.sql lists them for sim_runs.state. */
 type RunState = 'queued' | 'preparing' | 'running' | 'importing' | 'done' | 'failed' | 'stopped';
 
 const ACTIVE: readonly RunState[] = ['queued', 'preparing', 'running', 'importing'];
