@@ -126,6 +126,8 @@ export interface AnalysisDetail extends AnalysisListItem {
 
 /** A stop a ride is boarded or left at, and when. */
 export interface StoredStop {
+  /** The stop's GTFS id; missing in analyses run before ids were kept (D39). */
+  stop?: string;
   name: string;
   lat: number;
   lon: number;
@@ -142,6 +144,8 @@ export interface StoredWalkLeg {
 /** A ride in a stored journey, on a line (`route`) of a mode. */
 export interface StoredRideLeg {
   type: 'ride';
+  /** The trip's GTFS id; missing in analyses run before ids were kept (D39). */
+  trip?: string;
   route: string;
   mode: string;
   board: StoredStop;
@@ -152,6 +156,21 @@ export interface StoredRideLeg {
 
 /** One leg of a pair's journey, kept when the analysis runs, without the stops passed (D30). */
 export type StoredLeg = StoredWalkLeg | StoredRideLeg;
+
+/**
+ * Where a ride's path on the map came from (D39): the trip's shape, its stops in order (a trip
+ * with no shape, or a shape far from its stops), or a straight line when no trip was found.
+ */
+export type RidePathFrom = 'shape' | 'stops' | 'straight';
+
+/** A ride as the picked sample point gives it: the stored ride and its path on the map (D39). */
+export interface PointRideLeg extends StoredRideLeg {
+  path: GeoJsonPosition[];
+  pathFrom: RidePathFrom;
+}
+
+/** One leg of the picked sample point's journey. */
+export type PointLeg = StoredWalkLeg | PointRideLeg;
 
 /** One pair: a sample point and a point of interest, as shown when it is picked (FR-15). */
 export interface PointDetail {
@@ -165,7 +184,8 @@ export interface PointDetail {
   status: PairStatus;
   /** The public transport time and how it splits up; null when there is no journey. */
   pt: PtSplit | null;
-  legs: StoredLeg[] | null;
+  /** The stored legs, each ride with its path; null when there is no journey. */
+  legs: PointLeg[] | null;
   /** The free-flow drive; null when there is no road. */
   driveSecs: number | null;
   driveMetres: number | null;

@@ -1,6 +1,7 @@
-// The picked sample point on the results map (FR-15, D30; docs/architecture/access-analysis.md
-// §5.2): a ring round the point, its public transport journey as straight lines between leg ends
-// (rides in their mode colour and labelled with the line, walks dotted) and the car path dashed.
+// The picked sample point on the results map (FR-15, D30, D39; docs/architecture/
+// access-analysis.md §5.2): a ring round the point, its public transport journey (rides along the
+// vehicle's path in their mode colour and labelled with the line, walks dotted and straight) and
+// the car path dashed.
 // Drawn above the other results layers (use-analysis-result-layers.ts), which call this hook.
 // Sources and layers start with 'aa-'.
 import type * as maplibregl from 'maplibre-gl';
@@ -48,7 +49,7 @@ const LAYERS: maplibregl.AddLayerObject[] = [
     type: 'line',
     source: JOURNEY,
     filter: kind('ride'),
-    layout: { 'line-cap': 'round' },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#ffffff', 'line-width': 7 },
   },
   {
@@ -56,7 +57,7 @@ const LAYERS: maplibregl.AddLayerObject[] = [
     type: 'line',
     source: JOURNEY,
     filter: kind('ride'),
-    layout: { 'line-cap': 'round' },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': ['get', 'colour'], 'line-width': 4 },
   },
   {

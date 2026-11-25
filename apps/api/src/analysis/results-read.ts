@@ -19,6 +19,9 @@ import { fail, notFound } from '../http.ts';
 /** A finished analysis, as the reads need it. */
 export interface FinishedAnalysis {
   id: number;
+  /** The timetable it ran on: its day (null once deleted) and its scenario, if any (D39). */
+  baselineId: number | null;
+  scenarioId: number | null;
   settings: AnalysisSettings;
   /** The copied zone's outline, closed (the first corner repeated at the end). */
   ring: GeoJsonPosition[];
@@ -50,13 +53,21 @@ export const NOT_FINISHED = 'This analysis has not finished, so it has no result
 /** The analysis, if it is done: a 404 when there is none, a 409 when it has not finished. */
 export async function finishedAnalysis(sql: Sql, id: number): Promise<FinishedAnalysis> {
   const [row] = await sql<
-    { state: AnalysisState; settings: AnalysisSettings; rings: GeoJsonPosition[][] }[]
+    {
+      state: AnalysisState;
+      baselineId: number | null;
+      scenarioId: number | null;
+      settings: AnalysisSettings;
+      rings: GeoJsonPosition[][];
+    }[]
   >`
-    select state, settings, (st_asgeojson(zone_geom, 15)::json -> 'coordinates') as rings
+    select state, baseline_id as "baselineId", scenario_id as "scenarioId", settings,
+           (st_asgeojson(zone_geom, 15)::json -> 'coordinates') as rings
     from analyses where id = ${id}`;
   if (!row) throw notFound('Analysis');
   if (row.state !== 'done') throw fail(409, NOT_FINISHED);
-  return { id, settings: row.settings, ring: row.rings[0] };
+  const { baselineId, scenarioId, settings } = row;
+  return { id, baselineId, scenarioId, settings, ring: row.rings[0] };
 }
 
 /** Where one of the analysis's points of interest is; a 404 when it has no such one. */

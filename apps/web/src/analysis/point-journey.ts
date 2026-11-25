@@ -1,7 +1,8 @@
-// One sample point's journey as the map draws it (FR-15, D30; docs/architecture/access-analysis.md
-// §5.2): the stored legs keep no path, so walks and rides are straight lines from end to end. A
-// ride runs from where it boards to where it alights; walks join the sample point, the stops and
-// the point of interest. The car path is the road router's, as the API gives it.
+// One sample point's journey as the map draws it (FR-15, D30, D39; docs/architecture/
+// access-analysis.md §5.2): each ride along the path the API gives it, the vehicle's own path cut
+// between the two stops (a straight line only when its trip could not be found); walks as straight
+// lines joining the sample point, the stops and the point of interest, as the router's walks are
+// straight (A1). The car path is the road router's, as the API gives it.
 import type { GeoJsonPosition, PointDetail } from '@gtfs-editor/core';
 import type { Mode } from '../shared/api-client.ts';
 
@@ -48,7 +49,7 @@ export function journeyPieces(
 ): JourneyPiece[] {
   const pieces: JourneyPiece[] = [];
   if (detail.legs !== null) {
-    // Walks are drawn as what joins one ride's end to the next ride's start, as their own legs
+    // Walks are drawn as what joins one ride's stop to the next ride's stop, as their own legs
     // carry no places; a change at the same stop draws nothing.
     let at: GeoJsonPosition = [detail.lon, detail.lat];
     for (const leg of detail.legs) {
@@ -60,7 +61,7 @@ export function journeyPieces(
         kind: 'ride',
         colour: look(leg.mode).colour,
         label: leg.route,
-        line: [board, alight],
+        line: leg.path.length > 1 ? leg.path : [board, alight],
       });
       at = alight;
     }
