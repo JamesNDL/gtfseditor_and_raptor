@@ -61,4 +61,22 @@ describe('readMigrations', () => {
     expect(migrations[0]?.name).toBe('0001_initial');
     expect(migrations[0]?.sql).toContain('create table if not exists baselines');
   });
+
+  // AA-11 (FR-4, FR-5, FR-16, D24): the access analysis tables, numbered 0010 so that 0002 to
+  // 0009 stay free for trustworthy-edits.
+  it('finds 0010_access_analysis in the real folder, making the six tables', async () => {
+    const migrations = await readMigrations(MIGRATIONS_DIR);
+    const analysis = migrations.find((m) => m.version === '0010');
+    expect(analysis?.name).toBe('0010_access_analysis');
+    for (const table of [
+      'analysis_zones',
+      'points_of_interest',
+      'analyses',
+      'analysis_pois',
+      'analysis_points',
+      'analysis_results',
+    ]) {
+      expect(analysis?.sql).toContain(`create table if not exists ${table} (`);
+    }
+  });
 });
