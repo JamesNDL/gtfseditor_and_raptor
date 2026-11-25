@@ -124,6 +124,7 @@ try {
   await refused({ poiIds: [] }, 400, 'point of interest', 'no points of interest');
   await refused({ settings: { maxWalkM: 50 } }, 400, 'The longest walk', 'walk out of range');
   await refused({ settings: { maxWalkM: 'far' } }, 400, 'maxWalkM', 'walk not a number');
+  await refused({ settings: { modes: ['bus', 'spaceship'] } }, 400, 'spaceship', 'unknown mode');
   await refused({ zoneId: 999_999 }, 404, 'Zone not found', 'no such zone');
   await refused({ poiIds: [poiIds[0], 999_999] }, 404, 'Point of interest not found', 'no poi');
   await refused({ baselineId: 999_999 }, 404, 'Day not found', 'no such day');

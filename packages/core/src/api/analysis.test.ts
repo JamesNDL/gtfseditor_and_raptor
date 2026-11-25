@@ -71,6 +71,9 @@ describe('access analysis shared types', () => {
     expectTypeOf<AnalysisListItem['state']>().toEqualTypeOf<AnalysisState>();
     expectTypeOf<AnalysisDetail['pois'][number]['seq']>().toEqualTypeOf<number>();
     expectTypeOf<AnalysisDetail['pois'][number]['summary']>().toEqualTypeOf<PoiSummary | null>();
+    // The open band ends go over the wire as null (JSON has no infinity).
+    expectTypeOf<PoiSummary['bands'][number]['from']>().toEqualTypeOf<number | null>();
+    expectTypeOf<PoiSummary['bands'][number]['to']>().toEqualTypeOf<number | null>();
     expectTypeOf<AnalysisDetail['zone']['ring']>().toEqualTypeOf<[number, number][]>();
     expectTypeOf<NonNullable<AnalysisDetail['progress']>['stage']>().toEqualTypeOf<
       'timetable' | 'drives' | 'journeys'

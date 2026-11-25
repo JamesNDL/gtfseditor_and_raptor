@@ -1,10 +1,9 @@
 // AA-20 (FR-14, FR-19, FR-20): what the results screen and the legend say: the band ranges, the
 // settings line, 'Lines at' checked by the same rules as the API, and the summary table, whose
 // counts add up to the sample points.
-import { DEFAULT_ANALYSIS_SETTINGS } from '@gtfs-editor/core';
+import { DEFAULT_ANALYSIS_SETTINGS, type PoiSummary } from '@gtfs-editor/core';
 import { describe, expect, it } from 'vitest';
 import { bandColours } from '../analysis-colours.ts';
-import type { ShownSummary } from '../analysis-results.ts';
 import {
   OSM_CREDIT,
   bandLabel,
@@ -89,8 +88,8 @@ describe('readBreaks: Lines at (AC-FR-14.1)', () => {
 });
 
 describe('summaryRows and ratioText (AC-FR-20.1)', () => {
-  // As JSON brings it: the open band ends are null.
-  const summary: ShownSummary = {
+  // The open band ends are null, in core and over the wire alike.
+  const summary: PoiSummary = {
     bands: [
       { from: null, to: 1, label: '<1', count: 2 },
       { from: 1, to: 2, label: '1-2', count: 5 },

@@ -138,6 +138,18 @@ describe('csvOf', () => {
     );
   });
 
+  it('puts a quote mark before a name a spreadsheet would take as a formula', () => {
+    const nameCellOf = (poiName: string): string | undefined =>
+      csvOf([exportRowOf({ ...okPair, poiName }, DEFAULT_ANALYSIS_SETTINGS)])
+        .split('\r\n')[1]
+        ?.split(',')[4];
+    expect(nameCellOf('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
+    expect(nameCellOf('+61 shop')).toBe("'+61 shop");
+    expect(nameCellOf('-1 Main St')).toBe("'-1 Main St");
+    expect(nameCellOf('@home')).toBe("'@home");
+    expect(nameCellOf('Town hall = centre')).toBe('Town hall = centre');
+  });
+
   it('gives just the header when there are no rows', () => {
     expect(csvOf([])).toBe(`${EXPORT_COLUMNS.join(',')}\r\n`);
   });

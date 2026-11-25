@@ -12,8 +12,8 @@ describe('summarise', () => {
   it('labels one band below the first line, one between each pair, and one above the last', () => {
     const { bands } = summarise([], BREAKS);
     expect(bands.map((b) => b.label)).toEqual(['<1', '1-1.5', '1.5-2', '2-3', '3-4', '4 or more']);
-    expect(bands[0]).toEqual({ from: -Infinity, to: 1, label: '<1', count: 0 });
-    expect(bands[5]).toEqual({ from: 4, to: Infinity, label: '4 or more', count: 0 });
+    expect(bands[0]).toEqual({ from: null, to: 1, label: '<1', count: 0 });
+    expect(bands[5]).toEqual({ from: 4, to: null, label: '4 or more', count: 0 });
   });
 
   it('puts a ratio on a line in the band above it', () => {

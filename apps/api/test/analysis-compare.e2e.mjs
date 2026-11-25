@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import postgres from 'postgres';
 import { compareRatios } from '../../../packages/core/src/analysis/compare.ts';
+import { analysisRunner } from '../src/analysis/runner.ts';
 import { checkExports } from './analysis-export-checks.mjs';
 import {
   FAKE_ROUTER,
@@ -148,6 +149,17 @@ try {
     assert.equal((await send('GET', `/api/analyses/compare?${query}`)).status, status, query);
   }
   step('AC 2 other spacing, zone outline or point of interest, or not finished: 409 with why');
+
+  // ---- a cancel that loses the race with the end of the run (review F-2) -----------------------
+  // The route checks the state first; if the run finishes before the runner's cancel, the runner
+  // must leave the done analysis and its results alone.
+  const resultsOf = async (id) =>
+    (await db`select count(*)::int as n from analysis_results where analysis_id = ${id}`)[0].n;
+  const kept = await resultsOf(a.id);
+  await analysisRunner(db, () => {}).cancel(a.id);
+  assert.equal(await resultsOf(a.id), kept, 'a late cancel keeps a done analysis its results');
+  assert.equal((await get(`/api/analyses/${a.id}`)).state, 'done', 'and it stays done');
+  step('F-2 a cancel that comes after the run has finished changes nothing');
 
   // ---- the list marks what can be compared (AC 4) ----------------------------------------------
   const listed = await get(`/api/analyses?baseline=${places.body.baselineId}`);
