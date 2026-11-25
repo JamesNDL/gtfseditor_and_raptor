@@ -8,6 +8,7 @@ import gtfseditor.router.road.GraphHopperRoads;
 import gtfseditor.router.road.LatLon;
 import gtfseditor.router.road.RoadGraphBuilder;
 import gtfseditor.router.road.RoadRoute;
+import gtfseditor.router.road.RoadRouter;
 import gtfseditor.router.road.RoadSettings;
 import gtfseditor.router.road.RoadTable;
 import gtfseditor.router.road.Snapped;
@@ -107,6 +108,19 @@ final class RoadApi implements AutoCloseable {
         return road.put("mode", mode.wireName());
     }
 
+    /**
+     * The road router, for the OSRM-shaped endpoints ({@link OsrmApi}) as well as these.
+     *
+     * @throws ApiException 503 when road routing is off
+     */
+    RoadRouter router() {
+        if (roads == null) {
+            throw new ApiException(503, "road routing is off on this router (" + Settings.ROAD_VARIABLE + " is "
+                    + mode.wireName() + ", road graph " + graph + ")");
+        }
+        return roads;
+    }
+
     @Override
     public void close() {
         if (roads != null) {
@@ -173,10 +187,7 @@ final class RoadApi implements AutoCloseable {
      * (or left out).
      */
     private JsonNode request(Context ctx) throws IOException {
-        if (roads == null) {
-            throw new ApiException(503, "road routing is off on this router (" + Settings.ROAD_VARIABLE + " is "
-                    + mode.wireName() + ", road graph " + graph + ")");
-        }
+        router();
         JsonNode body = mapper.readTree(ctx.body());
         if (body == null || !body.isObject()) {
             throw ApiException.bad("the request must be a JSON object");

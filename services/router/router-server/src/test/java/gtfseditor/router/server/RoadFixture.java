@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * The road tests' shared parts: the hand-made map (router-road's {@code mini-roads.osm}, near
@@ -40,6 +41,22 @@ final class RoadFixture {
 
     static String point(double lat, double lon) {
         return "{\"lat\": " + lat + ", \"lon\": " + lon + "}";
+    }
+
+    /** The island's corner as OSRM writes a point: {@code lon,lat}, six places, as roads.ts sends it. */
+    static final String OSRM_ISLAND = osrmPoint(-32.9160, 151.73600);
+
+    /** The point far from any road, as OSRM writes it. */
+    static final String OSRM_FAR_FROM_ROADS = osrmPoint(-32.8910, 151.73750);
+
+    /** The street corner at this row and column of the grid, as OSRM writes a point. */
+    static String osrmCorner(int row, int column) {
+        return osrmPoint(ROW_LAT[row], COLUMN_LON[column]);
+    }
+
+    /** A point as OSRM writes it, {@code lon,lat} (longitude first), to six places as roads.ts does. */
+    static String osrmPoint(double lat, double lon) {
+        return String.format(Locale.ROOT, "%.6f,%.6f", lon, lat);
     }
 
     /** Builds the test map into {@code folder}/graph, keeping every network, and gives the folder. */
