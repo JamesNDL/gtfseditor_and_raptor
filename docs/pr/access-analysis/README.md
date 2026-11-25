@@ -29,3 +29,10 @@ Taken by `npm run test:access -- --fixture` (the small test feed over central Sy
 ## Rides along their vehicles' paths (D39)
 
 - `15-ride-follows-route.png`: taken on 26 Nov 2026 by `npm run test:access -- --fixture` (the small test feed and the fake router, told to ride a real bus of the feed). Sample point 32 near Town Hall to North Sydney: walk 3 min, Bus 333 from Elizabeth St near Hunter St to Oxford St at Taylor Square (10 min), walk 3 min. The bus is drawn along its own path, down Elizabeth St and out along Oxford St, through its bends, not as one straight line; the walks stay dotted straight lines. Before this change the same ride was a straight line from Hunter St to Taylor Square.
+
+## Arrive-by (D40)
+
+Taken on 26 Nov 2026 by `npm run test:access -- --fixture` (the small test feed and the fake router, which rides the same real 333 bus as `15`, reaching Taylor Square at 08:14), on the branch `feature/aa-arrive-by-app`. After the depart-at run, the check makes a second analysis of the same zone and points of interest with the switch on Arrive by, at 09:00.
+
+- `16-arrive-by-setup.png`: the setup with the "Depart at / Arrive by" switch above the time box, Arrive by lit; the box is named "Arrive-by time" and holds 09:00, and the note on traffic factors says the factor is for the part of the day the arrive-by time falls in (the morning peak).
+- `17-arrive-by-point.png`: sample point 32 to North Sydney, arriving by 09:00. Public transport 60 min: the time split shows walk 5 min, wait under 1 min, ride 10 min and a violet "Early wait 46 min"; the journey list ends "Arrive 08:14, 46 min before 09:00". The heading and the legend's settings line say "Arrive by 09:00". The fake router has only that one bus, so every point waits long; on real data the early wait is the gap to the last service in time.
