@@ -6,3 +6,7 @@ export * from './time.ts';
 export * from './edits/reshape.ts';
 export * from './limits.ts';
 export * from './edits/delete-stop.ts';
+export * from './analysis/local-metres.ts';
+export * from './analysis/polygon.ts';
+export * from './analysis/grid.ts';
+export * from './analysis/limits.ts';
