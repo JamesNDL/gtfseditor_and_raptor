@@ -1,5 +1,7 @@
 /**
- * Road routing (driving and walking) behind a small interface. Empty until phase 6 of
- * docs/router-plan.md.
+ * Road routing for cars behind a small interface ({@link gtfseditor.router.road.RoadRouter}),
+ * done with GraphHopper (decision D14). {@link gtfseditor.router.road.RoadGraphBuilder} builds a
+ * graph folder from OpenStreetMap; {@link gtfseditor.router.road.GraphHopperRoads} plans drives on
+ * it. Nothing outside this module depends on GraphHopper.
  */
 package gtfseditor.router.road;
