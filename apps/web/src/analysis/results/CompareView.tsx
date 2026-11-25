@@ -15,8 +15,8 @@ import {
   stopComparing,
   useComparison,
 } from '../analysis-compare.ts';
-import { timetableText } from '../analysis-state.ts';
-import { compareRows, compareTotal, type CompareRow } from './compare-text.ts';
+import { timetableTimeText } from '../analysis-state.ts';
+import { compareRows, compareTotal, timeModeNote, type CompareRow } from './compare-text.ts';
 import './compare-export.css';
 
 /** Compares with the analysis picked, or stops comparing when none is. */
@@ -34,6 +34,9 @@ export function CompareView({ detail, poiSeq }: { detail: AnalysisDetail; poiSeq
   const others = comparableAnalyses(items, detail.id);
   const poiId = savedPoiId(detail, poiSeq);
   const other = items.find((item) => item.id === compareWith);
+  // AC-FR-21.3: an arrive-by and a depart-at analysis may be compared, but not as if alike.
+  const own = items.find((item) => item.id === detail.id);
+  const note = own && other ? timeModeNote(own, other) : null;
 
   useEffect(() => {
     if (compareWith === null) return;
@@ -58,7 +61,7 @@ export function CompareView({ detail, poiSeq }: { detail: AnalysisDetail; poiSeq
             <option value="">Choose an analysis…</option>
             {others.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name} · {timetableText(item)}
+                {item.name} · {timetableTimeText(item)}
               </option>
             ))}
           </select>
@@ -87,6 +90,7 @@ export function CompareView({ detail, poiSeq }: { detail: AnalysisDetail; poiSeq
               How {other?.name ?? 'the other analysis'} differs from {detail.name}. A lower access
               ratio is better.
             </p>
+            {note && <p className="analysis-compare-note small">{note}</p>}
             <CompareCounts rows={compareRows(result.counts)} total={compareTotal(result.counts)} />
           </>
         ) : (

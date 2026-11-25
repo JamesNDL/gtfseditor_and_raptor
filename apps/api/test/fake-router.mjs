@@ -6,6 +6,10 @@
 // The answers, for a straight distance d metres between the two ends:
 //   journeys  depart = asked + 240 s; walk 150 s, ride d / 6 s on line 'F1', walk 150 s.
 //             noJourney when round(lat * 1e4) of the from point is a multiple of 7.
+//   arriveBy  (a query with arriveBy in place of depart, D38) the same journey, timed to arrive at
+//             the last 10-minute mark of the day at least 150 s before arriveBy, plus the 150 s
+//             walk: arriving by 10:00 arrives 09:52:30, earlyWait 450 s. With a fixed ride (below),
+//             the ride as it is; noJourney when it arrives after arriveBy.
 //   road      seconds = d * 1.3 / 12, metres = d * 1.3. A table row is null when round(lon * 1e4)
 //             of its source is a multiple of 11 (that source has no road). A route is two points.
 //   timetables 404 until a PUT, then ready with the version asked for.
@@ -58,11 +62,25 @@ function madeUpRide(from, to, depart) {
   };
 }
 
+/** The made-up ride for an arrive-by query: it reaches `to` on a 10-minute mark (see the top). */
+function madeUpRideBy(from, to, arriveBy) {
+  const alightAt = Math.floor((arriveBy - 150) / 600) * 600;
+  const rideSecs = Math.round(metresBetween(from, to) / 6);
+  return madeUpRide(from, to, alightAt - rideSecs - 240 - 150);
+}
+
+const NOT_IN_TIME = 'Nothing gets there by that time on this service day.';
+
 /** One line of a bulk answer for one query, riding `fixedRide` when it is given. */
 function journeyLine(query, fixedRide) {
-  const { id, from, to, depart } = query;
+  const { id, from, to, depart, arriveBy } = query;
   if (multipleOf(from.lat, 7)) return { id, status: 'noJourney', reason: 'No journey was found' };
-  const ride = fixedRide ?? madeUpRide(from, to, depart);
+  const timedBy = arriveBy !== undefined;
+  const ride =
+    fixedRide ?? (timedBy ? madeUpRideBy(from, to, arriveBy) : madeUpRide(from, to, depart));
+  if (timedBy && ride.alight.time + 150 > arriveBy) {
+    return { id, status: 'noJourney', reason: NOT_IN_TIME, arriveBy };
+  }
   const boardAt = ride.board.time;
   const alightAt = ride.alight.time;
   const start = boardAt - 150;
@@ -89,8 +107,9 @@ function journeyLine(query, fixedRide) {
     walkSecs: 300,
     waitSecs: 0,
     legs,
+    ...(timedBy && { arriveBy, earlyWait: arriveBy - arrive }),
   };
-  return { id, status: 'ok', journey };
+  return { id, status: 'ok', journey, ...(timedBy && { arriveBy }) };
 }
 
 function bulk(res, body, counts, ride) {

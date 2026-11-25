@@ -2,7 +2,12 @@
 // access-analysis.md §4.4). An analysis left queued, preparing or running when the API stopped is
 // driven again when it starts, from the first pair not yet finished. Cancel sets a flag that the
 // run checks between steps and batches; a cancelled or failed run deletes its results.
-import type { AnalysisProgress, AnalysisSettings, AnalysisState } from '@gtfs-editor/core';
+import {
+  withTimeMode,
+  type AnalysisProgress,
+  type AnalysisState,
+  type StoredAnalysisSettings,
+} from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import type { Scenario } from '../scenarios/engine.ts';
 import { ensureTimetable, timetableKey, type Box } from '../sim/timetables.ts';
@@ -39,7 +44,8 @@ interface RunRow {
   baselineId: number | null;
   scenarioId: number | null;
   scenarioName: string | null;
-  settings: AnalysisSettings;
+  /** Stored before arrive-by, they have no time mode (D40). */
+  settings: StoredAnalysisSettings;
 }
 
 /** A box's edges in degrees, before it is widened. */
@@ -159,8 +165,9 @@ async function driveAnalysis(
           update analyses set progress = ${progressJson({ stage, done, total })}::text::jsonb
           where id = ${id}`;
       };
-    await runDrives(sql, id, row.settings, afterBatch('drives'));
-    await runJourneys(sql, id, key.id, row.settings, afterBatch('journeys'));
+    const settings = withTimeMode(row.settings);
+    await runDrives(sql, id, settings, afterBatch('drives'));
+    await runJourneys(sql, id, key.id, settings, afterBatch('journeys'));
 
     await sql`
       update analyses set state = 'done', finished_at = now(), progress = '{}', error = null

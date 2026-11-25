@@ -4,7 +4,9 @@
 // switches the basemap, drags the zone and a pin, checks the setup's count line and runs; then
 // opens the results, checks the legend, settings line, OpenStreetMap credit and summary, switches
 // point of interest, opens a sample point, and saves screenshots 01-zone.png to 08-legend.png,
-// and the map editor's 09-basemap-streets.png to 14-reshape-zone.png.
+// and the map editor's 09-basemap-streets.png to 14-reshape-zone.png. Then it runs the same zone
+// and points of interest arriving by a time (access-arrive-by.mjs: 16-arrive-by-setup.png and
+// 17-arrive-by-point.png): 09:00 on the fake router, whose bus arrives after 08:00, else 08:00.
 // Usage: run-access-check.mjs starts a stack and runs this; to drive a stack already running:
 //   APP=http://localhost:5183 API=http://localhost:3111 OUT=<folder> PLACES=real|fixture \
 //   node apps/web/test/access-check.mjs
@@ -13,6 +15,7 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { checkArriveBy } from './access-arrive-by.mjs';
 import { openBrowser, sleep } from './access-browser.mjs';
 import { dragPlaces, drawZone, placePois, switchBasemaps } from './access-editor.mjs';
 import { clickPlace } from './access-map.mjs';
@@ -218,6 +221,11 @@ try {
   const detail = await runAnalysis(baseline.id);
   await showResults(detail);
   await checkDrive(detail);
+  // On the fake router every journey rides one bus that arrives well before 09:00.
+  const time = FAKE_ROUTER ? '09:00' : '08:00';
+  const arriveBy = { ...steps, baselineId: baseline.id, time, expectEarlyWait: !!FAKE_ROUTER };
+  const by = await checkArriveBy(b, arriveBy);
+  step(`arrive by ${time}: sample point ${by.seq} to ${by.poi} shows when it arrives`);
   if (process.env.SPEED === '1') {
     const speed = await runSpeedCheck({ send, baselineId: baseline.id, speed: PLAN.speed });
     for (const key of Object.keys(made)) made[key].push(...speed.made[key]);

@@ -2,7 +2,7 @@
 // app (apps/web/src/analysis/analysis-api.ts) share (D9, docs/architecture/access-analysis.md
 // §4.2). Times are seconds since the start of the service day; coordinates are [lon, lat].
 import type { CompareKind } from '../analysis/compare.ts';
-import type { AnalysisSettings } from '../analysis/defaults.ts';
+import type { AnalysisSettings, TimeMode } from '../analysis/defaults.ts';
 import type { PairStatus, PtSplit } from '../analysis/ratio.ts';
 import type { PoiSummary } from '../analysis/summary.ts';
 
@@ -84,6 +84,10 @@ export interface AnalysisListItem {
   sampleCount: number;
   createdAt: string;
   finishedAt: string | null;
+  /** How its time is used (FR-21); 'depart' for analyses made before arrive-by. */
+  timeMode: TimeMode;
+  /** Its time: the departure or the arrive-by time (the settings' `departSecs`). */
+  timeSecs: number;
 }
 
 /** An analysis as `GET /api/analyses?baseline=` lists it, with what it can be compared with. */

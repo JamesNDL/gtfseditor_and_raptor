@@ -21,7 +21,7 @@ import {
   openAnalysis,
   progressShare,
   stateText,
-  timetableText,
+  timetableTimeText,
 } from './analysis-state.ts';
 import { AnalysisResults } from './results/AnalysisResults.tsx';
 import { AnalysisSetup } from './setup/AnalysisSetup.tsx';
@@ -122,7 +122,10 @@ export function AnalysisPanel() {
   );
 }
 
-/** One analysis in the list: its name, timetable and state, a progress bar, Open and Delete. */
+/**
+ * One analysis in the list: its name, timetable and time ("Arrive by 08:00"), state, a progress
+ * bar, Open and Delete.
+ */
 function AnalysisRow({
   item,
   onChange,
@@ -142,7 +145,7 @@ function AnalysisRow({
         <div className="ellipsis" title={item.name}>
           {item.name}
         </div>
-        <div className="muted small ellipsis">{timetableText(item)}</div>
+        <div className="muted small ellipsis">{timetableTimeText(item)}</div>
         <div className={`small ${item.state === 'failed' ? 'error-text' : 'muted'}`}>
           {stateText(item)}
         </div>

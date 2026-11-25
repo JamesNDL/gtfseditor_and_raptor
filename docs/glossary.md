@@ -8,7 +8,7 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 
 ---
 
-**Access analysis** (BRD `access-analysis`, built 26 Nov 2026): a comparison, over a zone, of how long trips to chosen points of interest take by public transport and by car, shown as a map of access ratios. One analysis is run on one timetable (the published day or a scenario) at one departure time.
+**Access analysis** (BRD `access-analysis`, built 26 Nov 2026): a comparison, over a zone, of how long trips to chosen points of interest take by public transport and by car, shown as a map of access ratios. One analysis is run on one timetable (the published day or a scenario) at one departure time, or arriving by one time (arrive-by).
 - *Also known as*: analysis (in code). "Access" is its pane on the rail.
 - *In code*: `analyses` table and its `analysis_pois`, `analysis_points` and `analysis_results` (migration `0010_access_analysis.sql`); `apps/api/src/analysis/` (`runner.ts` runs it); `apps/web/src/analysis/`; pure logic in `packages/core/src/analysis/`.
 - *Business rules*: it runs in the background, one at a time, and can be cancelled; one left going when the API stops carries on when it starts. At most 10,000 sample points and 10 points of interest. It copies its zone and points of interest when made, so later changes to them do not change it. Running it twice on the same timetable gives the same results.
@@ -18,6 +18,12 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *In code*: `accessRatio` and `carSecs` in `packages/core/src/analysis/ratio.ts`; `analysis_results.ratio`.
 - *Business rules*: the public transport time is door to door from the asked departure time (walking, waiting, riding and changing), so waiting for the first vehicle counts as waiting. The car time is the road router's driving time times the traffic factor, plus the parking allowance. A pair with no service or no road has no access ratio. The map shows it as bands and lines of equal ratio, by default at 1, 1.5, 2, 3 and 4.
 - *Related*: Access analysis, Traffic factor, Parking allowance, No service, No road.
+
+**Arrive-by** (BRD `access-analysis` 1.1 FR-21, built 26 Nov 2026, D38, D40): an access analysis, or a journey, timed by when it must reach the point of interest rather than when it leaves. The journey router finds the latest departure that still gets there by the time.
+- *Also known as*: "Arrive by 08:00" (UI text; a depart-at analysis is "Depart 08:00"). The opposite is *depart-at*.
+- *In code*: `timeMode: 'arriveBy'` in an analysis's settings (`'depart'` otherwise; settings saved before have none and are depart-at), the time in `departSecs`; `arriveBy` in place of `depart` in a journey router request; `packages/core/src/analysis/time-mode.ts`.
+- *Business rules*: the public transport time runs from the journey's departure to the arrive-by time, so the early wait counts, and the longest journey applies to that time. The car time takes the traffic factor of the part of the day the arrive-by time falls in. No journey that arrives in time is no service. It takes no account of how full vehicles are.
+- *Related*: Access analysis, Early wait, Access ratio.
 
 **Baseline**: one published day of the TfNSW timetable, imported once and never changed. Every scenario starts from one.
 - *Also known as*: the published timetable, a day. Not the same as a *feed*, which is the whole download from TfNSW covering many days.
@@ -42,7 +48,7 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 **Comparison** (BRD `access-analysis`, built 26 Nov 2026): two finished access analyses of the same zone outline and spacing set side by side for one point of interest they share, sample point by sample point. The change is the other analysis's access ratio less the open one's.
 - *Also known as*: "Compare with…" (UI text).
 - *In code*: `compareRatios` in `packages/core/src/analysis/compare.ts` (kinds `better`, `worse`, `same`, `gainedService`, `lostService`, `bothNone`); `apps/api/src/analysis/compare-read.ts`; `apps/web/src/analysis/results/CompareView.tsx` and `compare-text.ts`.
-- *Business rules*: each sample point is one of six kinds, named in the UI as **Better** (the access ratio fell), **Worse** (it rose), **About the same** (it changed by 0.05 or less), **Gained service** (no public transport journey before, one now), **Lost service** (one before, none now) and **No service in either** (no journey, or no road, in either analysis). A zone redrawn between the two runs is a different zone, and they cannot be compared.
+- *Business rules*: each sample point is one of six kinds, named in the UI as **Better** (the access ratio fell), **Worse** (it rose), **About the same** (it changed by 0.05 or less), **Gained service** (no public transport journey before, one now), **Lost service** (one before, none now) and **No service in either** (no journey, or no road, in either analysis). A zone redrawn between the two runs is a different zone, and they cannot be compared. An arrive-by and a depart-at analysis can be compared, and the comparison says so ("One is arrive by 08:00, the other depart 08:00.").
 - *Related*: Access analysis, Access ratio, No service.
 
 **Clash**: something a scenario has made that cannot happen in real life, such as two trains at one platform at once or a vehicle starting its next trip before it has arrived. A clash is shown with a suggested fix; it never blocks an edit or an export.
@@ -66,6 +72,11 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *Also known as*: stop time (in UI text). Do not confuse with GTFS `stop_times`, which is a *Call*.
 - *Business rules*: bus timetables give no dwell of their own; it is inside the run time.
 - *Related*: Call, Run time.
+
+**Early wait** (BRD `access-analysis` 1.1 FR-21, built 26 Nov 2026, D40): in an arrive-by access analysis, the time between a journey reaching the point of interest and the arrive-by time. Leave 07:05, arrive 07:35, arrive by 08:00: 25 minutes of early wait in a 55-minute public transport time.
+- *In code*: `earlyWaitSecs` in `PtSplit` (`packages/core/src/analysis/ratio.ts`), worked out by `arriveBySplit` in `time-mode.ts`; `analysis_results.early_wait_secs` (migration `0011_analysis_early_wait.sql`); `early_wait_mins` in the export; the router's `earlyWait`.
+- *Business rules*: counted in the public transport time. A picked sample point shows it as its own part of the time split, and ends the journey with "Arrive 07:35, 25 min before 08:00". Null (left empty) for depart-at analyses.
+- *Related*: Arrive-by, Access ratio.
 
 **Edit**: one change to a scenario that can be undone in one step, such as retiming a trip, deleting a stop or drawing a closure.
 - *Also known as*: change (in UI text).

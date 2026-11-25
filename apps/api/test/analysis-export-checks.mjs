@@ -8,7 +8,8 @@ import { API, get, send, step } from './analysis-e2e-client.mjs';
 
 const HEADER =
   'point,lat,lon,poi,poi_name,status,pt_mins,walk_mins,wait_mins,ride_mins,rides,' +
-  'drive_mins_free_flow,drive_km,traffic_factor,parking_mins,car_mins,ratio';
+  'drive_mins_free_flow,drive_km,traffic_factor,parking_mins,car_mins,ratio,' +
+  'time_mode,time,early_wait_mins';
 
 /** Fetches an export; fails unless it is a 200 download whose file name matches `name`. */
 async function download(path, type, name) {
@@ -62,6 +63,9 @@ const csvLine = (r) =>
     '5.0',
     fixed(mins(r.car_secs), 1),
     fixed(r.ratio, 2),
+    'depart',
+    '08:00',
+    '',
   ].join(',');
 
 /** Fails unless the exports of `detail` (a finished analysis run with the default settings) fit. */
@@ -106,6 +110,7 @@ export async function checkExports(db, detail) {
       `feature ${k}`,
     );
     assert.equal(p.ratio, round(r.ratio, 2));
+    assert.deepEqual([p.time_mode, p.time, p.early_wait_mins], ['depart', '08:00', null]);
   });
   step('AC-FR-18.1 points.geojson: one point feature per pair, with the CSV columns');
 

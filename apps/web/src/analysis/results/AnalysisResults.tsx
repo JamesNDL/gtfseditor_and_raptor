@@ -4,7 +4,7 @@
 // legend on the map, 'Compare with…' (CompareView.tsx) and the downloads (FR-18). While comparing,
 // the comparison takes the place of the lines, summary and legend. The map's layers draw from the
 // same results (map/use-analysis-result-layers.ts, use-analysis-compare-layers.ts).
-import type { PoiSummary } from '@gtfs-editor/core';
+import { timeText, type PoiSummary } from '@gtfs-editor/core';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useStore } from '../../app/store.ts';
 import {
@@ -71,7 +71,8 @@ export function AnalysisResults() {
           {detail.name}
         </h2>
         <div className="muted small ellipsis">
-          {detail.scenarioName ?? 'Published day'} · {detail.zone.name}
+          {detail.scenarioName ?? 'Published day'} · {detail.zone.name} ·{' '}
+          {timeText(detail.settings)}
         </div>
       </div>
       {error && <p className="error-text small">{error}</p>}

@@ -113,6 +113,7 @@ describe('ptSplit', () => {
       walkSecs: 4 * MIN,
       waitSecs: 11 * MIN,
       rideSecs: 20 * MIN,
+      earlyWaitSecs: 0,
       rides: 1,
     });
   });
@@ -147,6 +148,7 @@ describe('ptSplit', () => {
       walkSecs: 5 * MIN,
       waitSecs: 15 * MIN,
       rideSecs: 35 * MIN,
+      earlyWaitSecs: 0,
       rides: 2,
     });
   });

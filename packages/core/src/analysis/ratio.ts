@@ -31,12 +31,18 @@ export interface RouterJourney {
   legs: (RouterRideLeg | RouterOtherLeg)[];
 }
 
-/** A pair's public transport time, from the asked departure, and how it splits up. */
+/**
+ * A pair's public transport time and how it splits up: from the asked departure, or for arrive-by
+ * from the journey's departure to the arrive-by time (FR-21), the parts then adding up to it.
+ */
 export interface PtSplit {
   ptSecs: number;
   walkSecs: number;
+  /** Waiting before the first ride and between rides. */
   waitSecs: number;
   rideSecs: number;
+  /** Arrive-by only: between arriving and the arrive-by time (FR-21); 0 for depart-at. */
+  earlyWaitSecs: number;
   rides: number;
 }
 
@@ -98,6 +104,7 @@ export function ptSplit(journey: RouterJourney, askedDepartSecs: number): PtSpli
     walkSecs,
     waitSecs: ptSecs - walkSecs - rideSecs,
     rideSecs,
+    earlyWaitSecs: 0,
     rides: journey.rides,
   };
 }

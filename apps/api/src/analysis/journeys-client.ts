@@ -11,13 +11,13 @@ export interface JourneyPoint {
   lon: number;
 }
 
-/** One journey to plan: `id` comes back on its answer line. */
-export interface JourneyQuery {
-  id: string;
-  from: JourneyPoint;
-  to: JourneyPoint;
-  depart: number;
-}
+/**
+ * One journey to plan: `id` comes back on its answer line. It leaves at `depart`, or arrives by
+ * `arriveBy` (D38: exactly one of the two, which needs capacity off).
+ */
+export type JourneyQuery = { id: string; from: JourneyPoint; to: JourneyPoint } & (
+  { depart: number } | { arriveBy: number }
+);
 
 /** The settings given once for every query in a bulk request. */
 export interface BulkSettings {

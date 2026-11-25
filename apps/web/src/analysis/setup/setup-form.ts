@@ -1,5 +1,6 @@
-// The setup screen's pure parts (FR-6, FR-8, FR-9, NFR-3): the departure as text, the label of each
-// traffic factor box, the live count line, why Run is refused and the body Run posts.
+// The setup screen's pure parts (FR-6, FR-8, FR-9, FR-21, NFR-3): the time as text and the name of
+// its box, the label of each traffic factor box and the note above them, the live count line, why
+// Run is refused and the body Run posts.
 // See docs/architecture/access-analysis.md §5.2.
 import {
   ANALYSIS_LIMITS,
@@ -11,6 +12,7 @@ import {
   settingsProblem,
   type AnalysisCreateBody,
   type Ring,
+  type TimeMode,
 } from '@gtfs-editor/core';
 import type { AnalysisSetupChoices } from '../analysis-state.ts';
 
@@ -23,6 +25,22 @@ export function clockSecs(text: string): number | null {
   if (!match) return null;
   const minutes = Number(match[2]);
   return minutes < 60 ? Number(match[1]) * 3600 + minutes * 60 : null;
+}
+
+/** The name of the time box, which follows the Depart at / Arrive by switch. */
+export const timeBoxLabel = (mode: TimeMode): string =>
+  mode === 'arriveBy' ? 'Arrive-by time' : 'Departure time';
+
+/**
+ * The note above the traffic factors: the drive is multiplied by the factor of the part of the day
+ * the departure, or the arrive-by time, falls in (FR-9), naming that part when the time is set.
+ */
+export function factorNote(mode: TimeMode, bandLabel: string | null): string {
+  const time = mode === 'arriveBy' ? 'the arrive-by time' : 'the departure';
+  return (
+    'Traffic factors: the drive time with no traffic is multiplied by the factor for the part ' +
+    `of the day ${time} falls in${bandLabel ? ` (the ${bandLabel}).` : '.'}`
+  );
 }
 
 /** A part of the day in DAY_BANDS: its name and when it starts and ends, in seconds. */

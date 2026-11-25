@@ -23,3 +23,11 @@
 .analysis-downloads a {
   color: var(--accent);
 }
+
+/* Said when one analysis is arrive-by and the other depart-at (AC-FR-21.3). */
+.analysis-compare-note {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+}

@@ -2,6 +2,7 @@
 // change it, and how an analysis reads in the list. See docs/architecture/access-analysis.md §5.2.
 import {
   DEFAULT_ANALYSIS_SETTINGS,
+  timeText,
   type AnalysisListItem,
   type AnalysisSettings,
   type AnalysisState,
@@ -148,6 +149,10 @@ export function progressShare(item: AnalysisListItem): number | null {
 /** The timetable the analysis ran on: its scenario's name, or the published day. */
 export const timetableText = (item: AnalysisListItem): string =>
   item.scenarioName ?? 'Published day';
+
+/** The timetable and the time, as the list shows them: "Published day · Arrive by 08:00" (FR-21). */
+export const timetableTimeText = (item: AnalysisListItem): string =>
+  `${timetableText(item)} · ${timeText({ timeMode: item.timeMode, departSecs: item.timeSecs })}`;
 
 const STATE_WORDS: Record<AnalysisState, string> = {
   queued: 'Waiting to start',

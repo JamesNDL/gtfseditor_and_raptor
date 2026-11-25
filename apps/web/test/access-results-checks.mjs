@@ -12,7 +12,7 @@ const OSM_CREDIT = 'Driving times © OpenStreetMap contributors (ODbL)';
  * 08:00, 250 m, walk 800 m, parking 5 min and the morning peak's traffic factor of 1.4.
  */
 export const STARTING_SETTINGS_LINE =
-  'Published day · 08:00 · 250 m · walk 800 m · parking 5 min · traffic 1.4';
+  'Published day · Depart 08:00 · 250 m · walk 800 m · parking 5 min · traffic 1.4';
 
 /** The legend as the page shows it: its words, where it is, and whether it is in plain view. */
 const readLegend = (b) =>

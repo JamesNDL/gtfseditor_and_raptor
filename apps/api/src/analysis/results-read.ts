@@ -11,7 +11,9 @@ import {
   type GeoJsonPosition,
   type PairStatus,
   type PoiSummary,
+  type StoredAnalysisSettings,
   type StoredLeg,
+  withTimeMode,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { fail, notFound } from '../http.ts';
@@ -45,6 +47,8 @@ export interface PairRow {
   driveMetres: number | null;
   carSecs: number | null;
   ratio: number | null;
+  /** Arrive-by only (FR-21): between arriving and the arrive-by time; null for depart-at. */
+  earlyWaitSecs: number | null;
 }
 
 /** An analysis that has not finished has no results to read (AA-16 AC 5). */
@@ -57,7 +61,7 @@ export async function finishedAnalysis(sql: Sql, id: number): Promise<FinishedAn
       state: AnalysisState;
       baselineId: number | null;
       scenarioId: number | null;
-      settings: AnalysisSettings;
+      settings: StoredAnalysisSettings;
       rings: GeoJsonPosition[][];
     }[]
   >`
@@ -66,8 +70,8 @@ export async function finishedAnalysis(sql: Sql, id: number): Promise<FinishedAn
     from analyses where id = ${id}`;
   if (!row) throw notFound('Analysis');
   if (row.state !== 'done') throw fail(409, NOT_FINISHED);
-  const { baselineId, scenarioId, settings } = row;
-  return { id, baselineId, scenarioId, settings, ring: row.rings[0] };
+  const { baselineId, scenarioId } = row;
+  return { id, baselineId, scenarioId, settings: withTimeMode(row.settings), ring: row.rings[0] };
 }
 
 /** Where one of the analysis's points of interest is; a 404 when it has no such one. */
@@ -95,7 +99,7 @@ export function pairsOf(
     select p.seq, p.i, p.j, p.lon, p.lat, r.status, r.pt_secs as "ptSecs",
            r.walk_secs as "walkSecs", r.wait_secs as "waitSecs", r.ride_secs as "rideSecs",
            r.rides, r.legs, r.drive_secs as "driveSecs", r.drive_metres as "driveMetres",
-           r.car_secs as "carSecs", r.ratio
+           r.car_secs as "carSecs", r.ratio, r.early_wait_secs as "earlyWaitSecs"
     from analysis_points p
     join analysis_results r on r.analysis_id = p.analysis_id and r.point_seq = p.seq
     where p.analysis_id = ${analysisId} and r.poi_seq = ${poiSeq} ${onePoint}

@@ -1,8 +1,14 @@
-// What one sample point's detail says (FR-15, NFR-6): its journey leg by leg, the walk/wait/ride
-// split of the public transport time, the car time and how it is made up, and why a time or the
-// car path is missing. Walk distances are the router's straight line taken 1.3 times as long
+// What one sample point's detail says (FR-15, FR-21, NFR-6): its journey leg by leg, when an
+// arrive-by journey arrives, the walk/wait/ride (and early wait) split of the public transport
+// time, the car time and how it is made up, and why a time or the car path is missing. Walk distances are the router's straight line taken 1.3 times as long
 // (services/router/README.md 'Walks'), so they are given as 'about'.
-import type { PointDetail, PointLeg, PtSplit } from '@gtfs-editor/core';
+import {
+  formatSecs,
+  type AnalysisSettings,
+  type PointDetail,
+  type PointLeg,
+  type PtSplit,
+} from '@gtfs-editor/core';
 import type { ModeLook } from '../point-journey.ts';
 
 /** Whole minutes; a time that rounds to none is 'under 1 min'. */
@@ -28,18 +34,41 @@ export interface LegRow {
 /** A wait shorter than this is not listed. */
 const SHORTEST_WAIT_SECS = 30;
 
+/** Settings as the time texts read them. */
+type TimeSettings = Pick<AnalysisSettings, 'timeMode' | 'departSecs'>;
+
+/**
+ * Where the clock of the journey list starts: the asked departure, or for arrive-by the journey's
+ * own departure, the arrive-by time less the public transport time (FR-21).
+ */
+export function journeyStartSecs(settings: TimeSettings, pt: PtSplit): number {
+  return settings.timeMode === 'arriveBy' ? settings.departSecs - pt.ptSecs : settings.departSecs;
+}
+
+/**
+ * The last line of an arrive-by journey: "Arrive 07:35, 25 min before 08:00" (AC-FR-21.1), or
+ * "just in time" with no early wait. Null for depart-at.
+ */
+export function arrivalText(settings: TimeSettings, pt: PtSplit): string | null {
+  if (settings.timeMode !== 'arriveBy') return null;
+  const arrive = formatSecs(settings.departSecs - pt.earlyWaitSecs);
+  if (pt.earlyWaitSecs <= 0) return `Arrive ${arrive}, just in time`;
+  return `Arrive ${arrive}, ${minutesText(pt.earlyWaitSecs)} before ${formatSecs(settings.departSecs)}`;
+}
+
 /**
  * The journey leg by leg (AC-FR-15.1). The stored legs have no waits, so they are found by
- * walking the clock from the asked departure: a ride boarded later than the clock shows a wait
- * before it. Waiting at home for the first vehicle (D23) shows as the wait before the first ride.
+ * walking the clock from `startSecs` (journeyStartSecs): a ride boarded later than the clock shows
+ * a wait before it. Waiting at home for the first vehicle (D23) shows as the wait before the first
+ * ride.
  */
 export function legRows(
   legs: readonly PointLeg[],
-  departSecs: number,
+  startSecs: number,
   look: (modeId: string) => ModeLook,
 ): LegRow[] {
   const rows: LegRow[] = [];
-  let clock = departSecs;
+  let clock = startSecs;
   let lastStop: string | null = null;
   for (const leg of legs) {
     if (leg.type === 'ride') {
@@ -69,26 +98,30 @@ export function legRows(
   return rows;
 }
 
-/** One part of the walk/wait/ride bar. */
+/** One part of the walk/wait/ride (and early wait) bar. */
 export interface SplitPart {
-  kind: 'walk' | 'wait' | 'ride';
+  kind: 'walk' | 'wait' | 'ride' | 'early';
   label: string;
   /** Its share of the public transport time, from 0 to 1. */
   share: number;
 }
 
-/** The public transport time split into walking, waiting and riding (FR-15). */
+/**
+ * The public transport time split into walking, waiting and riding (FR-15), and for an arrive-by
+ * journey that arrives early, the early wait at the point of interest (FR-21).
+ */
 export function splitParts(pt: PtSplit): SplitPart[] {
   const part = (kind: SplitPart['kind'], word: string, secs: number): SplitPart => ({
     kind,
     label: `${word} ${minutesText(secs)}`,
     share: pt.ptSecs > 0 ? Math.max(0, secs) / pt.ptSecs : 0,
   });
-  return [
+  const parts = [
     part('walk', 'Walk', pt.walkSecs),
     part('wait', 'Wait', pt.waitSecs),
     part('ride', 'Ride', pt.rideSecs),
   ];
+  return pt.earlyWaitSecs > 0 ? [...parts, part('early', 'Early wait', pt.earlyWaitSecs)] : parts;
 }
 
 const n = (value: number): string => value.toLocaleString('en-AU');

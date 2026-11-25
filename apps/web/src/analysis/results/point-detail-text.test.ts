@@ -57,7 +57,14 @@ const LEGS: PointLeg[] = [
 ];
 
 /** The split of LEGS from 08:00. */
-const PT: PtSplit = { ptSecs: 2640, walkSecs: 780, waitSecs: 540, rideSecs: 1320, rides: 2 };
+const PT: PtSplit = {
+  ptSecs: 2640,
+  walkSecs: 780,
+  waitSecs: 540,
+  rideSecs: 1320,
+  earlyWaitSecs: 0,
+  rides: 2,
+};
 
 const detail = (over: Partial<PointDetail> = {}): PointDetail => ({
   seq: 7,
@@ -173,7 +180,14 @@ describe('splitParts (AC-FR-15.1)', () => {
   });
 
   it('gives no shares for a journey of no time', () => {
-    const parts = splitParts({ ptSecs: 0, walkSecs: 0, waitSecs: 0, rideSecs: 0, rides: 0 });
+    const parts = splitParts({
+      ptSecs: 0,
+      walkSecs: 0,
+      waitSecs: 0,
+      rideSecs: 0,
+      earlyWaitSecs: 0,
+      rides: 0,
+    });
     expect(parts.every((p) => p.share === 0)).toBe(true);
   });
 });
@@ -197,7 +211,14 @@ describe('carText and journeyText', () => {
     const long = detail({
       status: 'noService',
       ratio: null,
-      pt: { ptSecs: 8000, walkSecs: 600, waitSecs: 1400, rideSecs: 6000, rides: 2 },
+      pt: {
+        ptSecs: 8000,
+        walkSecs: 600,
+        waitSecs: 1400,
+        rideSecs: 6000,
+        earlyWaitSecs: 0,
+        rides: 2,
+      },
     });
     expect(journeyText(long, 120)).toBe('133 min: longer than the longest journey (120 min)');
   });

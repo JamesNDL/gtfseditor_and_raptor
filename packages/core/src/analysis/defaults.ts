@@ -7,8 +7,19 @@ export type DayBandId = (typeof DAY_BANDS)[number]['id'];
 /** The traffic factor for each part of the day: the drive time is multiplied by it (FR-9). */
 export type TrafficFactors = Record<DayBandId, number>;
 
+/**
+ * How an analysis uses its time (FR-21, D40): journeys leave at it ('depart'), or arrive by it
+ * ('arriveBy'). Settings stored before arrive-by have no time mode and are depart-at.
+ */
+export type TimeMode = 'depart' | 'arriveBy';
+
 /** What an analysis is run with. Times are seconds since the start of the service day. */
 export interface AnalysisSettings {
+  timeMode: TimeMode;
+  /**
+   * The analysis's time: the departure, or the arrive-by time when `timeMode` is 'arriveBy'. The
+   * name is from before arrive-by and is kept so that stored settings read as they are (D40).
+   */
   departSecs: number;
   /** Distance between sample points, in metres (checked by `analysisProblem` in limits.ts). */
   spacingM: number;
@@ -26,8 +37,12 @@ export interface AnalysisSettings {
   breaks: number[];
 }
 
-/** The starting settings (D34): 08:00, 250 m, 800 m walk, 120 minutes, 3 changes, no school buses. */
+/**
+ * The starting settings (D34): depart at 08:00, 250 m, 800 m walk, 120 minutes, 3 changes, no
+ * school buses.
+ */
 export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
+  timeMode: 'depart',
   departSecs: 8 * 3600,
   spacingM: 250,
   maxWalkM: 800,
@@ -67,7 +82,8 @@ function factorsProblem(factors: TrafficFactors): string | null {
  */
 export function settingsProblem(s: AnalysisSettings): string | null {
   if (!within(s.departSecs, 0, 36 * 3600)) {
-    return 'The departure time must be between 00:00 and 36:00.';
+    const time = s.timeMode === 'arriveBy' ? 'arrive-by time' : 'departure time';
+    return `The ${time} must be between 00:00 and 36:00.`;
   }
   if (!within(s.maxWalkM, 100, 2000)) {
     return `The longest walk must be between 100 and ${n(2000)} m.`;

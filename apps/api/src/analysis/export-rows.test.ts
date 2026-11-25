@@ -24,6 +24,7 @@ const okPair: ExportPair = {
   driveMetres: 5432.1,
   carSecs: 939.49,
   ratio: 1.3135,
+  earlyWaitSecs: null,
 };
 
 const noRoadPair: ExportPair = {
@@ -72,6 +73,9 @@ describe('exportRowOf', () => {
       parking_mins: 5,
       car_mins: 15.7,
       ratio: 1.31,
+      time_mode: 'depart',
+      time: '08:00',
+      early_wait_mins: null,
     });
   });
 
@@ -116,7 +120,8 @@ describe('csvOf', () => {
   it('starts with the header and has one line per row, ending with a line break', () => {
     expect(lines[0]).toBe(
       'point,lat,lon,poi,poi_name,status,pt_mins,walk_mins,wait_mins,ride_mins,rides,' +
-        'drive_mins_free_flow,drive_km,traffic_factor,parking_mins,car_mins,ratio',
+        'drive_mins_free_flow,drive_km,traffic_factor,parking_mins,car_mins,ratio,' +
+        'time_mode,time,early_wait_mins',
     );
     expect(lines).toHaveLength(5);
     expect(lines[4]).toBe('');
@@ -124,17 +129,18 @@ describe('csvOf', () => {
 
   it('writes minutes to one place, kilometres and ratios to two, and nothing for null', () => {
     expect(lines[1]).toBe(
-      '12,-33.9123456,151.2034567,1,Town hall,ok,20.6,5.0,4.0,11.6,1,7.6,5.43,1.4,5.0,15.7,1.31',
+      '12,-33.9123456,151.2034567,1,Town hall,ok,20.6,5.0,4.0,11.6,1,7.6,5.43,1.4,5.0,15.7,1.31,' +
+        'depart,08:00,',
     );
     expect(lines[3]).toBe(
-      '14,-33.9123456,151.2034567,1,Town hall,noService,,,,,,7.6,5.43,1.4,5.0,15.7,',
+      '14,-33.9123456,151.2034567,1,Town hall,noService,,,,,,7.6,5.43,1.4,5.0,15.7,,depart,08:00,',
     );
   });
 
   it('quotes a name that holds a comma or a quote, doubling the quotes', () => {
     expect(lines[2]).toBe(
       '13,-33.9123456,151.2034567,1,"Smith\'s ""big"", shop",noRoad,20.6,5.0,4.0,11.6,1,,,1.4,' +
-        '5.0,,',
+        '5.0,,,depart,08:00,',
     );
   });
 

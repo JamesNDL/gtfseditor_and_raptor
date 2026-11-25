@@ -1,6 +1,6 @@
 // What the comparison's counts and key say (FR-17, AC-FR-17.1, NFR-6): each kind of change in
 // plain words, with its count and the colour or ring it has on the map (analysis-colours.ts).
-import type { CompareKind } from '@gtfs-editor/core';
+import { timeText, type AnalysisListItem, type CompareKind } from '@gtfs-editor/core';
 import {
   COMPARE_BETTER,
   COMPARE_FULL_AT,
@@ -73,3 +73,21 @@ export function compareRows(counts: Record<CompareKind, number>): CompareRow[] {
 /** Every sample point compared. */
 export const compareTotal = (counts: Record<CompareKind, number>): number =>
   Object.values(counts).reduce((sum, count) => sum + count, 0);
+
+/** How an analysis uses its time, as the list gives it. */
+type TimeOf = Pick<AnalysisListItem, 'timeMode' | 'timeSecs'>;
+
+/** "arrive by 08:00" or "depart 08:00", for the middle of a sentence. */
+const lowerTimeText = (a: TimeOf): string => {
+  const text = timeText({ timeMode: a.timeMode, departSecs: a.timeSecs });
+  return text.charAt(0).toLowerCase() + text.slice(1);
+};
+
+/**
+ * When the open analysis and the other one use time differently, says so plainly (AC-FR-21.3):
+ * "One is arrive by 08:00, the other depart 08:00." Null when both depart or both arrive by.
+ */
+export function timeModeNote(open: TimeOf, other: TimeOf): string | null {
+  if (open.timeMode === other.timeMode) return null;
+  return `One is ${lowerTimeText(open)}, the other ${lowerTimeText(other)}.`;
+}
