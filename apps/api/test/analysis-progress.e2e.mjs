@@ -93,8 +93,11 @@ try {
 
     await fake({ bulkAnswers: null });
     spare = await startApi(port);
-    const done = await until(resumed, (d) => d.state !== 'running', 'it finishes', 30, spare.base);
-    assert.equal(done.state, 'done', done.error);
+    // A resumed run passes through 'preparing' again while it reloads the timetable, so wait for
+    // a state that is no longer active rather than for one that is not 'running'.
+    const finished = (d) => !['queued', 'preparing', 'running'].includes(d.state);
+    const done = await until(resumed, finished, 'it finishes', 30, spare.base);
+    assert.equal(done.state, 'done', done.error ?? `state ${done.state}`);
     assert.deepEqual(await rowCounts(resumed), { pending: 0, rows: PAIRS });
     const { counts } = await fakeState();
     assert.equal(counts.drives, PAIRS, 'every pair is driven once');
