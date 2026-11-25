@@ -1,0 +1,132 @@
+
+> test:access
+> node apps/web/test/run-access-check.mjs --out docs/pr/access-analysis --router-graph C:\Programming Projects\GTFS Editor\data\router\road\opal --feed C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip
+
+[access 0s] creating database gtfs_aa_check; importing C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip 20261121
+Ran migrations 0001, 0010
+Extracting C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip ...
+Using the feed at C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip (local-nsw-complete-20261112-1750-538a2f9495)
+Staged agency: 686 rows in 0.1s
+Staged calendar: 2,380 rows in 0.1s
+Staged calendar_dates: 37,593 rows in 0.1s
+Staged levels: 7 rows in 0.1s
+Staged notes: 760 rows in 0.1s
+Staged pathways: 7,031 rows in 0.1s
+Staged routes: 10,215 rows in 0.1s
+Staged shapes: 14,726,218 rows in 19.2s
+Staged stops: 171,378 rows in 0.6s
+Staged stop_times: 5,704,258 rows in 9.1s
+Staged trips: 205,218 rows in 0.8s
+Importing 20261121 ...
+  trips running on the day: 32,879 rows in 0.1s
+  routes: 10,215 rows in 0.4s
+  stops: 171,378 rows in 5.2s
+  stop parents: 93,335 rows in 3.4s
+  shapes: 2,872 rows in 9.6s
+  trips: 32,879 rows in 2.2s
+  stop times: 1,197,149 rows in 22.5s
+  trip stop sequences: 32,879 rows in 0.5s
+  trip start, end and terminals: 32,879 rows in 1.7s
+  trips with no stop times removed: 0 rows in 0.0s
+  patterns: 2,872 rows in 0.2s
+  trip patterns: 32,879 rows in 2.6s
+  map lines: 2,872 rows in 1.4s
+  route trip counts: 989 rows in 0.0s
+  modes calling at each stop: 34,230 rows in 2.2s
+  modes calling at each station: 28,869 rows in 1.2s
+  vehicle types seen in the feed: 16 rows in 0.0s
+  trip vehicle types from the feed: 2,364 rows in 0.2s
+  stay-aboard links: 767 rows in 0.0s
+  pathways: 7,031 rows in 0.2s
+  platform and wharf overlaps already in the feed: 133 rows in 0.5s
+  vehicle days: 2,839 (131 from train run numbers, 2,708 inferred) in 3.2s
+  shapes simplified: 2,872 shapes, 2,253,432 points down to 443,328 in 8.1s
+  pack bus: 28,372 trips, 17.2 MB in 2.7s
+  pack coach: 127 trips, 1.2 MB in 0.1s
+  pack ferry: 849 trips, 0.1 MB in 0.0s
+  pack light_rail: 918 trips, 0.2 MB in 0.1s
+  pack metro: 249 trips, 0.1 MB in 0.0s
+  pack train: 2,364 trips, 1.7 MB in 0.2s
+Baseline 1 ready: Saturday 21 Nov 2026 in 71s
+{
+  "trips": 32879,
+  "patterns": 2872,
+  "stopTimes": 1197149,
+  "lastArrival": 120000,
+  "vehicleDays": 2839,
+  "routesRunning": 989,
+  "firstDeparture": 0,
+  "baselineConflicts": 133,
+  "vehicleDaysInferred": 2708,
+  "tripsWithAssumedVehicle": 30515
+}
+[access 112s] starting the router on http://localhost:3112: npm run router:dev
+[router] > router:dev
+[router] > cd services/router && .\gradlew :router-server:run
+[router] Starting a Gradle Daemon (subsequent builds will be faster)
+[router] > Task :router-gtfs:processResources
+[router]  NO-SOURCE
+[router] > Task :router-server:processResources NO-SOURCE
+[router] > Task :router-road:processResources
+[router]  NO-SOURCE
+[router] > Task :router-sim:processResources NO-SOURCE
+[router] > Task :router-core:compileJava
+[router]  FROM-CACHE
+[router] > Task :router-core:processResources NO-SOURCE
+[router] > Task :router-core:classes
+[router]  UP-TO-DATE
+[router] > Task :router-core:jar
+[router] > Task :router-gtfs:compileJava
+[router]  FROM-CACHE
+[router] > Task :router-gtfs:classes
+[router]  UP-TO-DATE
+[router] > Task :router-gtfs:jar
+[router] > Task :router-road:compileJava
+[router]  FROM-CACHE
+[router] > Task :router-road:classes
+[router]  UP-TO-DATE
+[router] > Task :router-sim:compileJava FROM-CACHE
+[router] > Task :router-sim:classes
+[router]  UP-TO-DATE
+[router] > Task :router-sim:jar
+[router] > Task :router-road:jar
+[router] > Task :router-server:compileJava
+[router]  FROM-CACHE
+[router] > Task :router-server:classes UP-TO-DATE
+[router] > Task :router-server:run
+[router] [main] INFO com.graphhopper.routing.ch.CHPreparationHandler - There are no CHs to prepare
+[router] [main] INFO io.javalin.Javalin - Starting Javalin ...
+[router] [main] INFO org.eclipse.jetty.server.Server - jetty-12.1.14; built: 2026-10-02T05:48:05.032Z; git: 15cecbd757a2f6b0fdc6a8944f4c6d0020b17da0; jvm 26.0.1+8-34
+[router] [main] INFO org.eclipse.jetty.session.DefaultSessionIdManager - Session workerName=node0
+[router] [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started oeje10s.ServletContextHandler@7e053511{ROOT,/,b=null,a=AVAILABLE,h=oeje10s.SessionHandler@60222fd8{STARTED}}
+[router] [main] INFO org.eclipse.jetty.ee10.servlet.ServletContextHandler - Started oeje10s.ServletContextHandler@7e053511{ROOT,/,b=null,a=AVAILABLE,h=oeje10s.SessionHandler@60222fd8{STARTED}}
+[router] [main] INFO org.eclipse.jetty.server.AbstractConnector - Started oejs.ServerConnector@3956b302{HTTP/1.1, (http/1.1)}{0.0.0.0:3112}
+[router] [main] INFO org.eclipse.jetty.server.Server - Started oejs.Server@cd7f1ae{STARTING}[12.1.14,sto=0] @329ms
+[router] [main] INFO io.javalin.Javalin - Javalin started in 907ms \o/
+[router] [main] INFO io.javalin.Javalin - Listening on http://localhost:3112/
+[router] [main] INFO io.javalin.Javalin - You are running Javalin 7.2.4 (released October 25, 2026).
+[access 132s] starting the API on http://localhost:3111
+[api] API listening on http://localhost:3111
+[access 135s] starting the web app on http://localhost:5183
+[web]   [32m[1mVITE[22m v8.3.8[39m  [2mready in [0m[1m721[22m[2m[0m ms[22m
+[web]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5183[22m/[39m
+[web] [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[access 136s] running the access check
+[web] [2m1:36:58 am[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+[web] [2m1:37:05 am[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mdeck: Attribute instanceFillColors is normalized
+[web] [2m1:37:06 am[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mImage "wood-pattern" could not be loaded. Please make sure you have added the image before it is needed with map.addImage(), resolved it with map.setMissingStyleImageResolver(), or included it in a "sprite" property in your style.
+ok  app loaded on 2026-11-21 (real places)
+ok  drew the zone Mayfield; its four corners landed where they were clicked
+ok  placed Newcastle city centre and Westfield Kotara
+ok  setup says "121 sample points, 2 points of interest: 242 public transport journeys and 242 drives"
+ok  running: preparing {"secs":1,"stage":"timetable"}
+[router] Timetable b1-ab2ede9f6
+[router]  (version local-nsw-complete-20261112-1750-538a2f9495@1795617322/r2|fleet-3bdd5634e795) loaded in 16.5 s: 1,717 trips, 2,928 stops
+ok  the analysis finished: 121 sample points
+ok  results for Newcastle city centre: Under 1: 0, 1 to 1.5: 1, 1.5 to 2: 0, 2 to 3: 91, 3 to 4: 24, 4 or more: 2, No service: 1, No road: 2; legend, settings line and credit shown
+ok  switched to Westfield Kotara: Under 1: 0, 1 to 1.5: 0, 1.5 to 2: 0, 2 to 3: 23, 3 to 4: 41, 4 or more: 54, No service: 1, No road: 2
+ok  opened sample point 49: 4 legs, ratio shown
+ok  cropped the legend
+ok  the drive from the middle of Mayfield to Newcastle city centre is 7.2 min
+all access checks passed; screenshots in C:\Programming Projects\GTFS Editor\.claude\worktrees\agent-abc67ff2a19a10d8f\docs\pr\access-analysis
+[access 182s] passed; cleaned up

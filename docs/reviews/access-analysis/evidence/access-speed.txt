@@ -1,0 +1,147 @@
+
+> test:access
+> node apps/web/test/run-access-check.mjs --out C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\068d2c03-6e8d-4bcf-992f-2572f0b0367b\scratchpad\speed-out --router-graph C:\Programming Projects\GTFS Editor\data\router\road\opal --feed C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip --speed
+
+[access 0s] creating database gtfs_aa_check; importing C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip 20261121
+Ran migrations 0001, 0010
+Using the feed at C:\Programming Projects\GTFS Editor\data\feeds\nsw-complete-20261112-1750.zip (local-nsw-complete-20261112-1750-538a2f9495)
+Staged agency: 686 rows in 0.1s
+Staged calendar: 2,380 rows in 0.1s
+Staged calendar_dates: 37,593 rows in 0.1s
+Staged levels: 7 rows in 0.1s
+Staged notes: 760 rows in 0.1s
+Staged pathways: 7,031 rows in 0.1s
+Staged routes: 10,215 rows in 0.1s
+Staged shapes: 14,726,218 rows in 17.5s
+Staged stops: 171,378 rows in 0.4s
+Staged stop_times: 5,704,258 rows in 9.5s
+Staged trips: 205,218 rows in 0.5s
+Importing 20261121 ...
+  trips running on the day: 32,879 rows in 0.1s
+  routes: 10,215 rows in 0.5s
+  stops: 171,378 rows in 5.3s
+  stop parents: 93,335 rows in 3.0s
+  shapes: 2,872 rows in 8.9s
+  trips: 32,879 rows in 2.0s
+  stop times: 1,197,149 rows in 21.8s
+  trip stop sequences: 32,879 rows in 0.5s
+  trip start, end and terminals: 32,879 rows in 2.0s
+  trips with no stop times removed: 0 rows in 0.0s
+  patterns: 2,872 rows in 0.3s
+  trip patterns: 32,879 rows in 3.6s
+  map lines: 2,872 rows in 1.7s
+  route trip counts: 989 rows in 0.1s
+  modes calling at each stop: 34,230 rows in 2.9s
+  modes calling at each station: 28,869 rows in 1.7s
+  vehicle types seen in the feed: 16 rows in 0.0s
+  trip vehicle types from the feed: 2,364 rows in 0.3s
+  stay-aboard links: 767 rows in 0.1s
+  pathways: 7,031 rows in 0.1s
+  platform and wharf overlaps already in the feed: 133 rows in 0.5s
+  vehicle days: 2,839 (131 from train run numbers, 2,708 inferred) in 3.7s
+  shapes simplified: 2,872 shapes, 2,253,432 points down to 443,328 in 6.3s
+  pack bus: 28,372 trips, 17.2 MB in 2.7s
+  pack coach: 127 trips, 1.2 MB in 0.1s
+  pack ferry: 849 trips, 0.1 MB in 0.0s
+  pack light_rail: 918 trips, 0.2 MB in 0.0s
+  pack metro: 249 trips, 0.1 MB in 0.0s
+  pack train: 2,364 trips, 1.7 MB in 0.1s
+Baseline 1 ready: Saturday 21 Nov 2026 in 70s
+{
+  "trips": 32879,
+  "patterns": 2872,
+  "stopTimes": 1197149,
+  "lastArrival": 120000,
+  "vehicleDays": 2839,
+  "routesRunning": 989,
+  "firstDeparture": 0,
+  "baselineConflicts": 133,
+  "vehicleDaysInferred": 2708,
+  "tripsWithAssumedVehicle": 30515
+}
+[access 102s] starting the router on http://localhost:3112: npm run router:dev
+[router] > router:dev
+[router] > cd services/router && .\gradlew :router-server:run
+[router] Starting a Gradle Daemon, 1 busy Daemon could not be reused, use --status for details
+[router] > Task :router-gtfs:processResources
+[router]  NO-SOURCE
+[router] > Task :router-sim:processResources
+[router]  NO-SOURCE
+[router] > Task :router-server:processResources
+[router]  NO-SOURCE
+[router] > Task :router-road:processResources NO-SOURCE
+[router] > Task :router-core:compileJava UP-TO-DATE
+[router] > Task :router-core:processResources NO-SOURCE
+[router] > Task :router-core:classes UP-TO-DATE
+[router] > Task :router-core:jar
+[router]  UP-TO-DATE
+[router] > Task :router-gtfs:compileJava UP-TO-DATE
+[router] > Task :router-gtfs:classes UP-TO-DATE
+[router] > Task :router-gtfs:jar UP-TO-DATE
+[router] > Task :router-sim:compileJava UP-TO-DATE
+[router] > Task :router-sim:classes UP-TO-DATE
+[router] > Task :router-sim:jar
+[router]  UP-TO-DATE
+[router] > Task :router-road:compileJava
+[router]  UP-TO-DATE
+[router] > Task :router-road:classes UP-TO-DATE
+[router] > Task :router-road:jar UP-TO-DATE
+[router] > Task :router-server:compileJava
+[router]  UP-TO-DATE
+[router] > Task :router-server:classes UP-TO-DATE
+[router] > Task :router-server:run
+[router] [main] INFO com.graphhopper.routing.ch.CHPreparationHandler - There are no CHs to prepare
+[router] [main] INFO io.javalin.Javalin - Starting Javalin ...
+[router] [main] INFO org.eclipse.jetty.server.Server - jetty-12.1.14; built: 2026-10-02T05:48:05.032Z; git: 15cecbd757a2f6b0fdc6a8944f4c6d0020b17da0; jvm 26.0.1+8-34
+[router] [main] INFO org.eclipse.jetty.session.DefaultSessionIdManager - Session workerName=node0
+[router] [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started oeje10s.ServletContextHandler@7e053511{ROOT,/,b=null,a=AVAILABLE,h=oeje10s.SessionHandler@60222fd8{STARTED}}
+[router] [main] INFO org.eclipse.jetty.ee10.servlet.ServletContextHandler - Started oeje10s.ServletContextHandler@7e053511{ROOT,/,b=null,a=AVAILABLE,h=oeje10s.SessionHandler@60222fd8{STARTED}}
+[router] [main] INFO org.eclipse.jetty.server.AbstractConnector - Started oejs.ServerConnector@3956b302{HTTP/1.1, (http/1.1)}{0.0.0.0:3112}
+[router] [main] INFO org.eclipse.jetty.server.Server - Started oejs.Server@edf4f36{STARTING}[12.1.14,sto=0] @196ms
+[router] [main] INFO io.javalin.Javalin - Javalin started in 686ms \o/
+[router] [main] INFO io.javalin.Javalin - Listening on http://localhost:3112/
+[router] [main] INFO io.javalin.Javalin - You are running Javalin 7.2.4 (released October 25, 2026).
+[access 117s] starting the API on http://localhost:3111
+[api] API listening on http://localhost:3111
+[access 119s] starting the web app on http://localhost:5183
+[web]   [32m[1mVITE[22m v8.3.8[39m  [2mready in [0m[1m425[22m[2m[0m ms[22m
+[web]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5183[22m/[39m
+[web] [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[access 120s] running the access check
+[web] [2m1:40:41 am[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mdeck: Attribute instanceFillColors is normalized
+[web] [2m1:40:41 am[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mImage "wood-pattern" could not be loaded. Please make sure you have added the image before it is needed with map.addImage(), resolved it with map.setMissingStyleImageResolver(), or included it in a "sprite" property in your style.
+ok  app loaded on 2026-11-21 (real places)
+ok  drew the zone Mayfield; its four corners landed where they were clicked
+ok  placed Newcastle city centre and Westfield Kotara
+ok  setup says "121 sample points, 2 points of interest: 242 public transport journeys and 242 drives"
+ok  running: preparing {"stage":"timetable"}
+[router] Timetable b1-ab2ede9f6 (version local-nsw-complete-20261112-1750-538a2f9495@1795617547/r2|fleet-3bdd5634e795) loaded in 13.2 s: 1,717 trips, 
+[router] 2,928 stops
+ok  the analysis finished: 121 sample points
+ok  results for Newcastle city centre: Under 1: 0, 1 to 1.5: 1, 1.5 to 2: 0, 2 to 3: 91, 3 to 4: 24, 4 or more: 2, No service: 1, No road: 2; legend, settings line and credit shown
+ok  switched to Westfield Kotara: Under 1: 0, 1 to 1.5: 0, 1.5 to 2: 0, 2 to 3: 23, 3 to 4: 41, 4 or more: 54, No service: 1, No road: 2
+ok  opened sample point 49: 4 legs, ratio shown
+ok  cropped the legend
+ok  the drive from the middle of Mayfield to Newcastle city centre is 7.2 min
+    speed: queued null
+    speed: preparing {"stage":"timetable"}
+    speed: preparing {"secs":1,"stage":"timetable"}
+    speed: preparing {"secs":2,"stage":"timetable"}
+    speed: preparing {"secs":4,"stage":"timetable"}
+[router] Timetable b1-ab127c190 (version 
+[router] local-nsw-complete-20261112-1750-538a2f9495@1795617547/r2|fleet-3bdd5634e795) loaded in 4.9 s: 1,723 trips, 2,954 stops
+    speed: running {"done":1000,"stage":"drives","total":14700}
+    speed: running {"done":3000,"stage":"drives","total":14700}
+    speed: running {"done":4900,"stage":"drives","total":14700}
+    speed: running {"done":7900,"stage":"drives","total":14700}
+    speed: running {"done":8900,"stage":"drives","total":14700}
+    speed: running {"done":10800,"stage":"drives","total":14700}
+    speed: running {"done":12800,"stage":"drives","total":14700}
+    speed: running {"done":1000,"stage":"journeys","total":14700}
+    speed: running {"done":3000,"stage":"journeys","total":14700}
+    speed: running {"done":6000,"stage":"journeys","total":14700}
+    speed: running {"done":8500,"stage":"journeys","total":14700}
+    speed: running {"done":12000,"stage":"journeys","total":14700}
+speed: 4,900 sample points × 3 points of interest (14,700 journeys and drives) in 18.6 s, within the 5 minutes of NFR-1
+all access checks passed; screenshots in C:\Users\james\AppData\Local\Temp\claude\99dc8acd61b8089c\068d2c03-6e8d-4bcf-992f-2572f0b0367b\scratchpad\speed-out
+[access 177s] passed; cleaned up
