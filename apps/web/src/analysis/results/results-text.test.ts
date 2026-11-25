@@ -13,6 +13,7 @@ import {
   ratioText,
   readBreaks,
   settingsLine,
+  summaryBreaks,
   summaryRows,
 } from './results-text.ts';
 
@@ -115,6 +116,10 @@ describe('summaryRows and ratioText (AC-FR-20.1)', () => {
     expect(rows[2]?.colour).toBe('#d73027');
     expect(rows.slice(3).map((r) => r.colour)).toEqual(['#7f7f7f', '#cccccc']);
     expect(total).toBe(15);
+  });
+
+  it('finds the breaks the summary was made for, so its rows and labels agree', () => {
+    expect(summaryBreaks(summary)).toEqual([1, 2]);
   });
 
   it('gives the median to two places, or says there is none', () => {
