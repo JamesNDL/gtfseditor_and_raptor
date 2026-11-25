@@ -6,6 +6,7 @@ import {
   describePlan,
   parseRoadDataArgs,
   planRoadData,
+  type CommandStep,
   type RoadDataFacts,
   type RoadDataStep,
 } from './road-data-plan.ts';
@@ -38,6 +39,12 @@ function posix(over: Partial<RoadDataFacts> = {}): RoadDataFacts {
 function step(steps: readonly RoadDataStep[], kind: RoadDataStep['kind']): RoadDataStep {
   const found = steps.find((s) => s.kind === kind);
   if (!found) throw new Error(`no ${kind} step`);
+  return found;
+}
+
+function commandStep(steps: readonly RoadDataStep[], kind: CommandStep['kind']): CommandStep {
+  const found = step(steps, kind);
+  if (!('command' in found)) throw new Error(`${kind} step has no command`);
   return found;
 }
 
@@ -97,14 +104,14 @@ describe('planRoadData: the graph', () => {
 
 describe('commandLine', () => {
   it('quotes the Gradle property as one argument for cmd.exe', () => {
-    const graph = step(planRoadData(noArgs, win()).steps, 'build-graph');
+    const graph = commandStep(planRoadData(noArgs, win()).steps, 'build-graph');
     expect(commandLine(graph)).toBe(
       'gradlew.bat :router-road:roadImport "-ProadArgs=data/osm/opal.osm.pbf data/router/road/opal.new"',
     );
   });
 
   it('quotes paths with spaces in the docker command', () => {
-    const cut = step(planRoadData(noArgs, win()).steps, 'cut');
+    const cut = commandStep(planRoadData(noArgs, win()).steps, 'cut');
     expect(commandLine(cut)).toBe(
       `docker run --rm -v "${WIN_DATA}\\osm:/osm" gtfs-editor-osmium osmium extract ` +
         '-b 150.10,-34.75,151.85,-32.70 /osm/australia-latest.osm.pbf -o /osm/opal.osm.pbf --overwrite',
