@@ -1,8 +1,9 @@
 // The access analysis check (docs/architecture/access-analysis.md §8, "The owner's check"): brings
 // up a throwaway stack on spare ports (database, API, journey router or the fake router, web) and
 // runs access-check.mjs against it in a headless browser, which saves screenshots 01-zone.png to
-// 08-legend.png. Then it always stops everything, drops the database and removes the temporary
-// folder (also on Ctrl+C), unless --keep.
+// 08-legend.png, and the map editor's 09-basemap-streets.png to 14-reshape-zone.png. Then it
+// always stops everything, drops the database and removes the temporary folder (also on Ctrl+C),
+// unless --keep.
 // Usage:
 //   npm run test:access -- --fixture [--out <folder>] [--speed]
 //       the small test feed and the fake router (D32): database gtfs_t24_aa, central Sydney.
@@ -16,6 +17,7 @@
 // --out defaults to data/ui-test/access/. --speed also times 5,000 × 3 through the API (NFR-1).
 // Ports: API 3111 (API_PUBLIC_URL http://localhost:3111), router 3112, web 5183, fake router any.
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -198,7 +200,11 @@ try {
   say(`starting the web app on ${APP}`);
   web = startServer('web', {
     node: [
-      path.join(ROOT, 'node_modules/vite/bin/vite.js'),
+      // Found as Node finds it, so that a git worktree without its own node_modules works too.
+      path.join(
+        path.dirname(createRequire(import.meta.url).resolve('vite/package.json')),
+        'bin/vite.js',
+      ),
       '--port',
       String(WEB_PORT),
       '--strictPort',

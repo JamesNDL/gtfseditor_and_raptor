@@ -69,3 +69,20 @@ export async function clickPlace(b, place, what) {
   await b.clickAt(x, y);
   await sleep(250);
 }
+
+/** Drags with the mouse from one place on the map to another, in small steps, as a hand would. */
+export async function dragPlace(b, from, to) {
+  const a = await toScreen(b, from);
+  const z = await toScreen(b, to);
+  const mouse = (type, x, y, buttons) =>
+    b.cdp('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons, clickCount: 1 });
+  await mouse('mouseMoved', a.x, a.y, 0);
+  await mouse('mousePressed', a.x, a.y, 1);
+  const steps = 8;
+  for (let k = 1; k <= steps; k++) {
+    await mouse('mouseMoved', a.x + ((z.x - a.x) * k) / steps, a.y + ((z.y - a.y) * k) / steps, 1);
+    await sleep(30);
+  }
+  await mouse('mouseReleased', z.x, z.y, 0);
+  await sleep(300);
+}

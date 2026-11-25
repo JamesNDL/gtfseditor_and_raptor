@@ -16,7 +16,8 @@ import {
 } from '../analysis/analysis-colours.ts';
 import { useAnalysisResults } from '../analysis/analysis-results.ts';
 import { useStore } from '../app/store.ts';
-import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
+import type { MapPalette } from '../app/theme.ts';
+import { useMapPalette } from './basemap-choice.ts';
 import { useAnalysisCompareLayers } from './use-analysis-compare-layers.ts';
 import { useAnalysisPointLayers } from './use-analysis-point-layers.ts';
 
@@ -230,7 +231,7 @@ export function useAnalysisResultLayers(
   mapRef: RefObject<maplibregl.Map | null>,
   whenLoaded: (fn: () => void) => void,
 ): void {
-  const theme = useStore((s) => s.theme);
+  const palette = useMapPalette();
   const paneOpen = useStore((s) => s.leftPane === 'analysis');
   const screen = useStore((s) => s.analysis.screen);
   const openId = useStore((s) => s.analysis.openId);
@@ -247,7 +248,7 @@ export function useAnalysisResultLayers(
     const map = mapRef.current;
     if (!map) return;
     onceLoaded(() => {
-      if (!map.getSource(BANDS)) addLayers(map, MAP_PALETTE[theme]);
+      if (!map.getSource(BANDS)) addLayers(map, palette);
       // Layers the network adds later (a day chosen again) would cover these: keep them on top.
       for (const id of LAYER_IDS) {
         map.moveLayer(id);
@@ -268,7 +269,7 @@ export function useAnalysisResultLayers(
       }
       if (!shown && openId === null) fitted.current = null;
     });
-  }, [mapRef, shown, detail, openId, poiSeq, results, theme]);
+  }, [mapRef, shown, detail, openId, poiSeq, results, palette]);
   // Called after the effect above, so the picked point's layers go on top of these.
   useAnalysisPointLayers(mapRef, whenLoaded, shown);
   // The comparison takes the results' place on the map while it is shown (FR-17).

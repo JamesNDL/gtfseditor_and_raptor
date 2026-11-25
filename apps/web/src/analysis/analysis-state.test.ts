@@ -13,6 +13,7 @@ import {
   timetableText,
   type AnalysisView,
 } from './analysis-state.ts';
+import { NO_MAP_WORK } from './map-work.ts';
 
 const item = (over: Partial<AnalysisListItem> = {}): AnalysisListItem => ({
   id: 1,
@@ -34,9 +35,7 @@ const item = (over: Partial<AnalysisListItem> = {}): AnalysisListItem => ({
 const busy = (): AnalysisView => ({
   ...defaultAnalysisView(),
   screen: 'results',
-  drawing: [[151.2, -33.9]],
-  placingPoi: 'Hospital',
-  movingPoiId: 4,
+  work: { ...NO_MAP_WORK, tool: 'zone', corners: [[151.2, -33.9]] },
   openId: 7,
   poiSeq: 2,
   breaks: [1, 2],
@@ -49,11 +48,7 @@ describe('defaultAnalysisView', () => {
     const view = defaultAnalysisView();
     expect(view).toEqual({
       screen: 'list',
-      drawing: null,
-      drawingClosed: false,
-      drawingProblem: null,
-      placingPoi: null,
-      movingPoiId: null,
+      work: NO_MAP_WORK,
       setup: {
         name: '',
         scenarioId: null,
@@ -89,11 +84,9 @@ describe('openAnalysis', () => {
     expect(view.compareWith).toBeNull();
   });
 
-  it('stops any drawing, placing or moving on the map', () => {
+  it("puts down the map editor's tool in use", () => {
     const view = openAnalysis(busy(), 12);
-    expect(view.drawing).toBeNull();
-    expect(view.placingPoi).toBeNull();
-    expect(view.movingPoiId).toBeNull();
+    expect(view.work).toEqual(NO_MAP_WORK);
   });
 });
 
@@ -105,9 +98,7 @@ describe('newAnalysis', () => {
     expect(view.openId).toBeNull();
     expect(view.pointSeq).toBeNull();
     expect(view.compareWith).toBeNull();
-    expect(view.drawing).toBeNull();
-    expect(view.placingPoi).toBeNull();
-    expect(view.movingPoiId).toBeNull();
+    expect(view.work).toEqual(NO_MAP_WORK);
   });
 
   it('uses the published day when no scenario is open', () => {
@@ -122,9 +113,7 @@ describe('backToList', () => {
     expect(view.openId).toBeNull();
     expect(view.pointSeq).toBeNull();
     expect(view.compareWith).toBeNull();
-    expect(view.drawing).toBeNull();
-    expect(view.placingPoi).toBeNull();
-    expect(view.movingPoiId).toBeNull();
+    expect(view.work).toEqual(NO_MAP_WORK);
   });
 });
 

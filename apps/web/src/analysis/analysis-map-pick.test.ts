@@ -1,17 +1,13 @@
 // AA-21 (FR-15; AC-FR-15.1, AC 4): a click on the map while an analysis's results are shown picks
 // the nearest sample point within 12 pixels, and a click away from every sample point lets go of
-// the one picked. Drawing, placing and moving still come first.
+// the one picked. The map editor's tools still come first.
 import type { GeoJsonPosition } from '@gtfs-editor/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useStore } from '../app/store.ts';
 import { analysisMapClick } from './analysis-map.ts';
 import { useAnalysisResults, type SamplePoints } from './analysis-results.ts';
-import {
-  defaultAnalysisView,
-  openAnalysis,
-  startDrawing,
-  type AnalysisView,
-} from './analysis-state.ts';
+import { defaultAnalysisView, openAnalysis, type AnalysisView } from './analysis-state.ts';
+import { NO_MAP_WORK, pickTool } from './map-work.ts';
 
 const view = (): AnalysisView => useStore.getState().analysis;
 const setView = (analysis: AnalysisView) => useStore.getState().set({ analysis });
@@ -81,9 +77,9 @@ describe('analysisMapClick on the results', () => {
   });
 
   it('adds a corner rather than picking while a zone is being drawn', () => {
-    setView(startDrawing(results()));
+    setView({ ...results(), work: pickTool(NO_MAP_WORK, 'zone') });
     expect(analysisMapClick(151.02, -33.9, from(151.02))).toBe(true);
-    expect(view().drawing).toEqual([[151.02, -33.9]]);
+    expect(view().work.corners).toEqual([[151.02, -33.9]]);
     expect(view().pointSeq).toBeNull();
   });
 });

@@ -1,8 +1,10 @@
 // The access analysis check in a headless browser (docs/architecture/access-analysis.md §8, "The
-// owner's check"; FR-4 to FR-20 end to end): opens the Access pane, draws a zone by clicking its
-// corners, places two points of interest, checks the setup's count line and runs; then opens the
-// results, checks the legend, settings line, OpenStreetMap credit and summary, switches point of
-// interest, opens a sample point, and saves screenshots 01-zone.png to 08-legend.png.
+// owner's check"; FR-4 to FR-20 end to end): opens the Access pane, draws a zone with the map
+// editor's Draw zone tool, places two points of interest with the pin tool (access-editor.mjs),
+// switches the basemap, drags the zone and a pin, checks the setup's count line and runs; then
+// opens the results, checks the legend, settings line, OpenStreetMap credit and summary, switches
+// point of interest, opens a sample point, and saves screenshots 01-zone.png to 08-legend.png,
+// and the map editor's 09-basemap-streets.png to 14-reshape-zone.png.
 // Usage: run-access-check.mjs starts a stack and runs this; to drive a stack already running:
 //   APP=http://localhost:5183 API=http://localhost:3111 OUT=<folder> PLACES=real|fixture \
 //   node apps/web/test/access-check.mjs
@@ -12,7 +14,8 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { openBrowser, sleep } from './access-browser.mjs';
-import { clickPlace, showPlaces } from './access-map.mjs';
+import { dragPlaces, drawZone, placePois, switchBasemaps } from './access-editor.mjs';
+import { clickPlace } from './access-map.mjs';
 import { middleOf, placesFor } from './access-places.mjs';
 import {
   STARTING_SETTINGS_LINE,
@@ -28,8 +31,6 @@ const OUT = path.resolve(process.env.OUT ?? 'data/ui-test/access');
 const PLAN = placesFor(process.env.PLACES ?? 'real');
 const FAKE_ROUTER = process.env.FAKE_ROUTER ?? null;
 const RUN_NAME = 'Access check';
-/** How near, in degrees, a click must land to the place it was aimed at (about 30 m). */
-const NEAR_DEGREES = 0.0003;
 
 const step = (words) => console.log(`ok  ${words}`);
 async function send(method, url, body) {
@@ -48,7 +49,6 @@ async function api(url) {
 const fake = (control) =>
   FAKE_ROUTER &&
   fetch(`${FAKE_ROUTER}/fake/control`, { method: 'POST', body: JSON.stringify(control) });
-const near = (a, b) => Math.abs(a[0] - b[0]) < NEAR_DEGREES && Math.abs(a[1] - b[1]) < NEAR_DEGREES;
 const metres = (a, b) =>
   Math.hypot((a[0] - b[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), (a[1] - b[1]) * 110_540);
 
@@ -59,63 +59,8 @@ const shot = async (name, clip) => {
   const file = path.join(OUT, `${String(++shotNo).padStart(2, '0')}-${name}.png`);
   await b.shot(file, clip);
 };
-
-/** Step 1: draws the zone by clicking its corners and then the first one again; names it. */
-async function drawZone() {
-  await b.click('.rail-button', 'Access');
-  await b.click('.analysis-panel button', 'New analysis');
-  await showPlaces(b, [...PLAN.zone.corners, ...PLAN.pois.map((p) => p.at)]);
-  await b.click('.analysis-panel button', 'Draw a zone');
-  for (const [k, corner] of PLAN.zone.corners.entries()) {
-    await clickPlace(b, corner, `corner ${k + 1} of the zone`);
-  }
-  await clickPlace(b, PLAN.zone.corners[0], 'the first corner again, to close the outline');
-  await b.waitFor(
-    `/The outline is closed with 4 corners/.test(document.querySelector('.analysis-panel').textContent)`,
-    'the outline to close on the first corner',
-  );
-  await b.typeText(PLAN.zone.name);
-  await b.pressKey('Enter', 'Enter', 13);
-  await b.waitFor(
-    `[...document.querySelectorAll('.analysis-place')].some((li) => li.textContent.includes(${JSON.stringify(PLAN.zone.name)}) && li.querySelector('input[type=radio]')?.checked)`,
-    `the zone ${PLAN.zone.name} saved and picked`,
-  );
-  const zone = (await api('/api/analysis/zones')).find((z) => z.name === PLAN.zone.name);
-  made.zones.push(zone.id);
-  PLAN.zone.corners.forEach((corner, k) =>
-    assert.ok(near(zone.ring[k], corner), `corner ${k + 1} landed at ${zone.ring[k]}`),
-  );
-  await sleep(300);
-  await shot('zone');
-  step(`drew the zone ${PLAN.zone.name}; its four corners landed where they were clicked`);
-}
-
-/** Step 2: places each point of interest with "Add a point of interest" and a click. */
-async function placePois() {
-  for (const poi of PLAN.pois) {
-    await b.click('.analysis-panel button', 'Add a point of interest');
-    await b.typeText(poi.name);
-    await b.pressKey('Enter', 'Enter', 13);
-    await b.waitFor(
-      `document.querySelector('.analysis-panel').textContent.includes(${JSON.stringify(`Click the map where ${poi.name} goes`)})`,
-      `the setup to wait for ${poi.name} to be placed`,
-    );
-    await clickPlace(b, poi.at, poi.name);
-    await b.waitFor(
-      `[...document.querySelectorAll('.analysis-place')].some((li) => li.textContent.includes(${JSON.stringify(poi.name)}) && li.querySelector('input[type=checkbox]')?.checked)`,
-      `${poi.name} saved and ticked`,
-    );
-    const saved = (await api('/api/analysis/pois')).find((p) => p.name === poi.name);
-    made.pois.push(saved.id);
-    assert.ok(
-      near([saved.lon, saved.lat], poi.at),
-      `${poi.name} landed at ${saved.lon}, ${saved.lat}`,
-    );
-  }
-  await sleep(300);
-  await shot('pois');
-  step(`placed ${PLAN.pois.map((p) => p.name).join(' and ')}`);
-}
+/** The map editor's screenshots, numbered 09 to 14 after the check's own eight. */
+const extraShot = (name) => b.shot(path.join(OUT, `${name}.png`));
 
 /** Step 3: checks the setup, runs, and waits for done; answers the finished analysis. */
 async function runAnalysis(baselineId) {
@@ -261,8 +206,15 @@ try {
   await b.waitFor(b.inApp('return useStore.getState().baselineId !== null;'), 'the app', 60_000);
   await b.waitFor(b.inApp('return mapView.bounds !== null;'), 'the map to load', 60_000);
   step(`app loaded on ${baseline.serviceDate} (${PLAN.name} places)`);
-  await drawZone();
-  await placePois();
+  const steps = { plan: PLAN, api, made, shot, extraShot };
+  const zone = await drawZone(b, steps);
+  step(`drew the zone ${PLAN.zone.name} with Draw zone; its corners landed where clicked`);
+  await placePois(b, steps);
+  step(`placed ${PLAN.pois.map((p) => p.name).join(' and ')} with the pin tool and name box`);
+  await switchBasemaps(b, steps);
+  step('switched the basemap to Streets, Satellite and back to Dark');
+  await dragPlaces(b, { ...steps, zone });
+  step('reshaped the zone and moved a pin by dragging, and put them back');
   const detail = await runAnalysis(baseline.id);
   await showResults(detail);
   await checkDrive(detail);

@@ -1,35 +1,30 @@
 // What a click on the map does for the Access pane (docs/architecture/access-analysis.md §5.2,
-// D29): it adds a corner to the zone being drawn (or closes it), places a new point of interest,
-// or moves one. The map's click handler asks here first and does nothing else when the answer is
-// true, so no vehicle or stop opens while drawing or placing. On the results, it picks the sample
-// point clicked (FR-15).
+// D29, D36): with Draw zone it adds a corner (or closes the outline); with Place point of interest
+// it drops the pin; with no tool, on the setup, a click on a saved pin opens its name box. The
+// map's click handler asks here first and does nothing else when the answer is true, so no vehicle
+// or stop opens while a tool is in use. On the results, it picks the sample point clicked (FR-15).
 import type { GeoJsonPosition } from '@gtfs-editor/core';
 import { useStore } from '../app/store.ts';
-import { movePoi, savePoi, usePlaces } from './analysis-api.ts';
+import { usePlaces } from './analysis-api.ts';
 import { useAnalysisResults } from './analysis-results.ts';
+import type { AnalysisView } from './analysis-state.ts';
 import {
+  NO_MAP_WORK,
+  REPEAT_REACH_PX,
   addCorner,
   closeDrawing,
   closesOutline,
-  isMapBusy,
-  togglePoi,
-  type AnalysisView,
-} from './analysis-state.ts';
+  dropPoi,
+  startRenaming,
+  type MapWork,
+} from './map-work.ts';
 
 const view = (): AnalysisView => useStore.getState().analysis;
 const setView = (analysis: AnalysisView): void => useStore.getState().set({ analysis });
+const setWork = (work: MapWork): void => setView({ ...view(), work });
 
-/** Places the new point of interest, and picks it for the analysis being set up. */
-async function place(name: string, lon: number, lat: number): Promise<void> {
-  const poi = await savePoi({ name, lon, lat });
-  setView(togglePoi(view(), poi.id));
-}
-
-/** Runs a change to a point of interest, showing the API's words if it fails. */
-function poiChange(change: Promise<void>): void {
-  usePlaces.setState({ poiError: null });
-  change.catch((e: Error) => usePlaces.setState({ poiError: e.message }));
-}
+/** How near a saved pin, in pixels, a click opens its name box. */
+export const PIN_REACH_PX = 10;
 
 /** How near a sample point, in pixels, a click picks it (FR-15). */
 export const PICK_REACH_PX = 12;
@@ -64,10 +59,36 @@ function pickSamplePoint(
   return true;
 }
 
+/** A click while drawing a zone: a corner, the outline closed, or nothing once it is closed. */
+function zoneClick(
+  work: MapWork,
+  at: GeoJsonPosition,
+  pixelsTo: (place: GeoJsonPosition) => number,
+): void {
+  // A closed outline waiting for its name takes no more corners; the click still goes nowhere.
+  if (work.closed) return;
+  if (closesOutline(work, pixelsTo)) return setWork(closeDrawing(work));
+  const last = work.corners[work.corners.length - 1];
+  // The second click of a double click (which finishes the outline) is not a corner of its own.
+  if (last && pixelsTo(last) <= REPEAT_REACH_PX) return;
+  setWork(addCorner(work, at));
+}
+
+/** On the setup with no tool, the saved pin under the click, if any. */
+function pinAt(current: AnalysisView, pixelsTo: (place: GeoJsonPosition) => number): number | null {
+  if (useStore.getState().leftPane !== 'analysis' || current.screen !== 'setup') return null;
+  let nearest: { id: number; px: number } | null = null;
+  for (const poi of usePlaces.getState().pois ?? []) {
+    const px = pixelsTo([poi.lon, poi.lat]);
+    if (px <= PIN_REACH_PX && (nearest === null || px < nearest.px)) nearest = { id: poi.id, px };
+  }
+  return nearest?.id ?? null;
+}
+
 /**
- * Uses a click on the map at (lon, lat) for the Access pane's map work, and answers whether it did.
+ * Uses a click on the map at (lon, lat) for the Access pane, and answers whether it did.
  * `pixelsTo` measures, in screen pixels, from the click to a given place, so that a click on the
- * first corner closes the outline.
+ * first corner closes the outline and a click on a pin opens its name box.
  */
 export function analysisMapClick(
   lon: number,
@@ -75,18 +96,24 @@ export function analysisMapClick(
   pixelsTo: (place: GeoJsonPosition) => number,
 ): boolean {
   const current = view();
-  if (!isMapBusy(current)) return pickSamplePoint(current, pixelsTo);
-  if (current.drawing !== null) {
-    // A closed outline waiting for its name takes no more corners; the click still goes nowhere.
-    if (current.drawingClosed) return true;
-    setView(
-      closesOutline(current, pixelsTo) ? closeDrawing(current) : addCorner(current, [lon, lat]),
-    );
+  const { work } = current;
+  if (work.tool === 'zone') {
+    zoneClick(work, [lon, lat], pixelsTo);
     return true;
   }
-  // The wait ends with this click, so a second click cannot place or move it twice.
-  setView({ ...current, placingPoi: null, movingPoiId: null });
-  if (current.placingPoi !== null) poiChange(place(current.placingPoi, lon, lat));
-  else if (current.movingPoiId !== null) poiChange(movePoi(current.movingPoiId, lon, lat));
-  return true;
+  if (work.tool === 'poi') {
+    setWork(dropPoi(work, [lon, lat]));
+    return true;
+  }
+  // A click away from an open name box closes it.
+  if (work.renamingPoiId !== null) {
+    setWork(NO_MAP_WORK);
+    return true;
+  }
+  const pin = pinAt(current, pixelsTo);
+  if (pin !== null) {
+    setWork(startRenaming(work, pin));
+    return true;
+  }
+  return pickSamplePoint(current, pixelsTo);
 }

@@ -137,7 +137,12 @@
   align-self: flex-start;
 }
 
-.analysis-drawing,
+/* Where to find the map editor's tools, under each list. */
+.analysis-map-hint {
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
 .analysis-name-form {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,6 @@
-// One saved zone or point of interest in the setup's lists: a box to pick it, Rename and Delete,
-// and any buttons of its own (Move, for a point of interest). Delete asks once more first.
-import { useState, type ReactNode } from 'react';
+// One saved zone or point of interest in the setup's lists: a box to pick it, Rename and Delete.
+// Delete asks once more first.
+import { useState } from 'react';
 import { NameForm } from './NameForm.tsx';
 
 interface Props {
@@ -17,7 +17,6 @@ interface Props {
   onDelete: () => Promise<void>;
   /** Shown while something else is being done, so that only one thing happens at once. */
   disabled?: boolean;
-  children?: ReactNode;
 }
 
 export function PlaceRow({
@@ -30,7 +29,6 @@ export function PlaceRow({
   onRename,
   onDelete,
   disabled = false,
-  children,
 }: Props) {
   const [mode, setMode] = useState<'show' | 'rename' | 'delete'>('show');
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +60,6 @@ export function PlaceRow({
       <div className="analysis-actions">
         {mode === 'show' ? (
           <>
-            {children}
             <button
               className="button small-button"
               disabled={disabled}

@@ -1,0 +1,110 @@
+/* The Access pane's map editor: the tool bar and its hint on the map beside the side panel (the
+   panel ends 410px from the left; see app/left-rail.css), and the name box over the map. */
+.aa-tools {
+  position: absolute;
+  top: 78px;
+  left: 410px;
+  z-index: 9;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100vw - 410px - 300px);
+  pointer-events: none;
+}
+
+.aa-tools > * {
+  pointer-events: auto;
+}
+
+.aa-toolbar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+}
+
+.aa-tool {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  border: 1.5px solid transparent;
+  color: var(--text);
+}
+
+.aa-tool:hover {
+  background: var(--surface-2);
+}
+
+.aa-tool.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.aa-tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.aa-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  max-width: 380px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.aa-hint.error {
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.aa-hint-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* The name box: above its place, with a point aimed at it (below it when there is no room). */
+.aa-name-box {
+  position: absolute;
+  z-index: 13;
+  width: 270px;
+  padding: 10px 12px 12px;
+  box-sizing: border-box;
+  background: var(--surface);
+}
+
+.aa-name-box::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--aim) - 7px);
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+
+.aa-name-box.below::after {
+  top: -7px;
+  bottom: auto;
+  transform: rotate(225deg);
+}
+
+.aa-name-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
