@@ -12,6 +12,7 @@ import type {
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { fail, int, notFound } from '../http.ts';
 import { createAnalysis } from './create.ts';
+import { summariesOf } from './results-read.ts';
 import { ACTIVE_STATES, analysisRunner, type AnalysisRunner } from './runner.ts';
 
 /** An analysis as read for the list, before its dates become text. */
@@ -85,12 +86,13 @@ export function registerAnalysisRoutes(app: FastifyInstance, sql: Sql): Analysis
       select seq, poi_id as "poiId", name, st_x(geom) as lon, st_y(geom) as lat
       from analysis_pois where analysis_id = ${id} order by seq`;
     const { settings, zoneId, zoneRings, zoneHash, zoneName, ...item } = row;
+    // Each point of interest's summary for the analysis's own lines, once it is done (FR-20).
+    const summaries = row.state === 'done' ? await summariesOf(sql, id, settings.breaks) : null;
     return {
       ...listItemOf({ ...item, zoneName }),
       settings,
       zone: { id: zoneId, name: zoneName, ring: zoneRings[0].slice(0, -1), hash: zoneHash },
-      // The summaries come with the results (AA-16).
-      pois: pois.map((poi) => ({ ...poi, summary: null })),
+      pois: pois.map((poi) => ({ ...poi, summary: summaries?.get(poi.seq) ?? null })),
     };
   });
 

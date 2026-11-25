@@ -2,6 +2,7 @@ import compress from '@fastify/compress';
 import Fastify from 'fastify';
 import { connect, migrate } from '@gtfs-editor/gtfs/db';
 import { registerAnalysisPlaceRoutes } from './analysis/places-routes.ts';
+import { registerAnalysisResultRoutes } from './analysis/results-routes.ts';
 import { registerAnalysisRoutes } from './analysis/routes.ts';
 import { registerExportRoutes } from './export/routes.ts';
 import { registerFleetRoutes } from './catalogue/routes.ts';
@@ -33,6 +34,7 @@ registerSimRoutes(app, sql);
 registerSimResultRoutes(app, sql);
 registerAnalysisPlaceRoutes(app, sql);
 const analyses = registerAnalysisRoutes(app, sql);
+registerAnalysisResultRoutes(app, sql);
 
 app.get('/api/health', async () => ({ ok: true }));
 
