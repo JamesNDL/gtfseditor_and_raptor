@@ -5,7 +5,7 @@
 | BRD | `docs/brd/access-analysis.md`, **version 1.0** (Approved, 25 Nov 2026) |
 | Status | **Approved** for building (the owner delegated the design calls to the architect, 25 Nov 2026; every choice below is open to the owner's review) |
 | Date | 25 Nov 2026 |
-| Checked against | commit `eab9bb5` (branch `refactor/stage-3`) |
+| Checked against | commit `eab9bb5` (branch `refactor/stage-3`) when written; **built** on `feature/access-analysis`, checked against `504fc45` (26 Nov 2026). What was built differently or decided while building is in §12. |
 | System architecture | `docs/architecture/system.md` (decisions D14 to D34 come from this document) |
 | Tickets | `docs/project/access-analysis-tickets.xlsx` (AA-1 to AA-26, epics EP-15 to EP-20) |
 
@@ -112,7 +112,7 @@ flowchart LR
 
 `GET /v1/health` gains `"road": {"available": true, "graph": "data/router/road/opal", "builtFrom": "opal.osm.pbf", "builtAt": "…", "mode": "on"}`. `available` is false when off.
 
-**Gradle:** `router-server`'s `run` task heap goes to `1g`. A new task `runRoad` (same main class) sets `ROUTER_ROAD=only`, `ROUTER_PORT=3003` and a `512m` heap. New npm script `router:road` = `cd services/router && .\gradlew :router-server:runRoad`.
+**Gradle:** `router-server`'s `run` task heap goes to `1g`. A new task `runRoad` (same main class) sets `ROUTER_ROAD=only`, `ROUTER_PORT=3003` (only when `ROUTER_PORT` is not already set; fixed in AA-7) and a `512m` heap. New npm script `router:road` = `cd services/router && .\gradlew :router-server:runRoad`.
 
 ### 3.3 Endpoints and shapes
 
@@ -422,13 +422,17 @@ Screenshots go to `docs/pr/access-analysis/` and are committed on the AA-26 bran
 |---|---|---|---|
 | AAI-1 | `apps/api/src/sim/sim.ts` (1,681 lines) holds the router client and timetable loading that the analysis needs; refactor plan §3.2 (split `sim.ts`) is not ticketed (`docs/project/refactor-tickets.xlsx`, Coverage: "3.2 sim.ts not planned yet"). Design: AA-13 moves just those two parts, to the names the planned layout already uses. The rest of §3.2 stays unticketed. | Project manager (done: AA-13) | Decided |
 | AAI-2 | Java files over 300 lines: `RouterServer.java` 723, `Simulations.java` 677, `JourneyApi.java` 659, `Timetables.java` 374. §14's short-file standard is written for the TypeScript side; T-19's file length check covers only `.ts`, `.tsx`, `.mjs` and `.css` under `apps/` and `packages/`. New road code goes in new files and adds only a few lines to `RouterServer.java`. Should the 300-line rule and its check cover `services/router`? | Owner | Open |
-| AAI-3 | `docs/router-plan.md` §8.1 lists `POST /v1/road/bulk` (streamed). D17 replaces it with `POST /v1/road/table`. §7.3's "memory-mapped for serving" stands; §7.5's OSRM endpoints and "a routing server that can be told a road is closed" (A7) are as the BRD says. Update router-plan §8.1 and add "Phase 6 findings" in AA-7 and AA-25. | Developer (docs, AA-7, AA-25) | Open |
+| AAI-3 | `docs/router-plan.md` §8.1 lists `POST /v1/road/bulk` (streamed). D17 replaces it with `POST /v1/road/table`. §7.3's "memory-mapped for serving" stands; §7.5's OSRM endpoints and "a routing server that can be told a road is closed" (A7) are as the BRD says. Update router-plan §8.1 and add "Phase 6 findings" in AA-7 and AA-25. | Developer (docs, AA-7, AA-25) | Resolved 26 Nov 2026: router-plan §8.1 updated and §21 added (AA-7); §7 marked as built (AA-25) |
 | AAI-4 | Migration numbers: `trustworthy-edits` plans three migrations "numbered whatever is next" on another branch. D24 reserves `0010` for this work and leaves 0002 to 0009 to that one. If `trustworthy-edits` needs more than eight, it skips 0010. | Coordinator (keep to it when merging) | Decided |
 | AAI-5 | NFR-5 says "no coordinates are sent outside the machine once FR-13 is built". The basemap tiles still come from OpenFreeMap (`apps/web/src/app/theme.ts`), and tile addresses say which part of the map is being looked at, though not any sample point or stop. The design reads NFR-5 as "no routing request leaves the machine", which is what the BRD's success line and AC-NFR-5.1 describe. If the owner means tiles too, a self-hosted basemap is a separate piece of work. | Owner, then BA | Open |
-| AAI-6 | `docs/architecture/system.md` §3 and §8 and decision D5 say road paths come from an outside OSRM server. After FR-13 they come from the journey router. D5 is marked superseded by D16 now; the context table and diagram are updated at close-out (AA-25), when it is built. | Developer (docs, AA-25) | Open |
-| AAI-7 | BRD I-1: `PLAN.md` lists "a self-hosted routing server" as remaining work; FR-13 does it. Fixed at close-out (AA-25). "A routing server that can be told a road is closed" stays (A7). | Developer (docs, AA-25) | Open |
+| AAI-6 | `docs/architecture/system.md` §3 and §8 and decision D5 say road paths come from an outside OSRM server. After FR-13 they come from the journey router. D5 is marked superseded by D16 now; the context table and diagram are updated at close-out (AA-25), when it is built. | Developer (docs, AA-25) | Resolved 26 Nov 2026: system.md §3, §4, §5.1, §6, §8, §9 updated |
+| AAI-7 | BRD I-1: `PLAN.md` lists "a self-hosted routing server" as remaining work; FR-13 does it. Fixed at close-out (AA-25). "A routing server that can be told a road is closed" stays (A7). | Developer (docs, AA-25) | Resolved 26 Nov 2026: struck from `PLAN.md`; BRD I-1 closed |
 | AAI-8 | "How to work" rule 6 says developers don't run Gradle. D33 allows it for the router tickets of this epic, as the owner asked. | Recorded in the tickets' "How to work" sheet | Decided |
-| AAI-9 | The BRD's edge cases use "no road" for a sample point with no road nearby, but the glossary list does not include it. It is a status beside "no service". Added to the "No service" entry as a related word; the BA may want its own entry. | BA | Open |
+| AAI-9 | The BRD's edge cases use "no road" for a sample point with no road nearby, but the glossary list does not include it. It is a status beside "no service". Added to the "No service" entry as a related word; the BA may want its own entry. | BA | Resolved 26 Nov 2026 at close-out (AA-25): "No road" has its own glossary entry, with "Comparison" and its six words; the BA may still revise them |
+| AAI-10 | `create.ts` runs `gridCount` before any size guard, so a very large zone at 50 m spacing is slow to refuse (AA-14). The setup screen guards itself with an area-based "About" count for huge boxes (AA-19). | Project manager (a small ticket: check columns × rows before counting) | Open |
+| AAI-11 | The results CSV does not guard text cells (analysis, zone and point of interest names) against formula injection when opened in a spreadsheet (AA-22). | Project manager (a small ticket) | Open |
+| AAI-12 | The map's hover tooltip still shows while a zone is being drawn (AA-18). | Project manager (a small ticket) | Open |
+| AAI-13 | `apps/web/src/app/store.ts` is 335 lines after the `analysis` field (AA-17), over the 300-line standard. | Project manager (refactor stage 5) | Open |
 
 ## 10. Risks and open questions
 
@@ -452,8 +456,41 @@ Open questions: AAI-2 and AAI-5 for the owner. BRD Q1 and Q2 are taken as stated
 - "Avoid a closed area" in the road router (A7): GraphHopper's custom model can do it, in the slower flexible mode (router-plan §14); `RoadRouter` would gain an `avoid` argument and `routedAround` could become one request.
 - Walking on the street network: the same graph with a foot profile (router-plan §7.5).
 
-## 12. Change log
+## 12. As built (26 Nov 2026)
+
+Every ticket AA-1 to AA-24 is merged into `feature/access-analysis`. The design above stands; these are the choices the developers made inside it, and the places where the code differs from the tables above. The file lists are kept current in `docs/codebase-map.md`.
+
+**Road router (§3).**
+- The graph leaves out footways, cycleways, paths, steps and the like. In the real data a point is not placed on an island of road with fewer than 200 links (GraphHopper's minimum network size; 0 in the tests). Each point is placed on the road once, then the drive is planned on the speed-up index.
+- Many drives and other routes have their own classes in `router-road`: `GraphHopperTable` (one query graph, the thread pool) and `GraphHopperAlternatives` (other routes work with the speed-up index on 11.1). The JSON of the road endpoints is in `RoadJson.java`, and the OSRM request's parts in `OsrmRequest.java`.
+- The OSRM-shaped `route` takes a missing `geometries` as `geojson`, gives up to 2 other routes (3 in all) and only where GraphHopper finds ones different enough, and refuses more than 500 points (`TooBig`). Jetty's request header size is raised to 32 KB for a 500-point address.
+- AA-7 measured everything (router-plan §21): the road-only process is not needed; the main router with roads stays under 800 MB.
+
+**API (§4.4).** Besides the files listed: `create-body.ts` reads the create body (settings left out take D34's values); `results-read.ts` reads what the result routes need and rebuilds the grid; `compare-read.ts` says which analyses can be compared (the list carries `comparableWith`); `export-rows.ts` builds the export rows. The compare and export routes are both in `export-routes.ts`.
+- **Ride metres** in a stored leg are the straight line from boarding to alighting.
+- A journey longer than the longest journey allowed is `noService`, but its time, split and legs are kept, so the sample point can still show it; its ratio is null.
+- `PointDetail` keeps the core names: `pt` (the split), `poiSeq`, `carPathMessage`.
+- The open ends of the outer bands are `null` in JSON (they are infinite in `packages/core`); breaks are checked before the lines are worked out.
+- In the results CSV the `poi` column is the analysis's own point of interest number (`seq`); the comparison's `poi` is the saved point of interest's id, since two analyses number theirs separately.
+- A zone's PATCH renames it only; a new outline is a new zone (D31).
+
+**Pure logic (§4.1).** `contours.ts` joins its segments with `contour-lines.ts`. The band type is `RatioBandPieces` (`RatioBand` is the summary's). `ContourGrid` takes its origin as the south-west corner of the zone's box plus half a spacing.
+
+**Web app (§5.2).**
+- The list of the day's analyses, and the saved zones and points of interest, are kept in a store local to the feature (`analysis-api.ts`), not the app store, which gains only the `analysis` field (D29 kept). The rail's Access button shows a badge while one is running. Accepted by the architect (coordinator) in AA-17.
+- The open analysis's results, the picked sample point and the comparison each have a small store of their own: `analysis-results.ts`, `point-detail.ts`, `analysis-compare.ts`. `point-journey.ts` turns the stored legs into lines for the map; waits are worked out from the clock times, as none is stored.
+- The setup has more parts than listed: `setup/ZoneDrawing.tsx`, `NameForm.tsx`, `PlaceRow.tsx`, and the pure `setup-form.ts` and `setup-choices.ts`. The results' words are in `results/results-text.ts`, `point-detail-text.ts` and `compare-text.ts`, with `point-detail.css` and `compare-export.css` beside them.
+- Progress comes from the list, fetched every 2 s while anything is waiting or running, not from each analysis's detail (accepted by the architect in AA-19). For a zone whose box is too big to count quickly, the count line gives an "About" figure from the area.
+- `analysisMapClick(lon, lat, pixelsTo)`: the map passes a function that measures screen pixels to a place, used to close the outline on its first corner and to pick the nearest sample point within 12 px.
+- The map layers are four hooks: `map/use-analysis-layers.ts` (places) and `use-analysis-result-layers.ts` (results), which `MapView.tsx` calls, and `use-analysis-point-layers.ts` (the picked point) and `use-analysis-compare-layers.ts` (the comparison), which the results hook calls. Their sources and layers are named `aa-…`. The road results' sources carry the OpenStreetMap credit, so it shows only while results are on the map. Opening an analysis moves the map to its zone.
+- **Comparison direction:** the open analysis is `a` and the one picked under "Compare with…" is `b`, so the change is the other analysis's ratio less the open one's; a fall is "Better" (§5.3, `compareRatios`).
+- `vite.config.ts` reads `WEB_PORT` and `API_TARGET`, so a check can run a private web app beside the owner's.
+
+**Tests (§8).** The fixture e2e is split into `analysis.e2e.mjs` and the suites it runs (`analysis-runs`, `analysis-progress`, `analysis-pairs`, `analysis-results`, `analysis-compare`), with `analysis-e2e-client.mjs`, `analysis-results-lines.mjs` and `analysis-export-checks.mjs` as helpers; the fixture run uses the fake router as both `ROUTER_SERVICE_URL` and `ROUTER_URL` (it answers no OSRM-shaped request, so `roads.ts` falls back as with no road router), and starts a second API to check that runs carry on. `npm run test:access` is eight files in `apps/web/test/`: `run-access-check.mjs`, `access-stack.mjs`, `access-check.mjs`, `access-results-checks.mjs`, `access-browser.mjs`, `access-map.mjs`, `access-places.mjs` and `access-speed.mjs`. With `--fixture --speed`, 4,900 sample points to 3 points of interest ran in 5.4 s on the fake router. There is no test hook in the app.
+
+## 13. Change log
 
 | Version | Date | Change | BRD version |
 |---|---|---|---|
 | 1.0 | 25 Nov 2026 | First version; D14 to D34; approved for building under the owner's delegation | 1.0 |
+| 1.1 | 26 Nov 2026 | Built (AA-1 to AA-24): §12 "As built" added; AAI-3, AAI-6, AAI-7 and AAI-9 resolved at close-out (AA-25); AAI-10 to AAI-13 added from the developers' notes; `runRoad`'s port fix noted in §3.2 | 1.0 |

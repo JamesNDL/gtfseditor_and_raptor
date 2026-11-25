@@ -224,6 +224,8 @@ When the editor gains its own editable transfers (already on its plan), it shoul
 
 ## 7. Road routing
 
+**As built (26 Nov 2026).** Phase 6 is built for cars, as the access analysis epic (`docs/architecture/access-analysis.md` §3, decisions D14 to D19), and section 21 has what was measured. In short: the recommendation of 7.2 was followed (GraphHopper 11.1 embedded in `router-road` behind `RoadRouter`, switched by `ROUTER_ROAD`, with the road-only process available but not needed); the area is the Opal area, not NSW, and only the car profile is built, with no turn costs, so the estimates of 7.3 were far too high (a 98 MB extract, a 31 s import, a 56 MB graph, about 2 ms per drive); the three OSRM-shaped endpoints of 7.5 are built, so the editor no longer uses the public OSRM server. Still not built: walking on the road graph (7.5), "avoid this area" (7.5), and a time-of-day factor in the router (7.4; the access analysis applies its own in the API). The rest of this section is the plan as first written.
+
 ### 7.1 Options
 
 | Option | For | Against |
@@ -462,7 +464,7 @@ Sizes are rough days of focused work.
 | 3. Service | Single journey, health, metadata, load and reload with swap, Docker | Usable over HTTP by any application | 3 |
 | 4. Capacity and bulk | Load state, `check`, `assign` with slices and re-routing, bulk streaming, load upload, capacity tests | The switch working end to end | 6 to 7 |
 | 5. Benchmarks | Demand generator, harness, report, tuning to the targets | The speed comparison the owner asked for | 3 |
-| 6. Road routing | Extract and import, GraphHopper module, road endpoints | Driving results beside public transport results | 3 to 5 |
+| 6. Road routing | Extract and import, GraphHopper module, road endpoints. **Built for cars, 25 Nov 2026 (section 21)**, with the OSRM-shaped endpoints from phase 8 | Driving results beside public transport results | 3 to 5 |
 | 7. Website | Node API forwarding, staleness check, a comparison panel on the map | **First usable version complete** | 3 to 4 |
 | 8. Later, in rough order | Export without shapes; range RAPTOR; database reader with baseline plus scenario changes; job-based bulk; walking times from the road graph; OSRM-shaped endpoints so the editor stops using the public server; area avoidance for closures; crowding penalties | | 2 to 5 each |
 | 9. Separate project | The tap-data simulator | | Not sized |
@@ -501,7 +503,7 @@ Each has a default, so work can start without answers.
 | 8 | Should the driving time include congestion and parking? | Free-flow, clearly labelled; optional multiplier by time of day; no parking allowance. |
 | 9 | Road data for all of NSW or Greater Sydney only? | All of NSW if the import fits in memory; otherwise Greater Sydney, Newcastle and Wollongong. |
 | 10 | GraphHopper embedded, or a separate OSRM or Valhalla container? | GraphHopper embedded, subject to the phase 0 licence and feature check. |
-| 11 | Should the router also replace the editor's use of the public OSRM server? | Yes, but in phase 8, after the first version. |
+| 11 | Should the router also replace the editor's use of the public OSRM server? | Yes, but in phase 8, after the first version. (Done with phase 6, for the access analysis: section 21.) |
 | 12 | May the Node API gain an export option that leaves out shapes, and later may the router read the database directly? | Yes to both. |
 | 13 | Where should the browser's calls go: through the Node API, or straight to the router? | Through the Node API. |
 | 14 | Will other applications need access control on the router? | None in the first version; it listens on the local network only. |
@@ -986,14 +988,16 @@ Free memory on the machine never went below about 1.9 GB.
 
 - **The area is the Opal area, not NSW** (D18), and only the car profile is built, with no turn costs (D14). That is why the import took 31 s rather than several minutes, and the graph is 56 MB rather than 0.5 to 1.5 GB (§7.3).
 - **`/v1/road/table` replaced `/v1/road/bulk`** (§8.1, D17). It answers in one JSON object, not a stream: rows are starting points, columns ends, `null` where there is no way or no road.
-- **`/v1/road/route` takes no `depart` and no stop ids** (§8.4). It gives the free-flow time only; the access analysis is to apply its time-of-day factors (D34) in the API, not the router. It takes `via` points instead, and its answer gives the snap distances.
+- **`/v1/road/route` takes no `depart` and no stop ids** (§8.4). It gives the free-flow time only; the access analysis applies its time-of-day factors (D34) in the API, not the router. It takes `via` points instead, and its answer gives the snap distances.
 - **The OSRM-shaped endpoints are at the root**, not under `/v1`, so that `roads.ts` works unchanged (D16).
 - **Up to 3 other routes are offered, not always 3.** Between Mayfield and the city, 3 were asked for and 2 came back: GraphHopper finds only those it judges different enough.
-- **`npm run router:road` ignores `ROUTER_PORT`.** The `runRoad` Gradle task sets `ROUTER_PORT=3003` itself, which overrides the one given, so the road-only process for these measurements ran on 3003, not the 3103 the ticket asked for. This needs a fix (use 3003 only when `ROUTER_PORT` is not set).
+- **`npm run router:road` ignored `ROUTER_PORT`.** The `runRoad` Gradle task set `ROUTER_PORT=3003` itself, which overrode the one given, so the road-only process for these measurements ran on 3003, not the 3103 the ticket asked for. Fixed when AA-7 was merged: `runRoad` uses 3003 only when `ROUTER_PORT` is not set (`router-server/build.gradle.kts`).
+- **The graph leaves out footways, cycleways, paths, steps and the like**, and in the real data a point is not placed on an island of road with fewer than 200 links (GraphHopper's minimum network size; 0 in the tests). A point is placed on the road once, then the drive is planned on the speed-up index.
+- **The OSRM-shaped `route` takes a missing `geometries` as `geojson`**, and its request line may be up to 32 KB (Jetty's header size raised), room for a route through 500 points.
 
 ### Not done in phase 6
 
 - **Avoiding an area** (§7.5): no "avoid this area" option yet, so `routedAround` in `roads.ts` still searches for a detour by trial.
 - **The foot profile**, and with it walking times for RAPTOR in place of straight lines (§7.5).
-- A time-of-day factor inside the router (§7.4); the access analysis will apply one in the API.
-- The owner's `.env` still names the public OSRM server. Pointing `ROUTER_URL` at `http://localhost:3002` is the owner's step.
+- A time-of-day factor inside the router (§7.4); the access analysis applies one in the API.
+- The owner's `.env` named the public OSRM server when this was written. Pointing `ROUTER_URL` at `http://localhost:3002`, as `.env.example` now does, is the owner's step.

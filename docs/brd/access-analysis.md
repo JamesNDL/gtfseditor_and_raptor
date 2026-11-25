@@ -32,7 +32,7 @@
 
 | ID | Found | Who acts | State |
 |---|---|---|---|
-| I-1 | `PLAN.md` lists "a self-hosted routing server" and "a routing server that can be told a road is closed" as remaining work. FR-13 does the first. The second stays open (A7). | Developer (doc fix at close-out) | Open |
+| I-1 | `PLAN.md` lists "a self-hosted routing server" and "a routing server that can be told a road is closed" as remaining work. FR-13 does the first. The second stays open (A7). | Developer (doc fix at close-out) | Resolved 26 Nov 2026 (AA-25): "a self-hosted routing server" struck from `PLAN.md`; the second kept |
 
 **Change log**
 
