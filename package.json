@@ -37,6 +37,7 @@
     "router:simulate": "cd services/router && .\\gradlew -q :router-sim:simulate",
     "router:bench": "cd services/router && .\\gradlew :router-bench:jmh",
     "router:road-import": "cd services/router && .\\gradlew :router-road:roadImport",
+    "road:data": "node packages/gtfs/src/cli/road-data.ts",
     "lint": "oxlint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
