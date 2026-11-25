@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import gtfseditor.router.core.Geo;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -128,6 +129,47 @@ class GraphHopperRoadsTest {
         assertFalse(route.snapped().get(1).found());
     }
 
+    /** AA-2: two points with alternatives give 1 to 3 drives, the first being the plain drive. */
+    @Test
+    void alternativesComeAfterThePlainDrive() {
+        List<LatLon> points = List.of(corner(0, 0), corner(3, 3));
+        RoadRoute plain = roads.route(points, false);
+        RoadRoute route = roads.route(points, true);
+
+        assertEquals(RoadRoute.Status.OK, route.status());
+        assertEquals(plain.metres(), route.metres(), 0.01, "the first drive is the plain drive");
+        assertEquals(plain.seconds(), route.seconds(), 0.01, "the first drive is the plain drive");
+        int drives = 1 + route.alternatives().size();
+        assertTrue(drives >= 1 && drives <= 3, "1 to 3 drives in all, not " + drives);
+        // Across the grid there are other ways of about the same length, through other blocks.
+        assertFalse(route.alternatives().isEmpty(), "at least one other way across the grid");
+        for (RoadRoute other : route.alternatives()) {
+            assertEquals(RoadRoute.Status.OK, other.status());
+            assertTrue(other.seconds() >= plain.seconds() - 1, "no faster than the plain drive");
+            assertTrue(other.path().length >= 2, "a path");
+            assertFalse(samePath(other.path(), plain.path()), "a different way");
+            assertEquals(1, other.legs().size());
+            assertEquals(2, other.snapped().size());
+            assertTrue(other.alternatives().isEmpty(), "alternatives have none of their own");
+        }
+    }
+
+    @Test
+    void alternativesAreIgnoredForMoreThanTwoPoints() {
+        RoadRoute route = roads.route(List.of(corner(0, 0), corner(0, 3), corner(3, 3)), true);
+
+        assertEquals(RoadRoute.Status.OK, route.status());
+        assertTrue(route.alternatives().isEmpty());
+    }
+
+    @Test
+    void noAlternativesWhenThereIsNoWay() {
+        RoadRoute route = roads.route(List.of(corner(0, 0), MiniRoads.ISLAND), true);
+
+        assertEquals(RoadRoute.Status.NO_ROUTE, route.status());
+        assertTrue(route.alternatives().isEmpty());
+    }
+
     @Test
     void nearestGivesAPointOnAStreetWithItsDistance() {
         // About 30 m north of the top row, between columns 1 and 2.
@@ -150,6 +192,10 @@ class GraphHopperRoadsTest {
     @Test
     void nearestGivesNoneFurtherThanTheSnapLimit() {
         assertFalse(roads.nearest(MiniRoads.FAR_FROM_ROADS).found());
+    }
+
+    private static boolean samePath(double[][] a, double[][] b) {
+        return Arrays.deepEquals(a, b);
     }
 
     private static double metresTo(double[] lonLat, LatLon point) {
