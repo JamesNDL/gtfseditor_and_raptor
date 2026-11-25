@@ -11,7 +11,8 @@ import java.util.List;
  * @param path the drive's line as {@code [lon, lat]} pairs; empty unless {@code OK}
  * @param legs one per hop between consecutive points; empty unless {@code OK}
  * @param snapped where each asked point meets the roads, in the order asked
- * @param alternatives other drives between the same two points (empty until AA-2)
+ * @param alternatives other drives between the same two points, at most two, each with none of
+ *     its own; empty for more than two points or unless asked for
  * @param reason why there is no drive, in plain English; empty for {@code OK}
  */
 public record RoadRoute(

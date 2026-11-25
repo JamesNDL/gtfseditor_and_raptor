@@ -16,12 +16,15 @@ import com.graphhopper.util.PointList;
 import com.graphhopper.util.shapes.GHPoint3D;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Road routing with GraphHopper, on a graph folder built by {@link RoadGraphBuilder}. The graph is
  * opened read-only and memory-mapped, so it sits in the operating system's file cache rather than
  * the Java heap (architecture §3.4). Every drive uses the speed-up index. Safe to use from many
- * threads: each request builds its own small query graph over the shared, read-only graph.
+ * threads: each request builds its own small query graph over the shared, read-only graph. A
+ * table's drives are shared out over a pool of {@link RoadSettings#threads} threads (D17).
  */
 public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
 
@@ -29,12 +32,18 @@ public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
     private final RoutingCHGraph speedUpGraph;
     private final EdgeFilter carRoads;
     private final double snapMetres;
+    private final ExecutorService pool;
+    private final GraphHopperTable tables;
     private volatile boolean open = true;
 
-    private GraphHopperRoads(GraphHopper hopper, double snapMetres) {
+    private GraphHopperRoads(GraphHopper hopper, RoadSettings settings) {
         this.hopper = hopper;
-        this.snapMetres = snapMetres;
+        this.snapMetres = settings.snapMetres();
         this.speedUpGraph = hopper.getCHGraphs().get(RoadGraphBuilder.PROFILE);
+        // Daemon threads, so an unclosed router never keeps the process alive.
+        this.pool = Executors.newFixedThreadPool(settings.threads(),
+                Thread.ofPlatform().daemon().name("road-table-", 1).factory());
+        this.tables = new GraphHopperTable(hopper.getBaseGraph(), speedUpGraph, pool, settings.threads());
         Profile car = hopper.getProfile(RoadGraphBuilder.PROFILE);
         // Only roads a car may use, and not in a network left out at build time.
         this.carRoads = new DefaultSnapFilter(hopper.createWeighting(car, new PMap()),
@@ -58,7 +67,7 @@ public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
         if (!hopper.load()) {
             throw new IllegalStateException("Could not open the road graph in " + settings.graphFolder());
         }
-        return new GraphHopperRoads(hopper, settings.snapMetres());
+        return new GraphHopperRoads(hopper, settings);
     }
 
     @Override
@@ -86,7 +95,16 @@ public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
             return RoadRoute.failed(RoadRoute.Status.NO_ROAD, snapped, "point " + (missing + 1) + " of "
                     + points.size() + " is more than " + Math.round(snapMetres) + " m from a road");
         }
-        return drive(snaps, snapped);
+        return drive(snaps, snapped, alternatives && points.size() == 2);
+    }
+
+    @Override
+    public RoadTable table(List<LatLon> sources, List<LatLon> destinations) {
+        double[] sourceSnapMetres = new double[sources.size()];
+        double[] destinationSnapMetres = new double[destinations.size()];
+        List<Snap> sourceSnaps = snapAll(sources, sourceSnapMetres);
+        List<Snap> destinationSnaps = snapAll(destinations, destinationSnapMetres);
+        return tables.run(sourceSnaps, destinationSnaps, sourceSnapMetres, destinationSnapMetres);
     }
 
     @Override
@@ -99,11 +117,15 @@ public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
     @Override
     public void close() {
         open = false;
+        pool.shutdownNow();
         hopper.close();
     }
 
-    /** Plans each hop between consecutive snapped points on the speed-up index, and joins them. */
-    private RoadRoute drive(List<Snap> snaps, List<Snapped> snapped) {
+    /**
+     * Plans each hop between consecutive snapped points on the speed-up index, and joins them.
+     * With {@code alternatives} (two points only) it also looks for other drives.
+     */
+    private RoadRoute drive(List<Snap> snaps, List<Snapped> snapped, boolean alternatives) {
         // Builds virtual nodes where the points meet the roads; updates each snap's closest node.
         QueryGraph queryGraph = QueryGraph.create(hopper.getBaseGraph(), snaps);
         CHRoutingAlgorithmFactory algorithms = new CHRoutingAlgorithmFactory(speedUpGraph, queryGraph);
@@ -124,12 +146,26 @@ public final class GraphHopperRoads implements RoadRouter, AutoCloseable {
             seconds += legSeconds;
             appendPoints(line, path.calcPoints());
         }
-        return new RoadRoute(RoadRoute.Status.OK, metres, seconds, line.toArray(new double[0][]),
-                List.copyOf(legs), List.copyOf(snapped), List.of(), "");
+        double[][] path = line.toArray(new double[0][]);
+        List<RoadRoute> others = alternatives ? GraphHopperAlternatives.find(algorithms, snaps, snapped, path)
+                : List.of();
+        return new RoadRoute(RoadRoute.Status.OK, metres, seconds, path, List.copyOf(legs),
+                List.copyOf(snapped), others, "");
+    }
+
+    /** Snaps every point once, noting each one's snap metres (NaN for none); null where none. */
+    private List<Snap> snapAll(List<LatLon> points, double[] snapMetresOut) {
+        List<Snap> snaps = new ArrayList<>(points.size());
+        for (int i = 0; i < points.size(); i++) {
+            Snap snap = snap(points.get(i));
+            snaps.add(snap);
+            snapMetresOut[i] = snap == null ? Double.NaN : snap.getQueryDistance();
+        }
+        return snaps;
     }
 
     /** Adds a hop's points to the line, leaving out a first point that repeats the line's last. */
-    private static void appendPoints(List<double[]> line, PointList points) {
+    static void appendPoints(List<double[]> line, PointList points) {
         for (int i = 0; i < points.size(); i++) {
             double[] lonLat = {points.getLon(i), points.getLat(i)};
             if (i == 0 && !line.isEmpty()) {
