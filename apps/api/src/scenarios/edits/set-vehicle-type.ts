@@ -3,12 +3,18 @@ import { describe } from '../describe.ts';
 import { cloneTrips, visible, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
+export interface SetVehicleTypeBody {
+  scope: 'route' | 'vehicleDay' | 'trip';
+  id: number;
+  vehicleTypeId: number;
+}
+
 /** Runs a line, one vehicle's day, or one trip with a chosen vehicle type. */
 export async function editSetVehicleType(
   tx: Tx,
   sc: Scenario,
   seq: number,
-  body: { scope: 'route' | 'vehicleDay' | 'trip'; id: number; vehicleTypeId: number },
+  body: SetVehicleTypeBody,
 ) {
   const id = Number(body.id);
   const [type] = await tx`

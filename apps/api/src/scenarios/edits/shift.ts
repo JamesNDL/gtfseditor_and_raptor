@@ -6,12 +6,13 @@ import { fail } from '../../http.ts';
 
 type Ripple = 'none' | 'vehicle' | 'line';
 
-export async function editShift(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: { tripIds: number[]; delta: number; ripple?: Ripple },
-) {
+export interface ShiftBody {
+  tripIds: number[];
+  delta: number;
+  ripple?: Ripple;
+}
+
+export async function editShift(tx: Tx, sc: Scenario, seq: number, body: ShiftBody) {
   const delta = Math.round(Number(body.delta));
   if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 6 * 3600)
     throw fail(400, 'Shift must be between 1 second and 6 hours');

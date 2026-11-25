@@ -3,8 +3,12 @@ import type { Sql } from '@gtfs-editor/gtfs/db';
 import { removeTrips, visible, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
+export interface DeleteLineBody {
+  routeId: number;
+}
+
 /** Takes a whole line out of the scenario: every trip it still runs, in both directions. */
-export async function editDeleteLine(tx: Tx, sc: Scenario, seq: number, body: { routeId: number }) {
+export async function editDeleteLine(tx: Tx, sc: Scenario, seq: number, body: DeleteLineBody) {
   const routeId = Number(body.routeId);
   const [route] = await tx`
     select coalesce(short_name, long_name, 'the line') as name from routes where id = ${routeId} and baseline_id = ${sc.baselineId}`;

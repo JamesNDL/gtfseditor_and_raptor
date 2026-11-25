@@ -8,31 +8,28 @@ import { platformNote, settlePlatforms } from './deps.ts';
 import { assignVehicles } from '../vehicles.ts';
 import { stopVisible } from '../stops-visible.ts';
 import { fleetNote, minutes } from '../wording.ts';
-import { type Scenario, type Tx } from '../engine.ts';
+import type { Scenario, Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
+
+export interface CreateLineBody {
+  name: string;
+  modeId: string;
+  color?: string;
+  stopIds: number[];
+  headwaySecs?: number;
+  fromSecs?: number;
+  toSecs?: number;
+  followRoads?: boolean;
+  /** Runs one way round and back to the first stop, with no return direction. */
+  loop?: boolean;
+}
 
 /**
  * Creates a new line through existing stops, with a timetable in both directions, or in one
  * direction only for a loop that runs round and back to where it started.
  * The path follows roads, or the track and ferry routes that published services already use.
  */
-export async function editCreateLine(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: {
-    name: string;
-    modeId: string;
-    color?: string;
-    stopIds: number[];
-    headwaySecs?: number;
-    fromSecs?: number;
-    toSecs?: number;
-    followRoads?: boolean;
-    /** Runs one way round and back to the first stop, with no return direction. */
-    loop?: boolean;
-  },
-) {
+export async function editCreateLine(tx: Tx, sc: Scenario, seq: number, body: CreateLineBody) {
   const follow = body.followRoads !== false;
   const loop = body.loop === true;
   let pathMethod: PathMethod = 'straight';

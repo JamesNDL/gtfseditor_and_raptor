@@ -3,7 +3,11 @@ import { describe } from '../describe.ts';
 import { removeTrips, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
-export async function editDelete(tx: Tx, sc: Scenario, seq: number, body: { tripIds: number[] }) {
+export interface DeleteBody {
+  tripIds: number[];
+}
+
+export async function editDelete(tx: Tx, sc: Scenario, seq: number, body: DeleteBody) {
   const ids = body.tripIds.map(Number);
   if (!ids.length) throw fail(400, 'No trips given');
   const first = await describe(tx, ids[0]);

@@ -7,7 +7,6 @@ import {
   describeChange,
   describeNewStretches,
   describeStops,
-  editReshape,
   planOtherWay,
   planReshape,
   reshapeDeps,
@@ -15,33 +14,15 @@ import {
   typicalChange,
   type ReshapeBody,
 } from './edits/reshape.ts';
-import { closureRoutes, editClose } from './edits/closure.ts';
-import { deleteStopRoutes, editDeleteStop } from './edits/delete-stop.ts';
+import { closureRoutes } from './edits/closure.ts';
+import { deleteStopRoutes } from './edits/delete-stop.ts';
 import { scheduleRoutes } from './edits/schedule.ts';
-import { closureDeps, deleteStopDeps, schedule } from './edits/deps.ts';
-import { editAddStop } from './edits/add-stop.ts';
-import { editCreateLine } from './edits/create-line.ts';
-import { editDelete } from './edits/delete.ts';
-import { editDeleteLine } from './edits/delete-line.ts';
-import { editDuplicate } from './edits/duplicate.ts';
-import { editHeadway } from './edits/headway.ts';
-import { editLineFrequency } from './edits/line-frequency.ts';
-import { editSetVehicle } from './edits/set-vehicle.ts';
-import { editSetVehicleType } from './edits/set-vehicle-type.ts';
-import { editShift } from './edits/shift.ts';
-import { editSkipStop } from './edits/skip-stop.ts';
+import { closureDeps, deleteStopDeps } from './edits/deps.ts';
+import { isEditKind, runEdit, type EditRequest } from './edits/registry.ts';
 import { describeMethod, linePath } from '../routing/roads.ts';
 import { findConflicts } from './clashes.ts';
 import { scenarioStopsGeoJson } from './stops.ts';
-import {
-  applyEdit,
-  dayFigures,
-  scenarioOf,
-  visible,
-  type EditResult,
-  type Scenario,
-  type Tx,
-} from './engine.ts';
+import { applyEdit, dayFigures, scenarioOf, visible, type Scenario } from './engine.ts';
 import { fail } from '../http.ts';
 
 /** One stop time as the playback pack reads it. */
@@ -180,39 +161,16 @@ export function registerScenarioRoutes(app: FastifyInstance, sql: Sql) {
   });
 
   app.post('/api/scenarios/:id/edits', async (req) => {
-    const body = req.body as { kind: string } & Record<string, unknown>;
-    const run = {
-      shift: editShift,
-      delete: editDelete,
-      deleteLine: editDeleteLine,
-      duplicate: editDuplicate,
-      skipStop: editSkipStop,
-      headway: editHeadway,
-      setVehicle: editSetVehicle,
-      setVehicleType: editSetVehicleType,
-      lineFrequency: editLineFrequency,
-      createLine: editCreateLine,
-      reshape: editReshape,
-      addStop: editAddStop,
-      setPlatform: schedule.editSetPlatform,
-      replan: schedule.editReplan,
-      moveToVehicle: schedule.editMoveToVehicle,
-      addTrip: schedule.editAddTrip,
-      addCall: schedule.editAddCall,
-      close: (tx: Tx, sc: Scenario, seq: number, b: never) =>
-        editClose(tx, sc, seq, b, closureDeps),
-      deleteStop: (tx: Tx, sc: Scenario, seq: number, b: never) =>
-        editDeleteStop(tx, sc, seq, b, deleteStopDeps),
-    }[body.kind] as
-      ((tx: Tx, sc: Scenario, seq: number, body: never) => Promise<EditResult>) | undefined;
-    if (!run) throw fail(400, `Unknown edit "${body.kind}"`);
+    // The body is not checked yet (refactor stage 4), so the kind may be one there is no function for.
+    const body = req.body as EditRequest;
+    if (!isEditKind(body.kind)) throw fail(400, `Unknown edit "${body.kind}"`);
     // The editor sends `confirm: false` first: an edit that would add many vehicles then comes back
     // described, not applied, and is sent again with `confirm: true` once the user has seen the figure.
     return applyEdit(
       sql,
       idParam(req),
       body.kind,
-      (tx, sc, seq) => run(tx, sc, seq, body as never),
+      (tx, sc, seq) => runEdit(body.kind, tx, sc, seq, body),
       body.confirm !== false,
     );
   });

@@ -3,12 +3,12 @@ import { cloneTrips, type Scenario, type Tx } from '../engine.ts';
 import { describe } from '../describe.ts';
 import { assignVehicles } from '../vehicles.ts';
 
-export async function editSetVehicle(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: { tripId: number; mode: 'new' | 'auto' },
-) {
+export interface SetVehicleBody {
+  tripId: number;
+  mode: 'new' | 'auto';
+}
+
+export async function editSetVehicle(tx: Tx, sc: Scenario, seq: number, body: SetVehicleBody) {
   const tripId = Number(body.tripId);
   const t = await describe(tx, tripId);
   const idMap = await cloneTrips(tx, sc, seq, [tripId], 0, { replace: true, keepVehicle: false });

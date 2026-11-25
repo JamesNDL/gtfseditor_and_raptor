@@ -53,12 +53,13 @@ async function skipSaving(
   };
 }
 
-export async function editSkipStop(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: { tripId: number; stopSeq: number; scope?: 'trip' | 'pattern' },
-) {
+export interface SkipStopBody {
+  tripId: number;
+  stopSeq: number;
+  scope?: 'trip' | 'pattern';
+}
+
+export async function editSkipStop(tx: Tx, sc: Scenario, seq: number, body: SkipStopBody) {
   const tripId = Number(body.tripId);
   const stopSeq = Number(body.stopSeq);
   const t = await describe(tx, tripId);

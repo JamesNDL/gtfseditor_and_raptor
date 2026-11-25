@@ -7,12 +7,12 @@ import { fleetNote } from '../wording.ts';
 import { cloneTrips, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
-export async function editDuplicate(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: { tripId: number; startSecs: number },
-) {
+export interface DuplicateBody {
+  tripId: number;
+  startSecs: number;
+}
+
+export async function editDuplicate(tx: Tx, sc: Scenario, seq: number, body: DuplicateBody) {
   const t = await describe(tx, Number(body.tripId));
   const start = Math.round(Number(body.startSecs));
   if (!Number.isFinite(start) || start < 0 || start > 36 * 3600)

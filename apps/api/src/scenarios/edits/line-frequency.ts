@@ -5,6 +5,13 @@ import { fleetNote } from '../wording.ts';
 import { removeTrips, TRIP_COLUMNS, visible, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
+export interface LineFrequencyBody {
+  routeId: number;
+  bands: { fromSecs: number; toSecs: number; headwaySecs: number }[];
+  /** Share the new departures between every stop pattern in each direction, in the proportions they run now. */
+  allPatterns?: boolean;
+}
+
 /**
  * Sets how often a whole line runs, in both directions, across several time bands at once.
  * In each direction the most-used stopping pattern is the one regenerated; other patterns (branches,
@@ -15,12 +22,7 @@ export async function editLineFrequency(
   tx: Tx,
   sc: Scenario,
   seq: number,
-  body: {
-    routeId: number;
-    bands: { fromSecs: number; toSecs: number; headwaySecs: number }[];
-    /** Share the new departures between every stop pattern in each direction, in the proportions they run now. */
-    allPatterns?: boolean;
-  },
+  body: LineFrequencyBody,
 ) {
   const routeId = Number(body.routeId);
   const bands = (body.bands ?? []).map((b) => ({

@@ -7,12 +7,14 @@ import { fleetNote, minutes } from '../wording.ts';
 import { removeTrips, TRIP_COLUMNS, visible, type Scenario, type Tx } from '../engine.ts';
 import { fail } from '../../http.ts';
 
-export async function editHeadway(
-  tx: Tx,
-  sc: Scenario,
-  seq: number,
-  body: { patternId: number; fromSecs: number; toSecs: number; headwaySecs: number },
-) {
+export interface HeadwayBody {
+  patternId: number;
+  fromSecs: number;
+  toSecs: number;
+  headwaySecs: number;
+}
+
+export async function editHeadway(tx: Tx, sc: Scenario, seq: number, body: HeadwayBody) {
   const from = Math.round(Number(body.fromSecs));
   const to = Math.round(Number(body.toSecs));
   const headway = Math.round(Number(body.headwaySecs));
