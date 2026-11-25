@@ -26,6 +26,7 @@
     "export:check": "node packages/gtfs/src/cli/export-check.ts",
     "test:ui": "node apps/web/test/ui-smoke.mjs",
     "test:sim": "node apps/api/test/sim.e2e.mjs",
+    "test:roads": "node --env-file-if-exists=.env apps/api/test/roads.e2e.mjs",
     "router:build": "cd services/router && .\\gradlew build",
     "router:test": "cd services/router && .\\gradlew test",
     "router:load": "cd services/router && .\\gradlew -q :router-gtfs:loadTimetable",
