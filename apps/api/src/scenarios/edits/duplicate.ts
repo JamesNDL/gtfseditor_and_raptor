@@ -1,6 +1,6 @@
 // duplicate edits: a copy of a trip at another time.
 import { formatSecs } from '@gtfs-editor/core';
-import { platformNote, settlePlatforms } from './deps.ts';
+import { platformNote, settlePlatforms } from '../platforms.ts';
 import { describe } from '../describe.ts';
 import { assignVehicles } from '../vehicles.ts';
 import { fleetNote } from '../wording.ts';

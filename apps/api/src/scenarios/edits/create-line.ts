@@ -4,7 +4,7 @@ import { acrossTheRoad, ROAD_MODES } from './reshape.ts';
 import { describeMethod, linePath, type PathMethod } from '../../routing/roads.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from '../../routing/timings.ts';
 import { NEW_LINE } from './assumptions.ts';
-import { platformNote, settlePlatforms } from './deps.ts';
+import { platformNote, settlePlatforms } from '../platforms.ts';
 import { assignVehicles } from '../vehicles.ts';
 import { stopVisible } from '../stops-visible.ts';
 import { fleetNote, minutes } from '../wording.ts';

@@ -2,8 +2,10 @@
 // Each kind's request body is the type of its function's last parameter, so adding an edit kind
 // is one new file in edits/ and one line here.
 import type { EditResult, Scenario, Tx } from '../engine.ts';
-import { closureDeps, deleteStopDeps, schedule } from './deps.ts';
+import { closureDeps, deleteStopDeps } from './deps.ts';
+import { editAddCall } from './add-call.ts';
 import { editAddStop } from './add-stop.ts';
+import { editAddTrip } from './add-trip.ts';
 import { editClose, type CloseBody } from './closure.ts';
 import { editCreateLine } from './create-line.ts';
 import { editDelete } from './delete.ts';
@@ -12,7 +14,10 @@ import { editDeleteStop, type DeleteStopBody } from './delete-stop.ts';
 import { editDuplicate } from './duplicate.ts';
 import { editHeadway } from './headway.ts';
 import { editLineFrequency } from './line-frequency.ts';
+import { editMoveToVehicle } from './move-to-vehicle.ts';
+import { editReplan } from './replan.ts';
 import { editReshape } from './reshape.ts';
+import { editSetPlatform } from './set-platform.ts';
 import { editSetVehicle } from './set-vehicle.ts';
 import { editSetVehicleType } from './set-vehicle-type.ts';
 import { editShift } from './shift.ts';
@@ -31,11 +36,11 @@ const EDIT_KINDS = {
   createLine: editCreateLine,
   reshape: editReshape,
   addStop: editAddStop,
-  setPlatform: schedule.editSetPlatform,
-  replan: schedule.editReplan,
-  moveToVehicle: schedule.editMoveToVehicle,
-  addTrip: schedule.editAddTrip,
-  addCall: schedule.editAddCall,
+  setPlatform: editSetPlatform,
+  replan: editReplan,
+  moveToVehicle: editMoveToVehicle,
+  addTrip: editAddTrip,
+  addCall: editAddCall,
   close: (tx: Tx, sc: Scenario, seq: number, b: CloseBody) =>
     editClose(tx, sc, seq, b, closureDeps),
   deleteStop: (tx: Tx, sc: Scenario, seq: number, b: DeleteStopBody) =>
