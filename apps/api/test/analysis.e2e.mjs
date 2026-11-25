@@ -2,7 +2,8 @@
 // of interest saved, listed, renamed, moved and deleted, and bad bodies refused with plain-English
 // messages; then analysis-runs.e2e.mjs (making and running analyses), analysis-pairs.e2e.mjs (what
 // a run stores), analysis-progress.e2e.mjs (progress, cancel and restart) and
-// analysis-results.e2e.mjs (the reads behind the results map). Run by
+// analysis-results.e2e.mjs (the reads behind the results map) and analysis-compare.e2e.mjs
+// (comparing two analyses, and the exports). Run by
 // `npm run test:e2e:fixture`, which passes API, DATABASE_URL and FAKE_ROUTER.
 // Usage: node apps/api/test/analysis.e2e.mjs   (needs an API with the 0010 migration run)
 import assert from 'node:assert/strict';
@@ -216,5 +217,8 @@ await import('./analysis-progress.e2e.mjs');
 
 // ---- the reads behind the results map (AA-16) ---------------------------------------------------
 await import('./analysis-results.e2e.mjs');
+
+// ---- comparing two analyses and the exports (AA-22) ---------------------------------------------
+await import('./analysis-compare.e2e.mjs');
 
 console.log('all analysis checks passed');
