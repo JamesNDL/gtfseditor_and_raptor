@@ -132,7 +132,9 @@ class GraphHopperRoadsTest {
     /** AA-2: two points with alternatives give 1 to 3 drives, the first being the plain drive. */
     @Test
     void alternativesComeAfterThePlainDrive() {
-        List<LatLon> points = List.of(corner(0, 0), corner(3, 3));
+        // West against the one-way street: there are two ways round, about 400 m each, by the row
+        // to the north and by the main road to the south.
+        List<LatLon> points = List.of(corner(1, 2), corner(1, 0));
         RoadRoute plain = roads.route(points, false);
         RoadRoute route = roads.route(points, true);
 
@@ -141,8 +143,7 @@ class GraphHopperRoadsTest {
         assertEquals(plain.seconds(), route.seconds(), 0.01, "the first drive is the plain drive");
         int drives = 1 + route.alternatives().size();
         assertTrue(drives >= 1 && drives <= 3, "1 to 3 drives in all, not " + drives);
-        // Across the grid there are other ways of about the same length, through other blocks.
-        assertFalse(route.alternatives().isEmpty(), "at least one other way across the grid");
+        assertFalse(route.alternatives().isEmpty(), "the other way round");
         for (RoadRoute other : route.alternatives()) {
             assertEquals(RoadRoute.Status.OK, other.status());
             assertTrue(other.seconds() >= plain.seconds() - 1, "no faster than the plain drive");
