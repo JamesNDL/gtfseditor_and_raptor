@@ -304,6 +304,12 @@ Decisions D35 to D37 answer the owner's request of 26 Nov 2026 to make the Acces
 | D36 | 26 Nov 2026 | The Access pane's zone and points of interest are made on the map: a tool bar floating beside the side panel (Draw zone, Place point of interest; Z, P, Escape, Backspace, Enter), and a name box on the map over what is to be named. The name box is a plain positioned div placed with `map.project` and moved as the map moves, not a MapLibre popup, so that it is ordinary React. The side panel keeps the lists (pick, tick, rename, delete) and a hint | Keep the side-panel forms; a MapLibre popup with a React portal; a positioned div | The owner found naming first and clicking after awkward; a div needs no portal and follows the app's styles |
 | D37 | 26 Nov 2026 | A saved zone is reshaped in place: the picked zone shows corner handles (drag to move) and handles mid-side (drag to add a corner); the new outline is sent as `ring` in the zone's PATCH, checked by the same rules as a new zone, and a name alone still renames. Analyses keep their own copy (D25), so reshaping changes none. A pin is dragged to move it (the PATCH with `lon` and `lat` that already existed) | A new outline as a new zone; PATCH with `ring` | Full editing was asked for; no migration or change to how analyses store zones is needed |
 
+Decision D38 answers FR-21 of BRD `access-analysis` 1.1 (arrive-by) on the journey router's side; the design was set by the coordinator and built by the developer (`docs/router-plan.md` §22). D39 is kept for the ride-paths work.
+
+| # | Date | Decision | Options considered | Reason |
+|---|---|---|---|---|
+| D38 | 26 Nov 2026 | Arrive-by is a backward RAPTOR search in `router-core` (`BackwardSearch.java`) that finds the latest departure under the forward search's own rules (time to change, longest walk, most rides, kinds of vehicle, staying aboard a vehicle that runs on; loads not looked at), then the ordinary forward search from that departure, keeping its journeys that arrive in time. Requests give `arriveBy` in place of `depart` (exactly one), on `POST /v1/journeys` and per query in `/v1/journeys/bulk`; capacity must be off. Answers add `arriveBy` and `earlyWait` (arriveBy less the arrival) to each journey. In bulk, arrive-by queries that share their end, time and limits share one backward search | A binary search over forward searches; backward search with legs rebuilt from its own labels; backward search then a forward search from its answer | The backward search is the efficient many-to-one direction (one per point of interest); planning the journey forwards gives legs of exactly the forward shape with no second path-building code, and the forward search arriving in time checks the two searches against each other. Forward bulk does not share searches between queries, so sharing is new |
+
 ## 11. Issues and discrepancies
 
 ### Open
@@ -379,6 +385,7 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 25 Nov 2026 | Added D14 to D34, marked D5 superseded by D16, added issues I8 and I9. The context and component sections are updated when the work is built (AA-25), not before. | Design of BRD `access-analysis` v1.0 (`docs/architecture/access-analysis.md`) |
 | 26 Nov 2026 | Access analysis built: §1, §3 (OSRM replaced by the journey router's road side; Geofabrik added), §4 (`router-road`, `apps/api/src/analysis/`, `apps/web/src/analysis/`), §5.1 (road graph and the five analysis entities), §6 (road and analysis interfaces), §8 (privacy, configuration, long-running work), §9, R1, I8 updated; two stale README lines corrected | Epic close-out, ticket AA-25 (access-analysis AAI-6) |
 | 26 Nov 2026 | Added D35 (basemap picker), D36 (the Access pane's map editor) and D37 (reshaping a zone with PATCH `ring`) | The owner's request for a map editor and map views (branch `feature/aa-map-editor`) |
+| 26 Nov 2026 | Added D38 (arrive-by in the journey router: a backward search, then the forward search from its answer) | BRD `access-analysis` v1.1 FR-21 (branch `feature/aa-arrive-by-router`) |
 
 ## 14. Project structure and coding standards
 
