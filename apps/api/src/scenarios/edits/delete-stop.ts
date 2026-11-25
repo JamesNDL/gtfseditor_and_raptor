@@ -18,8 +18,8 @@ import {
 } from '@gtfs-editor/core';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { scenarioOf, visible, type Scenario } from '../scenarios.ts';
-import { stopVisible } from '../stops.ts';
+import { scenarioOf, visible, type Scenario } from '../engine.ts';
+import { stopVisible } from '../stops-visible.ts';
 import { fail } from '../../http.ts';
 
 export interface DeleteStopDeps {

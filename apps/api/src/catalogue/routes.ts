@@ -2,7 +2,7 @@
 // The catalogue is shared reference data, not part of any one day or scenario.
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
-import { scenarioOf, visible } from '../scenarios/scenarios.ts';
+import { scenarioOf, visible } from '../scenarios/engine.ts';
 import { fail } from '../http.ts';
 
 interface TypeBody {
