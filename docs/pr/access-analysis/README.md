@@ -25,3 +25,7 @@ Taken by `npm run test:access -- --fixture` (the small test feed over central Sy
 - `12-naming-zone.png`: the outline closed on its first corner, and the name box on the map just above it, with the keyboard in it.
 - `13-naming-point.png`: Place point of interest in use: the pin dropped at Circular Quay and its name box above it, the name typed.
 - `14-reshape-zone.png`: the saved zone after one corner was dragged out (north-east); corner handles are solid, the handles in the middle of each side (drag to add a corner) are hollow. The setup's count line follows the new outline.
+
+## Rides along their vehicles' paths (D39)
+
+- `15-ride-follows-route.png`: taken on 26 Nov 2026 by `npm run test:access -- --fixture` (the small test feed and the fake router, told to ride a real bus of the feed). Sample point 32 near Town Hall to North Sydney: walk 3 min, Bus 333 from Elizabeth St near Hunter St to Oxford St at Taylor Square (10 min), walk 3 min. The bus is drawn along its own path, down Elizabeth St and out along Oxford St, through its bends, not as one straight line; the walks stay dotted straight lines. Before this change the same ride was a straight line from Hunter St to Taylor Square.

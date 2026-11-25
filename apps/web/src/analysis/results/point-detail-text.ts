@@ -2,7 +2,7 @@
 // split of the public transport time, the car time and how it is made up, and why a time or the
 // car path is missing. Walk distances are the router's straight line taken 1.3 times as long
 // (services/router/README.md 'Walks'), so they are given as 'about'.
-import type { PointDetail, PtSplit, StoredLeg } from '@gtfs-editor/core';
+import type { PointDetail, PointLeg, PtSplit } from '@gtfs-editor/core';
 import type { ModeLook } from '../point-journey.ts';
 
 /** Whole minutes; a time that rounds to none is 'under 1 min'. */
@@ -34,7 +34,7 @@ const SHORTEST_WAIT_SECS = 30;
  * before it. Waiting at home for the first vehicle (D23) shows as the wait before the first ride.
  */
 export function legRows(
-  legs: readonly StoredLeg[],
+  legs: readonly PointLeg[],
   departSecs: number,
   look: (modeId: string) => ModeLook,
 ): LegRow[] {
@@ -48,7 +48,9 @@ export function legRows(
         rows.push({ kind: 'wait', text: `Wait ${minutesText(wait)}`, colour: null });
       }
       const mode = look(leg.mode);
-      const text = `${mode.name} ${leg.route} from ${leg.board.name} to ${leg.alight.name}, ${minutesText(leg.secs)}`;
+      // A ride whose trip was not found is drawn straight on the map (D39); say so.
+      const straight = leg.pathFrom === 'straight' ? ' (path not known, drawn straight)' : '';
+      const text = `${mode.name} ${leg.route} from ${leg.board.name} to ${leg.alight.name}, ${minutesText(leg.secs)}${straight}`;
       rows.push({ kind: 'ride', text, colour: mode.colour });
       clock = leg.alight.time;
       lastStop = leg.alight.name;

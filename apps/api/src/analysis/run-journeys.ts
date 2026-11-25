@@ -1,28 +1,27 @@
-// The public transport side of an access analysis run (D21, D23, D30; docs/architecture/
+// The public transport side of an access analysis run (D21, D23, D30, D39; docs/architecture/
 // access-analysis.md §4.4): the pairs still pending, 500 at a time, to the journey router's
 // /v1/journeys/bulk. Each answer gives the pair its public transport time and split, its stored
-// legs, its status and, when it is ok, its access ratio. Each batch is stored with one update.
+// legs (stored-legs.ts), its status and, when it is ok, its access ratio. Each batch is stored
+// with one update.
 import {
   accessRatio,
-  localFrame,
   pairStatus,
   ptSplit,
   type AnalysisSettings,
   type PairStatus,
   type PtSplit,
   type StoredLeg,
-  type StoredStop,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import {
   avoidedModes,
   bulkJourneys,
-  type BulkJourney,
   type BulkSettings,
   type JourneyLine,
   type JourneyQuery,
 } from './journeys-client.ts';
 import type { AfterBatch } from './run-drives.ts';
+import { storedLegs } from './stored-legs.ts';
 
 /** Pairs per bulk request (D21): about a second each, for progress and cancel. */
 const JOURNEY_BATCH = 500;
@@ -49,42 +48,6 @@ interface PairResult {
 /** The query id of a pair: '<poi seq>:<point seq>'. */
 const pairId = (row: Pick<PendingRow, 'poiSeq' | 'pointSeq'>): string =>
   `${row.poiSeq}:${row.pointSeq}`;
-
-/** Straight-line metres between two places, with the flat-earth factors of the grid (D26). */
-function straightMetres(a: { lon: number; lat: number }, b: { lon: number; lat: number }): number {
-  const frame = localFrame((a.lon + b.lon) / 2, (a.lat + b.lat) / 2);
-  const [ax, ay] = frame.toMetres([a.lon, a.lat]);
-  const [bx, by] = frame.toMetres([b.lon, b.lat]);
-  return Math.hypot(bx - ax, by - ay);
-}
-
-/** The parts of a stop kept (the router's answer has more, such as its id). */
-const stopOf = ({ name, lat, lon, time }: StoredStop): StoredStop => ({ name, lat, lon, time });
-
-/**
- * A journey's legs as stored (D30): walks, transfers and rides without the stops passed. A ride's
- * metres are the straight line from where it boards to where it alights.
- */
-function storedLegs(journey: BulkJourney): StoredLeg[] {
-  const legs: StoredLeg[] = [];
-  for (const leg of journey.legs) {
-    if (leg.type === 'ride') {
-      legs.push({
-        type: 'ride',
-        route: leg.route,
-        mode: leg.mode,
-        board: stopOf(leg.board),
-        alight: stopOf(leg.alight),
-        secs: leg.alight.time - leg.board.time,
-        metres: Math.round(straightMetres(leg.board, leg.alight)),
-      });
-    } else if (leg.type !== 'warning') {
-      const secs = (leg.arrive ?? 0) - (leg.depart ?? 0);
-      legs.push({ type: leg.type, secs, metres: Math.round(leg.metres ?? 0) });
-    }
-  }
-  return legs;
-}
 
 /** What one answer line means for its pair (FR-11, FR-12). A line with an error stops the run. */
 function resultOf(

@@ -1,7 +1,8 @@
 // The reads behind the results map (FR-14, FR-15, FR-20; docs/architecture/access-analysis.md
 // §5.1): one point of interest's sample points as GeoJSON, its bands and lines of equal ratio for
 // the breaks asked for (worked out here, D28), and one pair in full with the car path asked from
-// the road router (D30). Only a finished analysis has results; the rest are a 409.
+// the road router (D30) and each ride's path looked up in the timetable (D39, ride-paths.ts).
+// Only a finished analysis has results; the rest are a 409.
 import type { FastifyInstance } from 'fastify';
 import {
   ratioBands,
@@ -19,6 +20,7 @@ import {
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { int, notFound } from '../http.ts';
 import { roadRoute } from './road-client.ts';
+import { legsWithPaths } from './ride-paths.ts';
 import {
   breaksOf,
   contourGridOf,
@@ -157,7 +159,7 @@ export function registerAnalysisResultRoutes(app: FastifyInstance, sql: Sql): vo
       poiSeq,
       status: pair.status,
       pt: hasJourney ? { ptSecs, walkSecs, waitSecs, rideSecs, rides } : null,
-      legs: pair.legs,
+      legs: await legsWithPaths(sql, analysis, pair.legs),
       driveSecs: pair.driveSecs,
       driveMetres: pair.driveMetres,
       carSecs: pair.carSecs,

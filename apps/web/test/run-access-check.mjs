@@ -23,6 +23,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import postgres from 'postgres';
 import { startFakeRouter } from '../../api/test/fake-router.mjs';
+import { rideRealBus } from './access-fake-ride.mjs';
 import {
   checkDatabaseName,
   checkFree,
@@ -183,7 +184,7 @@ try {
 
   if (opts.fixture) {
     fake = await startFakeRouter();
-    say(`fake router on ${fake.url}`);
+    say(`fake router on ${fake.url}, riding ${await rideRealBus(databaseUrl, fake.url)}`);
   }
   const routerUrl = fake?.url ?? (await startRouter(env));
   env.ROUTER_SERVICE_URL = routerUrl;

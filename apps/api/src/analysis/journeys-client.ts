@@ -29,16 +29,19 @@ export interface BulkSettings {
   detail: 'summary';
 }
 
-/** A stop a ride boards or alights at. */
+/** A stop a ride boards or alights at; the router gives its GTFS id as `stop`. */
 export interface RideStop {
+  stop?: string;
   name: string;
   lat: number;
   lon: number;
   time: number;
 }
 
-/** A ride leg as the bulk answer gives it, as far as the analysis keeps it (D30). */
+/** A ride leg as the bulk answer gives it, as far as the analysis keeps it (D30, D39). */
 export interface BulkRideLeg extends RouterRideLeg {
+  /** The trip's GTFS id. */
+  trip?: string;
   route: string;
   mode: string;
   board: RideStop;
@@ -89,8 +92,12 @@ const isNumber = (value: unknown): value is number =>
 const unreadable = (): Error =>
   new Error('The journey router gave an answer that could not be read');
 
+/** A field that may be left out, or is text. */
+const maybeText = (value: unknown): boolean => value === undefined || typeof value === 'string';
+
 const isStop = (value: unknown): value is RideStop =>
   isObject(value) &&
+  maybeText(value.stop) &&
   typeof value.name === 'string' &&
   isNumber(value.lat) &&
   isNumber(value.lon) &&
@@ -101,6 +108,7 @@ function isLeg(value: unknown): value is BulkRideLeg | BulkOtherLeg {
   if (!isObject(value)) return false;
   if (value.type === 'ride') {
     return (
+      maybeText(value.trip) &&
       typeof value.route === 'string' &&
       typeof value.mode === 'string' &&
       isNumber(value.depart) &&
