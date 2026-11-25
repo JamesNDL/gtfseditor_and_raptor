@@ -1,4 +1,4 @@
-// A journey's legs as an analysis run stores them (D30, D35): walks and transfers with their time
+// A journey's legs as an analysis run stores them (D30, D39): walks and transfers with their time
 // and metres; rides with their line, mode, trip and the ids of the stops they board and alight at,
 // so the picked sample point can draw the ride along its vehicle's path.
 import { describe, expect, it } from 'vitest';

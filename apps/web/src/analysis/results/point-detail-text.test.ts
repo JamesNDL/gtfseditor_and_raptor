@@ -150,7 +150,7 @@ describe('legRows (AC-FR-15.1)', () => {
     ]);
   });
 
-  it('says when a ride is drawn straight because its path is not known (D35)', () => {
+  it('says when a ride is drawn straight because its path is not known (D39)', () => {
     const ride = LEGS[1];
     if (ride.type !== 'ride') throw new Error('the test legs changed');
     const straight: PointLeg = { ...ride, path: [], pathFrom: 'straight' };

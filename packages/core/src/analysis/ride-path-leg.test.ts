@@ -1,4 +1,4 @@
-// One stored ride's path for the picked sample point (D35): along its trip when the trip and its
+// One stored ride's path for the picked sample point (D39): along its trip when the trip and its
 // two calls are found, otherwise the straight line from boarding to alighting, marked as such.
 import { describe, expect, it } from 'vitest';
 import { localFrame } from './local-metres.ts';

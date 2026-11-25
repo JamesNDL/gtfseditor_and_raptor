@@ -1,4 +1,4 @@
-// AA-21 (FR-15, D30, D35; AC 2): one sample point's journey as drawn on the map: rides along the
+// AA-21 (FR-15, D30, D39; AC 2): one sample point's journey as drawn on the map: rides along the
 // path the API gives (the vehicle's path, or a straight line when it is not known), in their mode
 // colour and labelled with the line; walks as straight lines joining the sample point, the stops
 // and the point of interest; and the car path.

@@ -1,4 +1,4 @@
-// End-to-end check that a picked sample point's rides follow their vehicles' paths (D35,
+// End-to-end check that a picked sample point's rides follow their vehicles' paths (D39,
 // docs/architecture/access-analysis.md §12): the fake router (fake-router.mjs) is told to ride a
 // real bus trip of the test feed, the run stores the trip and stop ids, and the point's detail gives
 // the ride a path cut from the trip's shape between the two stops. A leg stored the old way (no trip
@@ -76,7 +76,7 @@ try {
   assert.equal(stored.trip, trip.gtfs_id, 'the trip id is stored');
   assert.equal(stored.board.stop, calls[1].stop, 'the boarding stop id is stored');
   assert.equal(stored.alight.stop, calls[5].stop, 'the alighting stop id is stored');
-  step('D35 a run stores each ride with its trip and the ids of its two stops');
+  step('D39 a run stores each ride with its trip and the ids of its two stops');
 
   const rideOf = async () => {
     const point = await get(`/api/analyses/${id}/points/${pair.seq}?poi=0`);
@@ -89,7 +89,7 @@ try {
   assert.ok(shown.path.length > 2, `the ride has ${shown.path.length} points`);
   assert.ok(metresApart(shown.path[0], board) < 30, 'the path starts at the boarding stop');
   assert.ok(metresApart(shown.path.at(-1), alight) < 30, 'the path ends at the alighting stop');
-  step(`D35 a picked point's ride follows the trip's shape (${shown.path.length} points)`);
+  step(`D39 a picked point's ride follows the trip's shape (${shown.path.length} points)`);
 
   // A leg stored before trip and stop ids were kept: only the line, names, places and times.
   const oldStyle = (change) =>
@@ -106,7 +106,7 @@ try {
   const found = await rideOf();
   assert.equal(found.pathFrom, 'shape');
   assert.deepEqual(found.path, shown.path, 'the old-style leg finds the same trip');
-  step('D35 a ride stored without ids finds its trip by line, place and time');
+  step('D39 a ride stored without ids finds its trip by line, place and time');
 
   await storeLegs(
     oldStyle((leg) => ({ ...leg, board: { ...leg.board, time: leg.board.time + 7 } })),
@@ -114,7 +114,7 @@ try {
   const straight = await rideOf();
   assert.equal(straight.pathFrom, 'straight');
   assert.deepEqual(straight.path, [board, alight]);
-  step('D35 a ride that fits no trip is the straight line, marked so');
+  step('D39 a ride that fits no trip is the straight line, marked so');
 } finally {
   await fake({ ride: null });
   for (const id of made) await send('DELETE', `/api/analyses/${id}`);

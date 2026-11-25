@@ -1,4 +1,4 @@
-// A ride drawn along its vehicle's path (D35; docs/architecture/access-analysis.md §12): the calls a
+// A ride drawn along its vehicle's path (D39; docs/architecture/access-analysis.md §12): the calls a
 // stored ride boards and alights at, and the part of the trip's shape between them, with loops,
 // stops off the line and trips with no shape.
 import { describe, expect, it } from 'vitest';

@@ -140,7 +140,7 @@ try {
   // ---- one pair (AC 4, AC-FR-15.1) -------------------------------------------------------------
   const pick = (kind) => [...far, ...near].find((r) => kindOf(r) === kind);
   // The fake router's trip 'F1-1' is not in the test feed and no trip calls at its stops at its
-  // times, so each ride's path is not known and is the straight line, marked so (D35).
+  // times, so each ride's path is not known and is the straight line, marked so (D39).
   // analysis-ride-paths.e2e.mjs checks rides on real trips.
   const withStraightPath = (leg) =>
     leg.type === 'ride'

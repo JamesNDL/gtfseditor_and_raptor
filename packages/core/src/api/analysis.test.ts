@@ -12,6 +12,7 @@ import type {
   CompareResult,
   PairStatus,
   PointDetail,
+  PointLeg,
   PointOfInterest,
   PoiBody,
   PoiSummary,
@@ -100,7 +101,8 @@ describe('access analysis shared types', () => {
     ];
     const rides = legs.filter((leg) => leg.type === 'ride');
     expect(rides.map((leg) => leg.board.name)).toEqual(['Mayfield']);
-    expectTypeOf<PointDetail['legs']>().toEqualTypeOf<StoredLeg[] | null>();
+    // The picked point gives each ride its path on the map as well (D39).
+    expectTypeOf<PointDetail['legs']>().toEqualTypeOf<PointLeg[] | null>();
   });
 
   it('describes a comparison as points with their change and kind, and counts per kind', () => {
