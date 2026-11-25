@@ -1,17 +1,20 @@
-// Runs the scenario e2e suite against the small test feed, with no real data and no dev servers:
-// makes a throwaway database, imports packages/gtfs/test/fixtures/mini-feed into it, starts an API
-// of its own on a spare port, runs scenarios.e2e.mjs against it, and then always stops the API,
-// drops the database and removes the temporary folder (also on Ctrl+C).
+// Runs the scenario and access analysis e2e suites against the small test feed, with no real data
+// and no dev servers: makes a throwaway database, imports packages/gtfs/test/fixtures/mini-feed
+// into it, starts a fake journey router (fake-router.mjs) and an API of its own on spare ports,
+// runs scenarios.e2e.mjs and then analysis.e2e.mjs against it, and then always stops the API and
+// the fake router, drops the database and removes the temporary folder (also on Ctrl+C).
 // On the way it checks that the packs went to PACKS_DIR, and that re-importing a day that has a
 // scenario is refused and keeps the scenario.
 // Usage: npm run test:e2e:fixture   (needs only the database container: npm run db:up)
-// Settings: E2E_PORT (default 3101), E2E_DB (default gtfs_e2e), E2E_ADMIN_URL (a database to
+// Settings: E2E_PORT (default 3101; the analysis checks start a second API on E2E_PORT + 1 to
+// check that runs are picked up again), E2E_DB (default gtfs_e2e), E2E_ADMIN_URL (a database to
 // connect to while creating and dropping it; default the editor's Postgres on port 5433).
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import postgres from 'postgres';
+import { startFakeRouter } from './fake-router.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
 const FEED = path.join(ROOT, 'packages/gtfs/test/fixtures/mini-feed');
@@ -22,6 +25,8 @@ const ADMIN_URL = process.env.E2E_ADMIN_URL ?? 'postgres://gtfs:gtfs@localhost:5
 if (!/^gtfs_(e2e|t\d+_)[a-z0-9_]*$/.test(DB) || DB === 'gtfs_editor')
   throw new Error(`E2E_DB must be a throwaway database (gtfs_e2e...), not ${DB}`);
 const API = `http://localhost:${PORT}`;
+// The owner's dev servers may be on these; the second API must never be started on one of them.
+const SPARE_PORT = [3001, 3002, 5173].includes(PORT + 1) ? null : PORT + 1;
 const databaseUrl = (() => {
   const url = new URL(ADMIN_URL);
   url.pathname = `/${DB}`;
@@ -32,8 +37,11 @@ const started = Date.now();
 const elapsed = () => `${((Date.now() - started) / 1000).toFixed(0)}s`;
 const say = (message) => console.log(`[fixture ${elapsed()}] ${message}`);
 
-/** The environment the importer and the API run with: this database and folders, no routing server. */
-function envFor(tmp) {
+/**
+ * The environment the importer and the API run with: this database and folders, and the fake
+ * router as both the journey router and the road router (D32).
+ */
+function envFor(tmp, fakeRouterUrl) {
   const env = {
     ...process.env,
     DATABASE_URL: databaseUrl,
@@ -42,8 +50,10 @@ function envFor(tmp) {
     // The suite's export check writes here, not into the checkout's data/exports.
     EXPORTS_DIR: path.join(tmp, 'exports'),
   };
-  // No road routing server, so the run is the same everywhere; the suite allows for its absence.
-  delete env.ROUTER_URL;
+  // The fake router answers no OSRM-shaped road request, so roads.ts falls back as it does with no
+  // road router at all, and the run is the same everywhere.
+  env.ROUTER_SERVICE_URL = fakeRouterUrl;
+  env.ROUTER_URL = fakeRouterUrl;
   delete env.API_KEY;
   return env;
 }
@@ -169,6 +179,7 @@ function stopApi(child) {
 const admin = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
 let tmp = null;
 let api = null;
+let fakeRouter = null;
 let failed = true;
 let cleaning = null;
 
@@ -176,6 +187,7 @@ let cleaning = null;
 function cleanUp() {
   cleaning ??= (async () => {
     await stopApi(api);
+    await fakeRouter?.stop();
     await admin.unsafe(`drop database if exists ${DB} with (force)`).catch((err) => {
       failed = true;
       console.error(`could not drop ${DB}: ${err.message}`);
@@ -208,7 +220,9 @@ try {
   await admin.unsafe(`drop database if exists ${DB} with (force)`);
   await admin.unsafe(`create database ${DB}`);
   tmp = await mkdtemp(path.join(os.tmpdir(), `gtfs-e2e-${process.pid}-`));
-  const env = envFor(tmp);
+  fakeRouter = await startFakeRouter();
+  say(`fake router on ${fakeRouter.url}`);
+  const env = envFor(tmp, fakeRouter.url);
   await mkdir(env.PACKS_DIR);
 
   say('importing the test feed');
@@ -225,10 +239,25 @@ try {
   await waitForApi(api);
   await checkReimportRefused(env);
 
-  say('running the scenario checks');
-  const { code } = await run('apps/api/test/scenarios.e2e.mjs', [], { ...env, API });
-  failed = code !== 0;
-  if (failed) console.error(`[fixture ${elapsed()}] the scenario checks failed (code ${code})`);
+  // Each suite runs even if the one before failed, so one run shows every failure.
+  const suites = [
+    ['scenario', 'apps/api/test/scenarios.e2e.mjs'],
+    ['analysis', 'apps/api/test/analysis.e2e.mjs'],
+  ];
+  let anyFailed = false;
+  for (const [name, script] of suites) {
+    say(`running the ${name} checks`);
+    const { code } = await run(script, [], {
+      ...env,
+      API,
+      FAKE_ROUTER: fakeRouter.url,
+      ...(SPARE_PORT && { E2E_SPARE_PORT: String(SPARE_PORT) }),
+    });
+    if (code === 0) continue;
+    anyFailed = true;
+    console.error(`[fixture ${elapsed()}] the ${name} checks failed (code ${code})`);
+  }
+  failed = anyFailed;
 } catch (err) {
   console.error(`[fixture ${elapsed()}] ${err?.stack ?? err}`);
 } finally {

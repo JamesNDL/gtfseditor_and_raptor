@@ -4,7 +4,7 @@
 |---|---|
 | Date | 25 Nov 2026 |
 | Status | **Approved** (the owner asked for it to be taken as approved, 25 Nov 2026) |
-| Version | 1.0 |
+| Version | 1.1 |
 | Owner | Project owner |
 | Source | The owner's description and answers, 25 Nov 2026 |
 
@@ -32,7 +32,7 @@
 
 | ID | Found | Who acts | State |
 |---|---|---|---|
-| I-1 | `PLAN.md` lists "a self-hosted routing server" and "a routing server that can be told a road is closed" as remaining work. FR-13 does the first. The second stays open (A7). | Developer (doc fix at close-out) | Open |
+| I-1 | `PLAN.md` lists "a self-hosted routing server" and "a routing server that can be told a road is closed" as remaining work. FR-13 does the first. The second stays open (A7). | Developer (doc fix at close-out) | Resolved 26 Nov 2026 (AA-25): "a self-hosted routing server" struck from `PLAN.md`; the second kept |
 
 **Change log**
 
@@ -40,6 +40,7 @@
 |---|---|---|---|---|---|
 | 0.1 | 25 Nov 2026 | Created from the owner's description and four rounds of questions | New feature | FR-1 to FR-20, NFR-1 to NFR-6 added | |
 | 1.0 | 25 Nov 2026 | Approved as written; Q1, Q2 and A5, A7 taken as stated | The owner asked for it to be taken as approved and built overnight | none | Owner |
+| 1.1 | 26 Nov 2026 | Arrive-by added (FR-21), with a backward search in the journey router and the early wait counted; drawing and editing on the map made editor-like (tool bar, name box on the map, drag to move and reshape); basemap choice added (FR-22) | The owner's first hands-on check: "If I want to arrive at Westfield for work at 8"; drawing "doesn't feel right"; the map "doesn't let me see where certain buildings are" | FR-21, FR-22 added; FR-4, FR-5, FR-6, FR-9, FR-11, FR-15 changed | Owner |
 
 ---
 
@@ -58,14 +59,14 @@ The project owner, for their own planning and for maps and figures that go into 
 ### In scope
 
 - Drawing, naming, saving and reusing zones; placing, naming, saving and reusing points of interest.
-- Running an access analysis on a baseline or one of its scenarios, at one departure time, with the settings in FR-5 to FR-9.
+- Running an access analysis on a baseline or one of its scenarios, at one departure time or one arrive-by time, with the settings in FR-5 to FR-9.
 - Road routing in the journey router, and the editor using it in place of the public OSRM server.
 - The results map, the detail for one sample point, comparing two analyses, and export.
 
 ### Out of scope
 
 - Points of interest loaded from a dataset (hospitals, shopping centres from OpenStreetMap or government data). Later.
-- Arrive-by times, and a spread of departure times. Later.
+- A spread of departure times. Later. (Arrive-by was moved into scope in version 1.1: FR-21.)
 - Population or other weighting of sample points.
 - Traffic from real data. Traffic factors only (FR-9).
 - "Avoid a closed area" in the road router (A7).
@@ -82,28 +83,33 @@ The project owner, for their own planning and for maps and figures that go into 
 
 **Zones and points of interest**
 
-- **FR-4 A zone can be drawn, named, saved and reused.** The owner draws a polygon on the map, names it, and can pick it again for later analyses. A zone can be renamed and deleted.
-- **FR-5 Points of interest can be placed, named, saved and reused.** The owner clicks the map to place a point of interest and names it. Points of interest are saved and can be picked for later analyses, moved, renamed and deleted. A point of interest may lie outside the zone.
+- **FR-4 A zone can be drawn, named, saved and reused.** The owner picks the zone tool from a tool bar on the map, clicks the corners, finishes the outline, and names it in a box that appears on the map above it. It can be picked again for later analyses. A zone can be renamed, reshaped by dragging its corners, and deleted. Reshaping a zone changes no analysis already run (each keeps its own copy).
+- **FR-5 Points of interest can be placed, named, saved and reused.** The owner picks the point tool from the tool bar on the map, clicks the map to place a point of interest, and names it in a box that appears on the map above it. Points of interest are saved and can be picked for later analyses, moved, renamed and deleted. A point of interest may lie outside the zone.
 
 **Running an analysis**
 
-- **FR-6 An analysis is set up on one screen.** The owner chooses the zone, one or more points of interest, the timetable (a baseline or one of its scenarios), the departure time, and the grid spacing. Before running, the screen shows how many sample points the spacing gives and how many journeys that means.
+- **FR-6 An analysis is set up on one screen.** The owner chooses the zone, one or more points of interest, the timetable (a baseline or one of its scenarios), the time and whether it is a departure time or an arrive-by time (FR-21), and the grid spacing. Before running, the screen shows how many sample points the spacing gives and how many journeys that means.
 - **FR-7 Sample points are an even grid over the zone.** Points are laid at the chosen spacing (in metres) and only those inside the zone are kept.
 - **FR-8 Public transport limits are set on screen.** Longest walk to or from a stop, longest journey, most changes, and the modes allowed, each starting at a sensible value and changeable for each analysis.
-- **FR-9 Car settings are set on screen.** A parking allowance in minutes, added to every car time, and a traffic factor for each part of the day; the car time is multiplied by the factor for the part of the day the departure time falls in. Both are changeable for each analysis.
+- **FR-9 Car settings are set on screen.** A parking allowance in minutes, added to every car time, and a traffic factor for each part of the day; the car time is multiplied by the factor for the part of the day the analysis time (departure or arrive-by) falls in. Both are changeable for each analysis.
 - **FR-10 An analysis runs in the background.** It shows its progress, can be cancelled, and the editor stays usable while it runs. A failed analysis says why.
-- **FR-11 Each pair gets an access ratio.** For each sample point and point of interest: the public transport time is the journey router's door-to-door time (walk, wait, ride, changes, walk) leaving at the departure time; the car time is the road router's driving time times the traffic factor plus the parking allowance; the access ratio is the first divided by the second.
+- **FR-11 Each pair gets an access ratio.** For each sample point and point of interest: the public transport time is the journey router's door-to-door time (walk, wait, ride, changes, walk) leaving at the departure time, or for arrive-by as set out in FR-21; the car time is the road router's driving time times the traffic factor plus the parking allowance; the access ratio is the first divided by the second.
 - **FR-12 No service is marked.** A sample point with no public transport journey to a point of interest within the limits of FR-8 is **no service** for that point of interest. It has no access ratio and is kept out of the lines of equal ratio.
 
 **Results**
 
 - **FR-14 Results show as lines of equal access ratio, one map per point of interest.** Lines at ratios 1, 1.5, 2, 3 and 4 by default, which the owner can change, with the areas between them coloured from well served to poorly served. No service points are shown in their own style. The owner switches between points of interest.
-- **FR-15 One sample point can be looked at.** Clicking a sample point shows, for the chosen point of interest, its public transport journey (each walk, wait and ride, with the lines used), the car path, both times, the access ratio, and how the public transport time splits into walking, waiting and riding.
+- **FR-15 One sample point can be looked at.** Clicking a sample point shows, for the chosen point of interest, its public transport journey (each walk, wait and ride, with the lines used), the car path, both times, the access ratio, and how the public transport time splits into walking, waiting and riding (and, for arrive-by, the early wait at the point of interest).
 - **FR-16 Analyses are saved and can be reopened.** Each finished analysis is kept with its zone, points of interest, settings and results, listed, and can be reopened or deleted.
 - **FR-17 Two analyses can be compared.** For two analyses of the same zone and point of interest (for example the baseline and a scenario), the map shows where the access ratio got better or worse.
 - **FR-18 Results can be exported.** Sample points with their times and access ratios as CSV and GeoJSON, and the lines of equal ratio as GeoJSON.
 - **FR-19 The map has a legend and credits.** The results map shows a legend of the ratio bands and no service, the analysis settings, and the OpenStreetMap credit.
 - **FR-20 Summary figures.** For each point of interest: the number of sample points in each ratio band and with no service, and the median access ratio.
+
+**Added in version 1.1**
+
+- **FR-21 Arrive-by.** An analysis can be set to "arrive by" a time instead of "depart at" one. For each sample point and point of interest, the journey router finds the latest departure that reaches the point of interest by that time, within the limits of FR-8 (a backward search from the point of interest). The public transport time runs from that departure until the arrive-by time, so any wait between arriving and the arrive-by time (the **early wait**) counts. The car time is the drive time for the same pair. No journey that arrives in time within the limits is no service (FR-12).
+- **FR-22 Basemap choice.** The map can be shown as Light, Streets (with building outlines and place names), Dark or Satellite, whatever the app's light or dark theme. The choice is remembered. Each basemap's credit is shown.
 
 ### Non-functional requirements
 
@@ -177,6 +183,11 @@ Success:
 - **AC-FR-18.1** Given a finished analysis, when exported, then the CSV has one row per sample point and point of interest with both times and the ratio, and the GeoJSON files open in a GIS.
 - **AC-FR-19.1** Given the results map, then a legend, the settings and the OpenStreetMap credit are visible.
 - **AC-FR-20.1** Given a finished analysis, then the counts per band and no service add up to the number of sample points, and the median is shown.
+- **AC-FR-21.1** Given an arrive-by time of 08:00 and a sample point whose latest bus in time arrives at the point of interest at 07:35 after leaving the sample point at 07:05, then the public transport time is 55 minutes, of which 25 are early wait.
+- **AC-FR-21.2** Given the same sample point, point of interest and timetable, then the arrive-by journey found leaves no earlier than a depart-at search would need to arrive by 08:00 (no later departure arrives in time).
+- **AC-FR-21.3** Given an arrive-by analysis, then its settings, legend, export and comparison say "arrive by" and the time, and an arrive-by analysis and a depart-at analysis are not offered for comparison as if they were alike without saying so.
+- **AC-FR-22.1** Given the map, when Streets, Satellite, Dark or Light is chosen, then the basemap changes, the network and analysis layers stay on top, the credit changes, and the choice is kept after a reload.
+- **AC-FR-4.3** Given a saved zone, when a corner is dragged, then the zone's outline is saved with the new corner, and analyses already run keep their old outline.
 - **AC-NFR-1.1** Given 5,000 sample points and 3 points of interest on the development machine, then the analysis finishes within 5 minutes.
 - **AC-NFR-3.1** Given settings that would make 10,001 sample points, then Run is refused with the reason.
 - **AC-NFR-4.1** Given the same analysis run twice, then the results are identical.

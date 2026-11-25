@@ -1,0 +1,33 @@
+/* 'Compare with…' and the downloads on the results screen (FR-17, FR-18). */
+
+.analysis-compare-pick {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.analysis-compare-pick select {
+  flex: 1;
+  min-width: 0;
+}
+
+.analysis-downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-downloads a {
+  color: var(--accent);
+}
+
+/* Said when one analysis is arrive-by and the other depart-at (AC-FR-21.3). */
+.analysis-compare-note {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+}

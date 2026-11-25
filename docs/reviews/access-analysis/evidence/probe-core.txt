@@ -1,0 +1,13 @@
+Mayfield zone ringProblem: null
+Mayfield 250 m grid: points 121 columns 11 rows 11
+duplicate adjacent corner: The outline crosses itself. Draw it again so that no side crosses another.
+closing corner repeated: null
+traffic factor 08:00 1.4 25:00 1 09:30 1.2
+car secs 600 s drive x1.4 + 300 s parking = 1140
+ratio 1800/1140 = 1.5789473684210527 ; car 0 -> null
+status with drive 0 and parking 0: ok ratio null
+summary of that pair (ok, null ratio): {"bands":[{"from":null,"to":1,"label":"<1","count":0},{"from":1,"to":1.5,"label":"1-1.5","count":0},{"from":1.5,"to":2,"label":"1.5-2","count":0},{"from":2,"to":3,"label":"2-3","count":0},{"from":3,"to":4,"label":"3-4","count":0},{"from":4,"to":null,"label":"4 or more","count":0}],"noService":0,"noRoad":0,"okCount":0,"median":null}
+split, asked 08:00, journey 08:10-08:40, ride 08:12-08:38, walk 240 s: {"ptSecs":2400,"walkSecs":240,"waitSecs":600,"rideSecs":1560,"rides":1}
+bands piece counts -Infinity..1:4 1..2:8 2..Infinity:4
+lines 1: 1 line(s), 5 points; 2: 1 line(s), 5 points
+with the centre missing: band pieces 0,0,0 lines 0,0

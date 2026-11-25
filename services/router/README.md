@@ -3,12 +3,15 @@
 A standalone Java service that will answer journey queries on a GTFS timetable. The design is in
 [`docs/router-plan.md`](../../docs/router-plan.md).
 
-**Status: phase 4 (capacity and bulk).** The library loads a GTFS zip into memory and plans journeys
-on it (plain RAPTOR). It can respect how full the vehicles are, and add the passengers it routes to
-them. Journeys can be planned from the command line or over HTTP: the service loads, reloads and
-unloads timetables, keeps named load states, and answers one journey per request or many. Road
-routing is not built, and the editor does not call the service yet. The passenger simulator
-(`router-sim`) runs from the command line and as jobs on the service: see "The passenger simulator" below.
+**Status: phases 0 to 4 and phase 6 (road routing, for cars) are built.** The library loads a GTFS
+zip into memory and plans journeys on it (plain RAPTOR). It can respect how full the vehicles are,
+and add the passengers it routes to them. Journeys can be planned from the command line or over
+HTTP: the service loads, reloads and unloads timetables, keeps named load states, and answers one
+journey per request or many. It also plans drives on OpenStreetMap roads (`router-road`, with
+GraphHopper), and answers the editor's three road requests in OSRM's own shape: see "Roads" below.
+The passenger simulator (`router-sim`) runs from the command line and as jobs on the service: see
+"The passenger simulator" below. The editor's API calls the service for simulations and access
+analyses (`ROUTER_SERVICE_URL`) and for road paths (`ROUTER_URL`).
 
 ## Requirements
 
@@ -25,6 +28,8 @@ Run these from `services/router`. On Windows use `.\gradlew`; elsewhere use `./g
 | Run the tests only | `.\gradlew test` |
 | Load a GTFS zip and report counts, time and memory | `.\gradlew -q :router-gtfs:loadTimetable` |
 | Start the service (see "The service" below) | `.\gradlew :router-server:run` |
+| Start the road-only service (see "Roads" below) | `.\gradlew :router-server:runRoad` |
+| Build a road graph from an OpenStreetMap file | `.\gradlew :router-road:roadImport -ProadArgs="<osm file> <graph folder>"` |
 | Make up or check a demand file (see "The passenger simulator") | `.\gradlew -q :router-sim:demand` |
 | Run a simulation | `.\gradlew -q :router-sim:simulate` |
 | Run the benchmarks (a placeholder for now) | `.\gradlew :router-bench:jmh` |
@@ -33,8 +38,9 @@ Run these from `services/router`. On Windows use `.\gradlew`; elsewhere use `./g
 ## The service
 
 `.\gradlew :router-server:run` (or `npm run router:dev` from the repository root) starts it on port
-3002 with nothing loaded. It runs from the repository root with a 768 MB heap. To have a timetable
-loaded at start, set `ROUTER_LOAD` first (PowerShell):
+3002 with no timetable loaded. It runs from the repository root with a 1 GB heap (768 MB before road
+routing was added). Road routing is on if the road graph has been built (see "Roads"). To have a
+timetable loaded at start, set `ROUTER_LOAD` first (PowerShell):
 
 ```
 $env:ROUTER_LOAD = "b1=data/exports/check/export.zip"; npm run router:dev
@@ -42,7 +48,7 @@ $env:ROUTER_LOAD = "b1=data/exports/check/export.zip"; npm run router:dev
 
 | Method and path | Purpose |
 |---|---|
-| `GET /v1/health` | Up or not, and the ids of the timetables that are ready. |
+| `GET /v1/health` | Up or not, the ids of the timetables that are ready, and `road`: whether road routing is available (see "Roads"). |
 | `GET /v1/timetables` | Every timetable with its status, version and counts. |
 | `GET /v1/timetables/{id}` | The same for one, with the settings it was built with and the loader's notes. |
 | `PUT /v1/timetables/{id}` | Load or reload. Answers `202` at once; ask the address above until `building` is gone. |
@@ -56,6 +62,8 @@ $env:ROUTER_LOAD = "b1=data/exports/check/export.zip"; npm run router:dev
 | `POST`, `GET`, `DELETE /v1/simulations...` | Simulation runs as jobs; see "Runs on the service" below. |
 | `POST /v1/demand/check` | A demand CSV as the body (gzipped with `Content-Type: application/gzip`): the reader's report, and how many journey ends name each stop id. Needs no timetable. |
 | `POST /v1/demand/generate` | Makes a demand set up on a loaded timetable and answers it as a gzipped CSV: `timetable`, `journeys`, `seed`, `area`, `withinKm`, `focus`, `people`. |
+| `POST /v1/road/route`, `POST /v1/road/table` | One drive, or drives from many starting points to many ends; see "Roads". |
+| `GET /route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…` | The editor's road requests, in OSRM's shape, at the root rather than under `/v1`; see "Roads". |
 
 An id is the caller's choice: up to 64 letters, digits, dots, dashes or underscores, for example
 `b1` or `b1-s7`. An error is a `4xx` or `5xx` status with `{"error": "..."}`.
@@ -83,7 +91,9 @@ curl -X PUT "localhost:3002/v1/timetables/b1?version=v1" -H "Content-Type: appli
   answered on the old one until then. If the build fails the old one stays, and the metadata shows
   the reason under `lastFailure`.
 - One build runs at a time; a second request for an id that is still building is refused with `409`.
-- At most `ROUTER_MAX_TIMETABLES` are held. Loading one more drops the one used longest ago.
+- At most `ROUTER_MAX_TIMETABLES` are held. Loading one more drops the one used longest ago. An
+  access analysis loads a timetable of its own (the day cut to a box round its zone), so it can
+  push out a timetable a simulation was using; that one is loaded again when it is next needed.
 - `status` is `ready`, `building` (a first load not finished) or `failed` (a first load that failed).
 
 There is no access control: anyone who can reach the port can load a file the service can read or
@@ -99,7 +109,8 @@ curl -X POST localhost:3002/v1/journeys -H "Content-Type: application/json" -d "
 |---|---|---|
 | `timetable` | The id to plan on. | The only one loaded. |
 | `from`, `to` | `{"stop": id}`, `{"station": id}` or `{"lat": .., "lon": ..}`. Ids are GTFS ids. A `stop` that names a station is taken as the station. | Required. |
-| `depart` | `"HH:MM"`, `"HH:MM:SS"` or seconds from the start of the service day, up to `36:00:00`. After midnight keep counting: `"24:30"`. | Required. |
+| `depart` | `"HH:MM"`, `"HH:MM:SS"` or seconds from the start of the service day, up to `36:00:00`. After midnight keep counting: `"24:30"`. | Required, unless `arriveBy` is given. |
+| `arriveBy` | In place of `depart`: the time to arrive by, written the same way. Plans the journey that leaves latest and still arrives by then; see "Arriving by a time" below. Giving both is a `400`. | |
 | `maxRides` | Most vehicles to board. | 8 |
 | `maxWalkMetres` | Furthest to walk to the first stop or from the last, as straight lines (one, or two by way of a bridge); up to 5000. | 1200 |
 | `avoid` | Kinds of vehicle to leave out: `train`, `metro`, `light_rail`, `ferry`, `bus`, `coach`, `school_bus`, `other`. `[]` leaves out nothing. | `["school_bus"]` |
@@ -124,6 +135,28 @@ which one is `recommended` (its place in the list, or -1), the timetable's id an
   latitude and longitude, time, and `position`: the stop's place in the trip, counting from 0),
   `stops` (every stop from boarding to alighting, with latitude, longitude and times), and
   `stayAboard`.
+
+### Arriving by a time
+
+```
+curl -X POST localhost:3002/v1/journeys -H "Content-Type: application/json" -d "{\"from\":{\"lat\":-32.897,\"lon\":151.736},\"to\":{\"lat\":-32.940,\"lon\":151.698},\"arriveBy\":\"08:00\"}"
+```
+
+With `arriveBy` in place of `depart`, the router finds the latest departure that still arrives by
+then, within the request's limits, and plans the journey forwards from it. The answer has the same
+shape as for `depart`, and also:
+
+- `arriveBy` at the top, echoed;
+- on each journey, `arriveBy` and `earlyWait`: the seconds between arriving and `arriveBy`.
+  `depart` and `arrive` are the journey's real times.
+
+Only journeys that arrive in time are listed. None in time is `noJourney`, with the reason
+"Nothing gets there by that time on this service day." There is no limit on how long before
+`arriveBy` the journey may leave, as there is none on how long a journey may take.
+
+Arrive-by takes no account of how full vehicles are: it needs `capacity` `off` (the default) and
+no `blocked`, or the request is refused with `400`. How it works: section 22 of
+`docs/router-plan.md`.
 
 ### Walks
 
@@ -241,7 +274,14 @@ curl -X POST localhost:3002/v1/journeys/bulk -H "Content-Type: application/json"
 
 The settings of one journey (`maxRides`, `maxWalkMetres`, `avoid`, `changeSecs`, `lessWalking`,
 `detail`, `capacity`) are given once and apply to every query. Each query has `from`, `to`,
-`depart`, and optionally `id` and `group`. At most `ROUTER_BULK_LIMIT` queries per request.
+`depart` (or `arriveBy`), and optionally `id` and `group`. At most `ROUTER_BULK_LIMIT` queries per
+request.
+
+A query may give `arriveBy` in place of `depart` (see "Arriving by a time"); its line then has
+`arriveBy`, and its journey `arriveBy` and `earlyWait`. Arrive-by and depart-at queries may be
+mixed in one request, which then needs `capacity` `off`. Arrive-by queries with the same `to`,
+time and settings share one backward search, so many starting points to one end cost little more
+than the same number of depart-at queries. The lines are in the order asked.
 
 The answer is lines of JSON (`application/x-ndjson`), one per query, then one of totals:
 
@@ -265,6 +305,109 @@ The answer is lines of JSON (`application/x-ndjson`), one per query, then one of
   holds the place. `rerouted` and `stranded` in the totals show how much that mattered.
 - Only one request at a time may add passengers to a load state; a second is refused with `409`.
 - If the caller goes away the run stops. Passengers already added stay in the load state.
+
+## Roads
+
+The service plans drives for cars on OpenStreetMap roads, with GraphHopper 11.1 embedded in
+`router-road` behind a small interface (`RoadRouter`). Times are free-flow (no traffic) and
+distances are metres. There is no turn cost and no walking or cycling profile. Designed in
+`docs/architecture/access-analysis.md` §3; what was measured is section 21 of the plan.
+
+### Road data
+
+From the repository root, `npm run road:data` does it all (about 3 minutes, 2 GB of memory at
+its peak; stop the dev servers first on a small machine):
+
+1. takes `data/osm/australia-latest.osm.pbf`, downloading it from Geofabrik if it is missing
+   (about 1 GB);
+2. cuts it to the Opal area (150.10, -34.75 to 151.85, -32.70) with osmium, in a small Docker
+   image built from Debian's own package (`tools/osmium/Dockerfile`), into `data/osm/opal.osm.pbf`;
+3. builds the road graph with `:router-road:roadImport` into a new folder and swaps it in for
+   `data/router/road/opal` only when the build succeeds, so a failed build keeps the old graph.
+
+Options: `--data <folder>` (a worktree names the main checkout's `data`), `--pbf <file>`,
+`--no-cut` (the file is already cut) and `--dry-run` (prints the steps and runs none). The graph
+folder holds `road-graph.json`: the file it was built from, its size and date, the box, the
+GraphHopper version and when it was built. On 25 Nov 2026 the Opal-area graph was 56 MB and took
+31 s to build.
+
+`roadImport` can also be run by hand on any `.osm` or `.osm.pbf` file; it rebuilds a folder that
+already holds a road graph and refuses any other folder with files in it. Footways, cycleways,
+paths, steps and the like are left out of the graph, and a point is never placed on an island of
+road with fewer than 200 links (the real data only; the tests keep every one). The tests build `router-road/src/test/resources/
+mini-roads.osm`, a few hand-made streets in Mayfield, Newcastle, and need no `data/`.
+
+### Turning road routing on
+
+| `ROUTER_ROAD` | What the service does |
+|---|---|
+| `auto` (the default) | Road routing is on if `ROUTER_ROAD_GRAPH` holds a road graph; otherwise off, with one line saying so. |
+| `on` | Road routing is on; the service will not start without a graph. |
+| `off` | No road routing. The road endpoints answer `503`. |
+| `only` | Roads and health only: every other `/v1/` endpoint (timetables, journeys, loads, demand, simulations) answers `503` `{"error": "this router runs roads only"}`. The OSRM-shaped endpoints answer as normal. |
+
+The graph is memory-mapped, so it sits in the operating system's file cache rather than the heap.
+**The road-only process** is the same jar started a second time with `ROUTER_ROAD=only`, for when
+memory is too short to plan journeys and drives in one process: `npm run router:road` (or
+`.\gradlew :router-server:runRoad`) starts it on port 3003 (or `ROUTER_PORT` if set) with a 512 MB
+heap. On the development machine it has not been needed: the main router with roads on stayed under
+800 MB.
+
+`GET /v1/health` gains:
+
+```json
+"road": {"available": true, "graph": "data/router/road/opal", "builtFrom": "opal.osm.pbf", "builtAt": "…", "mode": "on"}
+```
+
+`available` is false when road routing is off; `builtFrom` and `builtAt` are there only when it is on.
+
+### Our own road endpoints
+
+Places are `{"lat": .., "lon": ..}`; `profile` may be left out or be `"car"`, and anything else is a
+`400`.
+
+```
+curl -X POST localhost:3002/v1/road/route -H "Content-Type: application/json" -d "{\"from\":{\"lat\":-32.897,\"lon\":151.736},\"to\":{\"lat\":-32.927,\"lon\":151.772}}"
+```
+
+`POST /v1/road/route` plans one drive from `from` to `to`, through any `via` points in order. The
+answer has `status` (`ok`, `noRoute` when no road joins them, or `noRoad` when a point is more than
+`ROUTER_ROAD_SNAP_METRES` from a road a car may use, with a `reason` naming it), `profile`,
+`freeFlow: true`, `metres`, `durationSecs`, `geometry` (`[lon, lat]` pairs), `snapMetres` (how far
+each end was from the road) and `computeMicros`.
+
+`POST /v1/road/table` takes `sources` and `destinations` (lists of places) and answers
+`durationsSecs` and `metres` as rows of sources by columns of destinations, `null` where there is
+no way or no road, with `sourceSnapMetres` and `destinationSnapMetres` (`null` for a place with no
+road). The drives are planned at once on `ROUTER_THREADS` threads, about 2 ms each per thread: 5,000
+starting points to one end took about a second. More pairs than `ROUTER_ROAD_TABLE_LIMIT` is a
+`400`; the access analysis sends 1,000 at a time.
+
+### The editor's road requests (OSRM's shape)
+
+The editor's API sends three requests to `ROUTER_URL` in the form of the OSRM routing server
+(`apps/api/src/routing/roads.ts`). The service answers them at its root, not under `/v1`, so
+`ROUTER_URL=http://localhost:3002` (or `:3003` for the road-only process) needs no other change.
+`npm run test:roads` sends them as the editor does and checks the answers.
+
+| Request | Answer |
+|---|---|
+| `GET /route/v1/driving/{lon,lat;lon,lat;…}?overview=full&geometries=geojson&steps=false` | `routes` (distance, duration, weight, geometry as GeoJSON, a leg between each pair of points) and `waypoints`. Up to 500 points. `alternatives=true` or a number, for two points only, adds up to 2 other routes (3 in all) where GraphHopper finds ones different enough. `overview=false` leaves out the geometry. |
+| `GET /table/v1/driving/{lon,lat;…}?annotations=distance` | `distances` and/or `durations` (`annotations` is `duration`, the default, `distance` or `duration,distance`), `sources` and `destinations`; optional `sources=` and `destinations=` indexes separated by `;`. `null` where there is no way. Up to 100 points. |
+| `GET /nearest/v1/driving/{lon,lat}` | One `waypoint`: the nearest point on a road, and how far it is. A `number` above 1 still gives one. |
+
+An answer is `200` with `"code": "Ok"`. A refusal is `400` with `code` and `message`, as OSRM
+does: `NoRoute` (no way by road), `NoSegment` (a point with no road within the snap limit),
+`InvalidQuery` (bad coordinates), `InvalidOptions` (`geometries` other than `geojson`,
+`steps=true`, or a bad option) or `TooBig`. `geometries` left out is taken as `geojson`. The
+request line may be up to 32 KB, room for a route through 500 points. With road routing off they
+answer `503` `{"error": ...}`.
+
+### Credit
+
+The road data is © OpenStreetMap contributors, under the Open Database Licence (ODbL). Anything
+that shows drive times or road paths from it must say so; the web app's access analysis legend and
+map do.
 
 ## Loading a timetable
 
@@ -318,6 +461,13 @@ sets the threads for the all-at-once run, `--area all` uses the whole state.
 `--change 120` sets the least time, in seconds, to change vehicles (2 minutes unless said), at one
 stop or by a walk to another. Staying aboard a vehicle that runs on as another trip takes no time.
 
+`--arrive-by` takes the time as the time to arrive by, and plans the journey that leaves latest
+and still arrives then:
+
+```
+.\gradlew -q :router-gtfs:route -ProuteArgs="-32.897,151.736 -32.940,151.698 08:00 --arrive-by --walk 800 --rides 4"
+```
+
 To compare with the TfNSW trip planner, write test journeys to a file and hand it to the comparer.
 It needs `API_KEY` in `.env`, sends only stop positions, a date and a time, and keeps TfNSW's
 answers so that a second run asks nothing again; with `--offline` it asks nothing at all:
@@ -360,8 +510,8 @@ Assignment.run(router, requests, Preferences.defaults(),      // many at once, a
 ## The passenger simulator
 
 `router-sim` sends a file of journeys through a timetable and writes where the passengers ended up.
-The design is in [`docs/simulator-plan.md`](../../docs/simulator-plan.md); phases S0 (demand files)
-(the simulator, from the command line), S2 (runs as jobs on the HTTP service) and S3 (the editor's
+The design is in [`docs/simulator-plan.md`](../../docs/simulator-plan.md); phases S0 (demand files),
+S1 (the simulator, from the command line), S2 (runs as jobs on the HTTP service) and S3 (the editor's
 API starts runs and keeps their results) are built, and S4 put it in the web app: see the root
 `README.md`.
 
@@ -474,7 +624,7 @@ export is a placeholder for now, so "left behind" and "stranded" figures are ill
 
 ### Runs on the service
 
-The service runs the same three kinds of run as jobs. Its 768 MB heap holds a bounded run or a
+The service runs the same three kinds of run as jobs. Its 1 GB heap holds a bounded run or a
 share of the demand; see `docs/simulator-plan.md` section 5.2 for a whole-network run.
 
 | Method and path | Purpose |
@@ -548,6 +698,10 @@ SimRun.bau(timetable, demand, report, settings, "BAU", folder, Progress.NONE);  
 | `ROUTER_DATA` | `data/router` | Folder for snapshots (`snapshots`) and fetched or uploaded zips (`zips`). |
 | `ROUTER_LOAD` | none | Timetables to load at start: `id=path`, or several separated by `;`. |
 | `ROUTER_BULK_LIMIT` | `200000` | Most queries in one bulk request. |
+| `ROUTER_ROAD` | `auto` | Road routing: `auto`, `on`, `off` or `only` (see "Roads"). |
+| `ROUTER_ROAD_GRAPH` | `data/router/road/opal` | The road graph folder, relative to where the service runs. |
+| `ROUTER_ROAD_SNAP_METRES` | `500` | How far a point may be from a road a car may use; further than that it has no road (10 to 5000). |
+| `ROUTER_ROAD_TABLE_LIMIT` | `100000` | Most pairs of sources and destinations in one `/v1/road/table` request. |
 
 ## Docker
 
@@ -570,7 +724,7 @@ options; the default limits the heap to 75% of the container's memory.
 |---|---|---|
 | `router-core` | Timetable, snapshot, search, load states and bulk assignment. | Nothing, and it must stay that way. |
 | `router-gtfs` | GTFS zip loader, walking links, snapshot cache, the load and route commands. | `router-core` |
-| `router-road` | Road routing. Empty until phase 6. | `router-core` |
+| `router-road` | Road routing for cars: the `RoadRouter` interface, GraphHopper behind it (`GraphHopperRoads`, with `GraphHopperTable` and `GraphHopperAlternatives`), and the graph build (`RoadGraphBuilder`, `RoadImport`). Only this module depends on GraphHopper. | `router-core`, GraphHopper |
 | `router-server` | The HTTP service (Javalin). | The three above and `router-sim` |
 | `router-sim` | The passenger simulator: demand files, planning, the replay in time order, result files, and its commands. | `router-core`; `router-gtfs` for the commands |
 | `router-bench` | Benchmarks (JMH). | `router-core` |

@@ -1,6 +1,10 @@
 import compress from '@fastify/compress';
 import Fastify from 'fastify';
 import { connect, migrate } from '@gtfs-editor/gtfs/db';
+import { registerAnalysisExportRoutes } from './analysis/export-routes.ts';
+import { registerAnalysisPlaceRoutes } from './analysis/places-routes.ts';
+import { registerAnalysisResultRoutes } from './analysis/results-routes.ts';
+import { registerAnalysisRoutes } from './analysis/routes.ts';
 import { registerExportRoutes } from './export/routes.ts';
 import { registerFleetRoutes } from './catalogue/routes.ts';
 import { registerBaselineRoutes } from './network/baselines.ts';
@@ -29,8 +33,18 @@ registerFleetRoutes(app, sql);
 registerExportRoutes(app, sql);
 registerSimRoutes(app, sql);
 registerSimResultRoutes(app, sql);
+registerAnalysisPlaceRoutes(app, sql);
+const analyses = registerAnalysisRoutes(app, sql);
+registerAnalysisResultRoutes(app, sql);
+registerAnalysisExportRoutes(app, sql);
 
 app.get('/api/health', async () => ({ ok: true }));
 
 await app.listen({ port: PORT, host: '0.0.0.0' });
 console.log(`API listening on http://localhost:${PORT}`);
+
+// Analyses that were going when this API last stopped carry on (D20). After listening, as the
+// router fetches the timetable's export from this API.
+analyses
+  .resume()
+  .catch((err: unknown) => app.log.error(err, 'could not pick up unfinished analyses'));

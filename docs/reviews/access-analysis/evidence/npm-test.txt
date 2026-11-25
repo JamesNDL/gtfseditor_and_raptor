@@ -1,0 +1,20 @@
+
+> test
+> vitest run
+
+
+ RUN  v5.1.0 C:/Programming Projects/GTFS Editor/.claude/worktrees/agent-abc67ff2a19a10d8f
+
+(node:37456) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38636) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  40 passed (40)
+      Tests  392 passed (392)
+   Start at  01:42:38
+   Duration  3.54s (tests 42%, transform 30%, import 24%, worker 4%)
+
+    Isolate  40 workers spawned · ~489ms startup each (spawn + environment, per file)
+             at least ~1.29s faster with isolate: false — reuses workers across files instead of one per file
+

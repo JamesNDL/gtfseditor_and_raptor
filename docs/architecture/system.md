@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Draft (awaiting the owner's approval) |
-| Describes | The system as built, checked against commit `c33fbef` (22 Nov 2026) |
+| Describes | The system as built, checked against commit `c33fbef` (22 Nov 2026); the road router and access analysis parts against `504fc45` (branch `feature/access-analysis`, 26 Nov 2026) |
 | Source of truth for | How the parts fit together. Plans and progress stay in `PLAN.md`, `docs/router-plan.md` and `docs/simulator-plan.md`. |
 | Navigation | `docs/codebase-map.md` |
 
@@ -19,10 +19,11 @@ A visual editor for NSW public transport timetables (GTFS, the standard file for
 - Sees **clashes** (impossible or doubtful results) with one-click fixes.
 - Exports a scenario as a GTFS zip.
 - Runs the **simulator**: sends a file of journeys (demand) through the published day or a scenario and compares the results.
+- Runs an **access analysis**: over a drawn zone, times trips to chosen points of interest by public transport and by car, and maps the access ratio (BRD `access-analysis`).
 
 Users: today, one owner and developer, on one Windows machine. There are no logins. The aim is a hosted service on AWS (not built).
 
-Out of scope as built: road routing of its own (an outside OSRM server is used), journey planning in the web page, deployment, and authentication.
+Out of scope as built: journey planning in the web page, deployment, and authentication. Road routing is our own since the access analysis work (the journey router's road side, D16); before that an outside OSRM server was used.
 
 ## 2. Architectural drivers
 
@@ -30,7 +31,7 @@ Out of scope as built: road routing of its own (an outside OSRM server is used),
 - **Every edit can be undone and has no side effects on other scenarios.** This drives the copy-on-write scenario model (section 5.3).
 - **Honest results.** The clash rules and the simulator's "honesty" outputs (made-up journeys labelled, people who gave up counted) aim to show only what the data supports.
 - **Speed of the journey router.** A median of 8 ms for a single query, and bulk assignment of up to millions of journeys. This is why the router is a separate Java service with flat in-memory arrays.
-- **A small machine.** The dev machine is low on memory. The Gradle daemon is limited to 512 MB, the router heap to 768 MB, and the Docker router to 1 GB.
+- **A small machine.** The dev machine is low on memory. The Gradle daemon is limited to 512 MB, the router heap to 1 GB (768 MB before road routing), the road-only router to 512 MB, and the Docker router to 1 GB.
 - **One developer.** Simple tooling: no build step for Node, no queues, no ORM.
 
 ## 3. System context
@@ -39,23 +40,24 @@ Out of scope as built: road routing of its own (an outside OSRM server is used),
 flowchart LR
   user([Planner in a browser])
   tfnsw[(TfNSW Open Data<br/>GTFS feed)]
-  osrm[(OSRM road router<br/>public demo server)]
+  geofabrik[(Geofabrik<br/>OpenStreetMap extract)]
   ofm[(OpenFreeMap<br/>basemap tiles)]
   subgraph sys[GTFS Editor]
     web[Web app<br/>React, :5173]
     api[API<br/>Fastify, :3001]
     db[(Postgres + PostGIS<br/>:5433)]
-    router[Journey router<br/>+ simulator<br/>Java, :3002]
-    files[(data/ folder<br/>feeds, packs, exports,<br/>demand, router files)]
+    router[Journey router<br/>+ simulator + road router<br/>Java, :3002]
+    files[(data/ folder<br/>feeds, packs, exports,<br/>demand, router files,<br/>OSM extract, road graph)]
   end
   user --> web
   web -- /api --> api
   web --> ofm
   api --> db
-  api --> osrm
   api -- ROUTER_SERVICE_URL --> router
+  api -- ROUTER_URL<br/>roads --> router
   router -- pulls export + water lines<br/>API_PUBLIC_URL --> api
-  importer[Import CLIs<br/>packages/gtfs] --> tfnsw
+  importer[Import and road-data CLIs<br/>packages/gtfs] --> tfnsw
+  importer --> geofabrik
   importer --> db
   importer --> files
   api --> files
@@ -65,8 +67,10 @@ flowchart LR
 | Outside system | Used by | How | Notes |
 |---|---|---|---|
 | TfNSW Open Data GTFS | `packages/gtfs/src/feed/feed-cache.ts` | HTTPS, `API_KEY` | Downloaded once per feed version, checked by etag |
-| OSRM (`ROUTER_URL`) | `apps/api/src/routing/roads.ts` | `route`, `table`, `nearest` | Currently the public demo server, so stop coordinates leave the machine. It cannot be told a road is closed. At most two requests at a time. |
-| OpenFreeMap | `apps/web/src/app/theme.ts` | Style URLs | Basemap only |
+| Geofabrik (OpenStreetMap) | `packages/gtfs/src/cli/road-data.ts` (`npm run road:data`) | HTTPS download of `australia-latest.osm.pbf` | Only when `data/osm/` has no copy. Cut to the Opal area with osmium in Docker and built into the road graph. The data is © OpenStreetMap contributors (ODbL) and is credited wherever road results are shown. |
+| OpenFreeMap | `apps/web/src/app/theme.ts` | Style URLs | Basemap only. Tile addresses say which part of the map is viewed (I9). |
+
+The editor's road requests (`route`, `table`, `nearest` from `apps/api/src/routing/roads.ts`, through `ROUTER_URL`) used to go to the public OSRM demo server. Since the access analysis work they go to the journey router's road side, which answers them in OSRM's shape (D16), so no routing request leaves the machine. The owner's own `.env` must name `http://localhost:3002` for that; `.env.example` does. It still cannot be told a road is closed (A7 of BRD `access-analysis`), and `roads.ts` still sends at most two requests at a time.
 
 ## 4. Components
 
@@ -78,15 +82,17 @@ flowchart TB
     insp[inspector/]
     tl[timeline/]
     simui[sim/]
-    scen[scenario.ts<br/>applyEdit, undo]
+    aaui[analysis/<br/>Access pane]
+    scen[scenario-client.ts<br/>applyEdit, undo]
   end
   subgraph api[apps/api]
-    server[server.ts<br/>reads, tiles, packs]
-    scenarios[scenarios.ts<br/>edit engine + clash rules]
-    editmods[reshape / closures /<br/>delete-stop / schedule / stops]
-    geo[roads.ts / tracks.ts / timings.ts]
-    export[export.ts]
-    sim[sim.ts / sim-results.ts]
+    server[server.ts + network/<br/>reads, tiles, packs]
+    scenarios[scenarios/<br/>engine, routes, clash rules]
+    editmods[scenarios/edits/<br/>one file per edit kind]
+    geo[routing/<br/>roads.ts, tracks.ts, timings.ts]
+    export[export/routes.ts]
+    sim[sim/<br/>sim.ts, router-client.ts,<br/>timetables.ts, results-read.ts]
+    analysis[analysis/<br/>places, analyses, runner,<br/>results, compare, export]
   end
   core[packages/core<br/>pure logic]
   gtfs[packages/gtfs<br/>import, schema, CLIs]
@@ -94,28 +100,33 @@ flowchart TB
     rcore[router-core]
     rgtfs[router-gtfs]
     rsim[router-sim]
+    rroad[router-road<br/>GraphHopper]
     rserver[router-server]
   end
-  web --> server & scenarios & sim
+  web --> server & scenarios & sim & analysis
   web --> core
   scenarios --> editmods --> geo
   scenarios --> core
   editmods --> core
+  analysis --> core
+  analysis -- timetables --> sim
   server --> gtfs
   sim --> rserver
-  rserver --> rcore & rgtfs & rsim
+  analysis -- journeys, roads --> rserver
+  geo -- OSRM-shaped roads --> rserver
+  rserver --> rcore & rgtfs & rsim & rroad
   rserver -- GET export --> export
 ```
 
 | Part | Responsibility | Must not |
 |---|---|---|
-| `apps/web` | Everything the user sees. It holds one zustand store. Vehicle animation, the clock and simulator loads are kept outside React for speed. Every change goes through `scenario.ts` `applyEdit`. | Decide whether an edit is valid, or work out clashes (both are done on the server). |
-| `apps/api` | The HTTP API, the scenario edit engine, the clash rules, map tiles, export, and the simulator back end that drives the router and keeps its results. | Import feeds (that is a CLI). |
-| `packages/core` | Logic with no database or IO: vehicle-day chaining, the pack format, reshape geometry and timing, the delete-stop rule, waits, physical limits, time formatting. Unit-tested. | Depend on anything. |
-| `packages/gtfs` | Download, staging and import of a feed into a baseline; the database schema as numbered migrations (`sql/migrations/`); pack building; the audit and export-check CLIs. | Serve HTTP. |
-| `services/router` | A Java RAPTOR journey router (an algorithm for public transport journey planning) and the passenger simulator, behind an HTTP service. It loads timetables from the editor's GTFS export. | Read the editor's database. It only sees exported zips. |
+| `apps/web` | Everything the user sees. It holds one zustand store; the Access pane keeps its lists and results in small stores of its own (`apps/web/src/analysis/`). Vehicle animation, the clock and simulator loads are kept outside React for speed. Every change goes through `scenario-client.ts` `applyEdit`. | Decide whether an edit is valid, or work out clashes (both are done on the server). |
+| `apps/api` | The HTTP API, the scenario edit engine, the clash rules, map tiles, export, the simulator back end that drives the router and keeps its results, and the access analysis (zones, points of interest, analyses run in the background, their results, comparison and export). | Import feeds (that is a CLI). |
+| `packages/core` | Logic with no database or IO: vehicle-day chaining, the pack format, reshape geometry and timing, the delete-stop rule, waits, physical limits, time formatting, and the access analysis's grid, outline check, access ratio, summary, lines of equal ratio and comparison (`analysis/`). The types the web app and the API share (`api/`). Unit-tested. | Depend on anything. |
+| `packages/gtfs` | Download, staging and import of a feed into a baseline; the database schema as numbered migrations (`sql/migrations/`); pack building; the audit, export-check and road-data CLIs. | Serve HTTP. |
+| `services/router` | A Java RAPTOR journey router (an algorithm for public transport journey planning), the passenger simulator and the road router (drives on OpenStreetMap roads, with GraphHopper), behind an HTTP service. It loads timetables from the editor's GTFS export and the road graph from `data/router/road/opal`. | Read the editor's database. It only sees exported zips and its own road graph. |
 
-The router's own modules are `router-core`, `router-gtfs`, `router-sim`, `router-server`, `router-road` (an empty placeholder) and `router-bench` (a placeholder). They are described in `services/router/README.md` and `docs/router-plan.md`.
+The router's own modules are `router-core`, `router-gtfs`, `router-sim`, `router-server`, `router-road` (road routing for cars, the only module that uses GraphHopper) and `router-bench` (a placeholder). They are described in `services/router/README.md` and `docs/router-plan.md`. The same jar can run roads only (`ROUTER_ROAD=only`, `npm run router:road`, port 3003), for a machine short of memory.
 
 ## 5. Information architecture
 
@@ -139,6 +150,12 @@ The router's own modules are `router-core`, `router-gtfs`, `router-sim`, `router
 | Sim run | One simulator run: kind BAU (business as usual), scenario or capacity | `sim_runs`; results in the partitions `sim_journeys`, `sim_legs`, `sim_trip_loads`, `sim_stop_activity`; `sim_link_loads` | `sim.ts`, `sim-results.ts` |
 | Timetable (router) | An exported day loaded into the router's memory under a named id, with a binary snapshot | Router memory, `data/router/snapshots/` | Router |
 | Load state (router) | Passengers aboard per stop time, in memory, at most 8 per timetable | Router memory | Router |
+| Road graph (router) | OpenStreetMap roads of the Opal area, built for cars, with `road-graph.json` saying what it was built from | `data/osm/opal.osm.pbf` (the cut extract); `data/router/road/opal/` (memory-mapped when served) | `npm run road:data` |
+| Zone | A named outline drawn on the map, reused on any day | `analysis_zones` | `apps/api/src/analysis/places-routes.ts` |
+| Point of interest | A named place to reach, reused on any day | `points_of_interest` | `places-routes.ts` |
+| Access analysis | One run over a zone to some points of interest, on one timetable at one departure time, with its settings, state and progress, and copies of its zone (outline and hash) and points of interest | `analyses`, `analysis_pois` | `apps/api/src/analysis/create.ts`, `runner.ts` |
+| Sample point | One grid point of an analysis, with its column and row | `analysis_points` | `create.ts` |
+| Analysis result | One sample point and point of interest: status, public transport time and split, stored legs, drive, car time, access ratio | `analysis_results` | `run-drives.ts`, `run-journeys.ts` |
 
 The terms above follow `docs/glossary.md` (started 23 Nov 2026), which is the place to look for what each one means.
 
@@ -192,7 +209,9 @@ flowchart LR
 | Map tiles | `GET /api/baselines/:b/tiles/:z/:x/:y` | Mapbox vector tiles from `map_lines` and `stops`, for the **baseline only**. What a scenario adds is drawn from GeoJSON routes. |
 | Packs and waits | `GET /api/baselines/:b/packs/:mode`, `/waits` | Binary. Format in `packages/core/src/pack.ts`. |
 | GTFS export | `GET /api/baselines/:b/export?s=&shapes=0&box=` | Standard GTFS plus `editor_vehicle_types.txt` and `editor_trip_vehicles.txt` |
-| Router HTTP API, `/v1/*` | `services/router/router-server/.../RouterServer.java` | Timetables, journeys (single and bulk NDJSON), load states, demand check and generation, simulations. See `services/router/README.md`. |
+| Router HTTP API, `/v1/*` | `services/router/router-server/.../RouterServer.java`; road endpoints in `RoadApi.java` | Timetables, journeys (single and bulk NDJSON), load states, demand check and generation, simulations, and `POST /v1/road/route` and `/v1/road/table`. Health says whether road routing is on. See `services/router/README.md`. |
+| OSRM-shaped road requests | `services/router/router-server/.../OsrmApi.java`, at the router's root | `GET /route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…`, exactly as `apps/api/src/routing/roads.ts` sends them to `ROUTER_URL` (D16). Checked by `npm run test:roads`. |
+| Access analysis API | `apps/api/src/analysis/` | `/api/analysis/zones`, `/api/analysis/pois`, `/api/analyses` (list, make, read, cancel, delete), and per analysis `points`, `lines`, `points/:seq`, `export/results.csv`, `export/points.geojson`, `export/lines.geojson`, plus `/api/analyses/compare`. Types shared with the web app in `packages/core/src/api/analysis.ts`. Listed in `docs/architecture/access-analysis.md` §4.4, §5.1, §5.3. |
 | Demand file | `services/router/README.md`, simulator-plan §3.1 | CSV, gzip allowed |
 
 ## 7. Technology
@@ -210,7 +229,7 @@ flowchart LR
 - **Security and privacy:**
   - There is no authentication and no CORS setting.
   - The API listens on `0.0.0.0`, and demand uploads have no size limit.
-  - Stop coordinates are sent to the public OSRM server.
+  - No routing request leaves the machine once `ROUTER_URL` names the journey router (D16; `.env.example` does). Before that, stop coordinates went to the public OSRM server. Basemap tile addresses still go to OpenFreeMap (I9).
   - This is acceptable for one person on one machine, and not for hosting (risk R1).
 - **Errors:**
   - Each module throws `Error` with a `statusCode` through a local `fail()` helper. Fastify turns it into JSON, and there is no global handler.
@@ -219,10 +238,11 @@ flowchart LR
   - 503 means the router is down.
   - The router answers `{"error": …}`.
 - **Logging:** Fastify's logger at `warn`, and a few `log.error` calls. The router uses slf4j-simple.
-- **Configuration:** environment variables only, from `.env` at the repo root, plus the router's own `ROUTER_*` settings. `ROUTER_URL` is OSRM; `ROUTER_SERVICE_URL` is the Java router. The list is in `docs/codebase-map.md`.
+- **Configuration:** environment variables only, from `.env` at the repo root, plus the router's own `ROUTER_*` settings. `ROUTER_URL` is the road router and `ROUTER_SERVICE_URL` the journey router; both are usually the Java router on 3002, kept apart in the code so the road side can run on its own (3003). The list is in `docs/codebase-map.md`.
 - **Validity (clash) rules:** SQL on the server only (`scenarios.ts` `conflictsIn`), using the limits in `packages/core/src/limits.ts`. Each list is capped (200, 60 and 2000). Guards against impossible edits live in each edit module.
 - **Long-running work:**
   - Sim runs are in-process promises in the API (`drive()`), resumed when it starts. The router runs one simulation at a time in a queue.
+  - Access analyses run the same way, one at a time (`apps/api/src/analysis/runner.ts`, D20), writing their results batch by batch, so one cut off by a restart carries on from the last batch.
   - Export streams through temporary staging tables.
   - The dev API restarts on any source change, which cuts off an export in progress.
 
@@ -230,7 +250,7 @@ flowchart LR
 
 - **Development only.** `docker compose up -d db` starts Postgres on port 5433. `npm run dev` starts the API (`node --watch`) and the web app (Vite). `npm run router:dev` starts the router with Gradle.
 - `docker-compose.yml` also has a `router` service behind the `router` profile. Its image has not been rebuilt since the endpoints were added.
-- There are no other environments and no CI. AWS, a self-hosted routing server and logins are planned (PLAN.md, remaining work item 6).
+- There are no other environments and no CI. AWS and logins are planned (PLAN.md, remaining work item 6). The routing server is our own journey router (D16), so it needs no separate hosting.
 
 ## 10. Decision log
 
@@ -240,7 +260,7 @@ flowchart LR
 | D2 | before Nov 2026 (PLAN.md) | Clash rules run on the server only | Shared with the browser in `packages/core`; server only | One source of truth; the rules need the database. PLAN.md:46 records the change. |
 | D3 | 22 Nov 2026 | The copied rows are the source of truth. Edits are not stored in a form that can be replayed, and rebasing onto a new feed is future work. | Store each edit's parameters now; accept as built | Owner accepted as built |
 | D4 | Nov 2026 (router-plan) | The journey router is a separate Java service that reads the editor's GTFS export | In Node; a separate service | Speed targets; a clean boundary (the router never reads the database) |
-| D5 | before Nov 2026 | Road paths come from an outside OSRM server. **Superseded by D16** (25 Nov 2026) once access-analysis FR-13 is built. | Valhalla with OSM in the database (the original plan); OSRM API | Nothing to host yet. A routing server of our own is still planned. |
+| D5 | before Nov 2026 | Road paths come from an outside OSRM server. **Superseded by D16** (25 Nov 2026), built 26 Nov 2026. | Valhalla with OSM in the database (the original plan); OSRM API | Nothing to host yet. A routing server of our own is still planned. |
 | D6 | 22 Nov 2026 | The vehicle catalogue ships with placeholders, and real NSW vehicle types remain the aim | Placeholders as the design; placeholders for now | Owner: the placeholders are as built and the aim stands |
 | D7 | 22 Nov 2026 | Lint with oxlint, not ESLint | ESLint with typescript-eslint; oxlint; Biome | typescript-eslint does not support TypeScript 7 |
 | D8 | 23 Nov 2026 | Organise code by feature folders: one folder per part of the product, plus `shared/`, with the conventions in `CLAUDE.md` and `docs/codebase-map.md` | By kind (`components/`, `hooks/`, `routes/`…); by feature | What changes together lives together, and it matches how `sim/`, `timeline/` and `inspector/` already work. By kind spreads one feature over five folders. Moved to in stages (`docs/refactor-plan.md` stage 2). |
@@ -250,7 +270,7 @@ flowchart LR
 | D12 | 23 Nov 2026 | `import --replace` runs as one database transaction; packs are written after the commit | One transaction; build beside the old day and swap | The smallest change, and Postgres keeps showing the old day to readers until the commit |
 | D13 | 23 Nov 2026 | Coding standards gaps become tickets; all new code meets the standards in section 14 now | Tickets with strict new code; record only; fix all first | Fixes land without a week's delay, and the gaps stop growing |
 
-Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the architect on 25 Nov 2026 under the owner's delegation (the owner may reopen any). The full reasons are in `docs/architecture/access-analysis.md` §1. D5 is superseded by D16 once FR-13 is built.
+Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the architect on 25 Nov 2026 under the owner's delegation (the owner may reopen any). The full reasons are in `docs/architecture/access-analysis.md` §1. All are built (26 Nov 2026, branch `feature/access-analysis`), and D5 is superseded by D16.
 
 | # | Date | Decision | Options considered | Reason |
 |---|---|---|---|---|
@@ -270,11 +290,27 @@ Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the a
 | D27 | 25 Nov 2026 | Lines and bands of equal ratio by our own marching triangles in `packages/core`, leaving out squares with a missing corner | d3-contour 4.0.2; marching squares | d3-contour cannot leave out missing values (FR-12); no library needed |
 | D28 | 25 Nov 2026 | Lines are worked out by the API on request | In the browser | One place for the map and the export |
 | D29 | 25 Nov 2026 | Web: an "Access" left pane in `apps/web/src/analysis/`, one app-store field, layers in `map/use-analysis-layers.ts` and `use-analysis-result-layers.ts` | A modal; a pane | Like the Simulation pane; `store.ts` and `MapView.tsx` barely grow |
-| D30 | 25 Nov 2026 | Each pair's journey legs (summary) are stored at run time; the car path is asked for on click | Ask again on click; store | Reopening and sameness (FR-16, NFR-4) |
+| D30 | 25 Nov 2026 | Each pair's journey legs (summary) are stored at run time; the car path is asked for on click. Rides drawn as straight lines: superseded by D39 | Ask again on click; store | Reopening and sameness (FR-16, NFR-4) |
 | D31 | 25 Nov 2026 | Two analyses compare when their copied zone outline and spacing are the same and both have the point of interest | Same zone id | Points must line up |
 | D32 | 25 Nov 2026 | The fixture e2e runs analyses against a fake router written in Node | Skip without routers | Real coverage of the job with no Java |
 | D33 | 25 Nov 2026 | Developers may run Gradle on the access analysis router tickets, one Gradle build at a time | Owner-run only | The owner asked for the epic to be built overnight |
 | D34 | 25 Nov 2026 | Starting values: walk 800 m, longest journey 120 min, 3 changes, all modes but school buses, parking 5 min, traffic 1.0/1.4/1.2/1.4/1.0, spacing 250 m, lines at 1, 1.5, 2, 3, 4, departure 08:00 | | BRD Q1, Q2 and the router's settled walking rules |
+
+Decisions D35 to D37 answer the owner's request of 26 Nov 2026 to make the Access pane feel like a map editor and to choose the map's look. The owner chose satellite from Esri World Imagery and full editing; the rest was decided by the developer under the owner's delegation (`docs/architecture/access-analysis.md` §12, "Map editor").
+
+| # | Date | Decision | Options considered | Reason |
+|---|---|---|---|---|
+| D35 | 26 Nov 2026 | The basemap is chosen apart from the theme, for the whole app: Light (OpenFreeMap positron), Streets (liberty), Dark (dark) and Satellite (Esri World Imagery, no key, with Esri's Boundaries and Places labels over it and Esri's credit). It follows the theme until one is picked, and the pick is kept in the browser (`localStorage`, key `basemap`). The map is rebuilt on a change, as for the theme; the map's colours come from the basemap's tone (light set over Light and Streets, dark set over Dark and Satellite). Code: `apps/web/src/map/basemaps.ts`, `basemap-choice.ts`, `BasemapPicker.tsx` | Tied to the theme; a picker; Mapbox or MapTiler satellite (needs a key) | The owner could not see buildings (liberty draws them, with house numbers); Esri's imagery needs no key. Esri's terms want the credit shown, which the attribution does; heavy use would need an ArcGIS account |
+| D36 | 26 Nov 2026 | The Access pane's zone and points of interest are made on the map: a tool bar floating beside the side panel (Draw zone, Place point of interest; Z, P, Escape, Backspace, Enter), and a name box on the map over what is to be named. The name box is a plain positioned div placed with `map.project` and moved as the map moves, not a MapLibre popup, so that it is ordinary React. The side panel keeps the lists (pick, tick, rename, delete) and a hint | Keep the side-panel forms; a MapLibre popup with a React portal; a positioned div | The owner found naming first and clicking after awkward; a div needs no portal and follows the app's styles |
+| D37 | 26 Nov 2026 | A saved zone is reshaped in place: the picked zone shows corner handles (drag to move) and handles mid-side (drag to add a corner); the new outline is sent as `ring` in the zone's PATCH, checked by the same rules as a new zone, and a name alone still renames. Analyses keep their own copy (D25), so reshaping changes none. A pin is dragged to move it (the PATCH with `lon` and `lat` that already existed) | A new outline as a new zone; PATCH with `ring` | Full editing was asked for; no migration or change to how analyses store zones is needed |
+
+Decision D38 answers FR-21 of BRD `access-analysis` 1.1 (arrive-by) on the journey router's side; the design was set by the coordinator and built by the developer (`docs/router-plan.md` §22). D39 is kept for the ride-paths work.
+
+| # | Date | Decision | Options considered | Reason |
+|---|---|---|---|---|
+| D38 | 26 Nov 2026 | Arrive-by is a backward RAPTOR search in `router-core` (`BackwardSearch.java`) that finds the latest departure under the forward search's own rules (time to change, longest walk, most rides, kinds of vehicle, staying aboard a vehicle that runs on; loads not looked at), then the ordinary forward search from that departure, keeping its journeys that arrive in time. Requests give `arriveBy` in place of `depart` (exactly one), on `POST /v1/journeys` and per query in `/v1/journeys/bulk`; capacity must be off. Answers add `arriveBy` and `earlyWait` (arriveBy less the arrival) to each journey. In bulk, arrive-by queries that share their end, time and limits share one backward search | A binary search over forward searches; backward search with legs rebuilt from its own labels; backward search then a forward search from its answer | The backward search is the efficient many-to-one direction (one per point of interest); planning the journey forwards gives legs of exactly the forward shape with no second path-building code, and the forward search arriving in time checks the two searches against each other. Forward bulk does not share searches between queries, so sharing is new |
+| D39 | 26 Nov 2026 | A picked sample point's rides follow their vehicles' paths. A run keeps each ride's trip id and its two stops' ids in the stored legs JSON (no migration); the point's detail looks up the trip in the analysis's day (its scenario's trips included) and cuts the trip's shape between the two stops (`packages/core` `ride-path.ts`: the feed's distances, else snapping every stop in order so loops are cut on the right pass). No shape, or one far from the stops: stop to stop. Rides stored before ids were kept find a trip of their line at the stored places and times; failing that, the straight line, marked "path not known". Walks stay straight. Supersedes D30's straight rides | Store the paths at run time; ask the router for the stops passed (`detail: legs`); look up on click | The owner saw straight lines where the bus goes. Paths are only needed for one point at a time, so storing about 2 KB more per pair is not worth it; trip rows are never changed once made (an edit adds new rows), so a lookup later gives the same path. The router's `position` is the place in the box-cut export, not `stop_sequence`, so it is not kept; times tell a loop's two calls apart |
+| D40 | 26 Nov 2026 | Arrive-by analyses in the API and web app (FR-21). An analysis's settings JSON gains `timeMode` (`depart` or `arriveBy`); the time stays in `departSecs` in both modes, and settings saved before have no `timeMode` and read as `depart` (`withTimeMode`), so no data changes. Each pair's early wait goes in a new column, `analysis_results.early_wait_secs` (migration 0011, null for depart-at). The bulk query sends `arriveBy` in place of `depart`. The public transport time is arriveBy less the journey's departure; the wait is what is left after walks, rides and early wait; the longest journey applies to it; the traffic factor is that of the arrive-by time. Depart-at text now says "Depart 08:00" (names, list, legend). The export appends `time_mode` (`depart`, `arrive_by`), `time` and `early_wait_mins`. An arrive-by and a depart-at analysis are still comparable (D31 unchanged) and the comparison says how they differ | A separate `arriveBySecs` setting; renaming `departSecs` with a data migration; the early wait in the legs JSON or worked out from the legs; a `time_mode` column | One time field keeps old settings valid and every reader of the time (traffic factor, settings line) right for both modes with no data change; the name is documented. A column makes the early wait a plain read for the point detail and export, where deriving it from legs would mean the last leg's arrival, which walks do not store |
 
 ## 11. Issues and discrepancies
 
@@ -284,7 +320,7 @@ Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the a
 |---|---|---|---|
 | I6 | Coding standards gaps (section 14): no check for unused variables or parameters; 20 uses of `any` and 32 `as never` casts; 28 files over 300 lines and no file length check. Decided by D13. | `tsconfig.base.json`, `.oxlintrc.json`, `apps/*/src`, `packages/*/src` | Project manager (tickets) |
 | I7 | The copy-on-write rule "an edit changes only rows it made, apart from the tag that removes an earlier row" holds in the code sampled but is not enforced or written down in the code. D11 depends on it. | `apps/api/src/scenarios/` | Developer (a check for every edit kind, BRD `trustworthy-edits` step 3) |
-| I8 | Java files over 300 lines (`RouterServer.java` 723, `Simulations.java` 677, `JourneyApi.java` 659, `Timetables.java` 374). Section 14's short-file rule is written for TypeScript, and T-19's check covers only `apps/` and `packages/`. Should the rule and its check cover `services/router`? (access-analysis AAI-2) | `services/router/router-server/` | Owner |
+| I8 | Java files over 300 lines (`RouterServer.java` 738 since the road endpoints were registered, `Simulations.java` 677, `JourneyApi.java` 659, `Timetables.java` 374). The new road files are all under 300. Section 14's short-file rule is written for TypeScript, and T-19's check covers only `apps/` and `packages/`. Should the rule and its check cover `services/router`? (access-analysis AAI-2) | `services/router/router-server/` | Owner |
 | I9 | NFR-5 of `access-analysis` ("no coordinates sent outside the machine") is read as routing requests only; basemap tiles still come from OpenFreeMap, and their addresses say which part of the map is viewed (access-analysis AAI-5) | `apps/web/src/app/theme.ts` | Owner, then BA |
 
 ### Resolved: fixed in the code
@@ -315,8 +351,8 @@ Each line below should be corrected in its document when that document is next e
 | PLAN.md:9; `router-bench/build.gradle.kts:1-2` | The demand generator is next (phase 5) | Built: `router-sim/.../DemandGenerator.java` |
 | PLAN.md:46 | Dragging exists only on the trip diagram | All three charts drag (`PlatformView.tsx`, `VehicleView.tsx`) |
 | PLAN.md:334, 348 | "Draw a new line" is in the left panel; the "Close a road or a line" button is on the map | Rail buttons "Draw a line" and "Close a road" (`LeftRail.tsx`) |
-| `services/router/README.md:10` | "The editor does not call the service yet" | It does (simulator) |
-| `services/router/README.md:364` | The "S1" label is missing | Typo |
+| `services/router/README.md:10` | "The editor does not call the service yet" | It does (simulator). Corrected 26 Nov 2026 (AA-25). |
+| `services/router/README.md:364` | The "S1" label is missing | Typo. Corrected 26 Nov 2026 (AA-25). |
 | `docs/router-plan.md:3` | The website's use of the router is not built | True only for journey planning (phase 7) |
 | `docs/router-plan.md:198-200` | Walking links: 400 m, 1.2 m/s, cap of 40 | 500 m, 1.03 m/s, cap of 150 (`TransferSettings.java:50`); §18 already says so |
 | `docs/router-plan.md:380` | `route(query, CapacityMode, loads)` | `route(Query, Preferences, Capacity)` (`Router.java:139`) |
@@ -326,7 +362,7 @@ Each line below should be corrected in its document when that document is next e
 
 | # | Risk | Effect | Mitigation |
 |---|---|---|---|
-| R1 | No authentication, an open bind, no upload limit, and coordinates sent to a public server | Fine locally; unsafe once hosted | Must be designed before any deployment (logins, a routing server of our own) |
+| R1 | No authentication, an open bind and no upload limit | Fine locally; unsafe once hosted | Must be designed before any deployment (logins). Coordinates no longer go to a public routing server once `ROUTER_URL` names our router (D16). |
 | R2 | Re-import cascades and deletes scenarios (I1) | Loss of work | Mitigated: the importer refuses without `--replace`, and `npm run db:backup` takes a whole-database backup first |
 | R3 | Edits cannot be replayed (D3) | A new feed means scenarios cannot be carried over | Design rebasing when it is needed |
 | R4 | The biggest files carry many concerns: `scenarios.ts` (edit engine, eleven edit kinds and the clash rules), `MapView.tsx` (about 2,000 lines) and `styles.css` (about 3,000 lines) | Changes are slow to review and easy to break | See the suggestions given with this document |
@@ -349,6 +385,11 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | File paths updated for the feature-folder moves | Stage 2 of `docs/refactor-plan.md` (tickets T-6, T-7) |
 | 23 Nov 2026 | Added D10 to D13, the copy-on-write rule in 5.3, issues I6 and I7, and section 14 (project structure and coding standards); pointed to the glossary and BRDs | Design of BRD `trustworthy-edits` v1.0 (`docs/architecture/trustworthy-edits.md`) |
 | 25 Nov 2026 | Added D14 to D34, marked D5 superseded by D16, added issues I8 and I9. The context and component sections are updated when the work is built (AA-25), not before. | Design of BRD `access-analysis` v1.0 (`docs/architecture/access-analysis.md`) |
+| 26 Nov 2026 | Access analysis built: §1, §3 (OSRM replaced by the journey router's road side; Geofabrik added), §4 (`router-road`, `apps/api/src/analysis/`, `apps/web/src/analysis/`), §5.1 (road graph and the five analysis entities), §6 (road and analysis interfaces), §8 (privacy, configuration, long-running work), §9, R1, I8 updated; two stale README lines corrected | Epic close-out, ticket AA-25 (access-analysis AAI-6) |
+| 26 Nov 2026 | Added D35 (basemap picker), D36 (the Access pane's map editor) and D37 (reshaping a zone with PATCH `ring`) | The owner's request for a map editor and map views (branch `feature/aa-map-editor`) |
+| 26 Nov 2026 | Added D38 (arrive-by in the journey router: a backward search, then the forward search from its answer) | BRD `access-analysis` v1.1 FR-21 (branch `feature/aa-arrive-by-router`) |
+| 26 Nov 2026 | Added D39 (rides along their vehicles' paths), superseding D30's straight rides | Owner's report that public transport directions showed straight lines |
+| 26 Nov 2026 | Added D40 (arrive-by analyses in the API and web app: `timeMode` in the settings, the early wait column) | BRD `access-analysis` v1.1 FR-21 (branch `feature/aa-arrive-by-app`) |
 
 ## 14. Project structure and coding standards
 

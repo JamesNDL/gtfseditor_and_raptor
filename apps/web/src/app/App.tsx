@@ -9,6 +9,7 @@ import { Inspector } from '../inspector/Inspector.tsx';
 import { liveStats } from '../shared/live-stats.ts';
 import { LeftRail } from './LeftRail.tsx';
 import { MapView } from '../map/MapView.tsx';
+import { useShownBasemap } from '../map/basemap-choice.ts';
 import { NewLinePanel } from '../editing/new-line/NewLinePanel.tsx';
 import { ReshapePanel } from '../editing/reshape/ReshapePanel.tsx';
 import { loadScenarios, redo, selectScenario, undo } from '../scenarios/scenario-client.ts';
@@ -44,6 +45,7 @@ export function App() {
   );
   const timelineOpen = useStore((s) => s.timeline.open);
   const theme = useStore((s) => s.theme);
+  const basemap = useShownBasemap();
 
   // Set the colours before anything draws; the choice is remembered between visits.
   useMemo(() => applyTheme(theme), [theme]);
@@ -205,8 +207,9 @@ export function App() {
     <div
       className={`app${inspectorOpen ? ' inspector-open' : ''}${timelineOpen ? ' timeline-open' : ''}${paneOpen ? ' pane-open' : ''}`}
     >
-      {/* The map and the charts draw their own colours, so they are rebuilt when the theme changes. */}
-      <MapView key={`map-${theme}`} onVehicleCount={onVehicleCount} />
+      {/* The map and the charts draw their own colours, so they are rebuilt when the theme or the
+          basemap changes. */}
+      <MapView key={`map-${theme}-${basemap}`} onVehicleCount={onVehicleCount} />
       <TopBar />
       <LeftRail />
       <TimelinePanel key={`timeline-${theme}`} />

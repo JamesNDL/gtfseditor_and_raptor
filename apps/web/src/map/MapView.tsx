@@ -5,6 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef, useState } from 'react';
+import { analysisMapClick } from '../analysis/analysis-map.ts';
 import {
   addClosurePoint,
   describePick,
@@ -34,6 +35,11 @@ import {
 import { mapView } from '../sim/sim-api.ts';
 import { mapScale } from '../sim/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
+import { AnalysisMapEditor } from '../analysis/AnalysisMapEditor.tsx';
+import { isMapBusy } from '../analysis/map-work.ts';
+import { BasemapPicker } from './BasemapPicker.tsx';
+import { useShownBasemap } from './basemap-choice.ts';
+import { basemapStyle, basemapTone } from './basemaps.ts';
 import {
   computeFrame,
   vehicleAt,
@@ -41,14 +47,16 @@ import {
   vehicleFrames,
   waitingUntil,
 } from '../vehicles/vehicles.ts';
+import { useAnalysisLayers } from './use-analysis-layers.ts';
+import { useAnalysisResultLayers } from './use-analysis-result-layers.ts';
 import './map.css';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 const SYDNEY: [number, number] = [151.12, -33.87];
-// The colours in use, set each time the map is built for a theme.
+// The colours in use, set each time the map is built for a basemap.
 let P: MapPalette = MAP_PALETTE.dark;
-// Where the map was looking, so that rebuilding it for another theme does not lose the place.
+// Where the map was looking, so that rebuilding it for another basemap does not lose the place.
 let lastView: { center: [number, number]; zoom: number } | null = null;
 
 // Drawn bottom to top.
@@ -107,7 +115,12 @@ export function MapView({ onVehicleCount }: Props) {
     else map.once('style.load', fn);
   };
 
-  P = MAP_PALETTE[useStore((s) => s.theme)];
+  const basemap = useShownBasemap();
+  P = MAP_PALETTE[basemapTone(basemap)];
+  // The map is made once per basemap (App keys it by the basemap), so the first style is the one.
+  const styleRef = useRef(basemapStyle(basemap));
+  // The map, once made, for the Access pane's map editor.
+  const [madeMap, setMadeMap] = useState<maplibregl.Map | null>(null);
   const baselineId = useStore((s) => s.baselineId);
   const enabledModes = useStore((s) => s.enabledModes);
   const loadedModes = useStore((s) => s.loadedModes);
@@ -122,7 +135,7 @@ export function MapView({ onVehicleCount }: Props) {
   useEffect(() => {
     const map = new maplibregl.Map({
       container: containerRef.current!,
-      style: P.basemap,
+      style: styleRef.current,
       center: lastView?.center ?? SYDNEY,
       zoom: lastView?.zoom ?? 10.2,
       minZoom: 4,
@@ -137,6 +150,7 @@ export function MapView({ onVehicleCount }: Props) {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
     mapRef.current = map;
     overlayRef.current = overlay;
+    setMadeMap(map);
     // The simulation wizard can use "what is on screen" as a run's area.
     const noteBounds = () => {
       const b = map.getBounds();
@@ -270,6 +284,8 @@ export function MapView({ onVehicleCount }: Props) {
 
     map.on('click', (e) => {
       const { open, close, openTimeline } = useStore.getState();
+      // The Access pane is drawing a zone or placing a point of interest: the click is its alone.
+      if (analysisMapClick(e.lngLat.lng, e.lngLat.lat, (p) => map.project(p).dist(e.point))) return;
       // A box for a simulation's area is being drawn, or has just been.
       if (useStore.getState().simDrawing || performance.now() - drawEndedRef.current < 400) return;
       // While a closure is being drawn, each click carries its line on.
@@ -348,6 +364,11 @@ export function MapView({ onVehicleCount }: Props) {
       if (now - lastMove < 50) return;
       lastMove = now;
       const tooltip = tooltipRef.current!;
+      // The Access pane's map editor has the pointer: nothing under it is named.
+      if (isMapBusy(useStore.getState().analysis.work)) {
+        tooltip.style.display = 'none';
+        return;
+      }
       const { routes } = useStore.getState();
       let text = '';
       const closing = useStore.getState().closing;
@@ -504,6 +525,7 @@ export function MapView({ onVehicleCount }: Props) {
       mapRef.current = null;
       overlayRef.current = null;
       loadedRef.current = false;
+      setMadeMap(null);
     };
   }, []);
 
@@ -1386,6 +1408,9 @@ export function MapView({ onVehicleCount }: Props) {
     };
   }, [simDrawing]);
 
+  useAnalysisLayers(mapRef, whenLoaded);
+  useAnalysisResultLayers(mapRef, whenLoaded);
+
   // The results of a simulation run, drawn over the network: passengers on each stretch between
   // stops, or where the people who gain and lose time are. See docs/simulator-plan.md, section 18.
   const simRunId = useStore((s) => s.simRunId);
@@ -1869,11 +1894,16 @@ export function MapView({ onVehicleCount }: Props) {
           document.querySelector('.rail')?.getBoundingClientRect().right ??
           40,
       ) + 20;
+    // Below the Access pane's tool bar on the map, when it is showing.
+    const top = Math.max(
+      110,
+      (document.querySelector('.aa-tools')?.getBoundingClientRect().bottom ?? 0) + 30,
+    );
     map.fitBounds(fitBounds, {
       padding:
         room - left - right > 200
-          ? { top: 110, bottom: 150, left, right }
-          : { top: 110, bottom: 150, left: 60, right: 60 },
+          ? { top, bottom: 150, left, right }
+          : { top, bottom: 150, left: 60, right: 60 },
       maxZoom: 14,
       duration: 900,
     });
@@ -1998,6 +2028,8 @@ export function MapView({ onVehicleCount }: Props) {
     <>
       <div ref={containerRef} className="map" />
       <div ref={tooltipRef} className="map-tooltip" />
+      <BasemapPicker />
+      {madeMap && <AnalysisMapEditor map={madeMap} />}
     </>
   );
 }

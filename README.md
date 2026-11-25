@@ -28,7 +28,11 @@ npm run dev          # API on :3001, web app on http://localhost:5173
 | `npm run test:ui` | Drive the real interface in a headless browser (click, type, drag, shortcuts) against the running app; screenshots go to `data/ui-test/`. With the router running it also sets up and runs simulations |
 | `npm run test:e2e` | End-to-end test of scenario editing against the running API (creates and deletes its own scenarios). Its "Reality" block checks what an edit must never produce, and ends by exporting its scenario and running the export check on it |
 | `npm run test:sim` | End-to-end test of the simulator through the running API and router (makes and removes its own journeys, runs and scenario) |
-| `npm run router:dev` | Start the journey router service, which also runs the simulator |
+| `npm run router:dev` | Start the journey router service, which also runs the simulator and, once road data is built, plans drives (port 3002, 1 GB) |
+| `npm run router:road` | Start a second copy of the router that plans drives only (port 3003, 512 MB), for when memory is short |
+| `npm run road:data` | Build the road data: cut the OpenStreetMap extract of Australia to the Opal area (osmium in Docker) and build the road graph into `data/router/road/opal`. About 3 minutes |
+| `npm run test:roads` | Send the editor's three road requests to `ROUTER_URL` and check the answers |
+| `npm run test:access -- --fixture` | Run an access analysis through the web app in a headless browser, on a throwaway stack with the small test feed and a fake router, and save screenshots |
 | `npm run dev` | Start the API and web app |
 
 ## Editing through the API
@@ -92,9 +96,15 @@ Any of them may add `name`, `folderId`, `madeBy` and `settings`. A run is `queue
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `ROUTER_SERVICE_URL` | `http://localhost:3002` | The journey router. (`ROUTER_URL` is the road-routing server.) |
+| `ROUTER_SERVICE_URL` | `http://localhost:3002` | The journey router's public transport side. (`ROUTER_URL` is its road side; see "Roads and access analysis".) |
 | `API_PUBLIC_URL` | `http://localhost:3001` | Where the router can reach this API, to fetch an export |
 | `ROUTER_SHARES_FILES` | yes | Set to `0` if the router runs on another machine and cannot read demand files from this one's disk |
+
+## Roads and access analysis
+
+Bus lines that are drawn, reshaped or sent round a closure follow roads planned by the **road router**: the road side of the journey router, built on OpenStreetMap with GraphHopper. Set `ROUTER_URL=http://localhost:3002` in `.env` (as `.env.example` does) and build the road data once with `npm run road:data`; then `npm run router:dev` plans drives as well as journeys, and nothing is sent off this machine. Without `ROUTER_URL`, new bus lines follow existing bus routes where they run and are straight elsewhere. The router's road requests and settings are in `services/router/README.md`.
+
+The **Access** pane, on the rail down the left edge, runs an **access analysis**: draw a zone, place points of interest, and the editor times trips from an even grid of sample points in the zone to each point of interest, by public transport (on the published day or a scenario) and by car. The map shows the access ratio (public transport time divided by car time) as coloured bands and lines, with a legend, a summary, one sample point's journey on click, a comparison of two analyses of the same zone, and CSV and GeoJSON downloads. It needs both sides of the router running. The words are defined in `docs/glossary.md` and the design is `docs/architecture/access-analysis.md`. Driving times are free-flow, from © OpenStreetMap contributors (ODbL).
 
 ## Layout
 

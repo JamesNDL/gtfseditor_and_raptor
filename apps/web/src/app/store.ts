@@ -3,6 +3,7 @@ import type { Baseline, Mode, RouteListItem } from '../shared/api-client.ts';
 import type { ScenarioInfo, ScenarioSummary } from '../scenarios/scenario-client.ts';
 import type { SimBox, SimJourney, SimRun } from '../sim/sim-api.ts';
 import type { SimMapState, SimResultsState } from '../sim/results.ts';
+import { defaultAnalysisView, type AnalysisView } from '../analysis/analysis-state.ts';
 
 export type Selection =
   | { kind: 'route'; id: number }
@@ -48,8 +49,8 @@ export interface Closing {
 
 export type TimelineTab = 'stringline' | 'platforms' | 'vehicles';
 
-/** The panels that fold out of the rail on the left: the timetable and its scenarios, the simulation, the modes shown. */
-export type LeftPane = 'scenario' | 'sim' | 'modes';
+/** The panels that fold out of the rail on the left: the timetable and its scenarios, the simulation, the access analysis, the modes shown. */
+export type LeftPane = 'scenario' | 'sim' | 'analysis' | 'modes';
 
 export interface TimelineState {
   open: boolean;
@@ -199,6 +200,9 @@ interface AppState {
   /** Trips in the timelines are coloured by how full they are in the chosen run. */
   simTripColours: boolean;
 
+  /** What the Access pane is showing: its screen, map work in progress and the analysis open. */
+  analysis: AnalysisView;
+
   timeline: TimelineState;
   /** Time window shown by every timeline view, in seconds since the start of the service day. */
   view: [number, number];
@@ -255,7 +259,9 @@ export const useStore = create<AppState>((set) => ({
   leftPane: (() => {
     try {
       const kept = localStorage.getItem('leftPane');
-      return kept === 'scenario' || kept === 'sim' || kept === 'modes' ? kept : null;
+      return kept === 'scenario' || kept === 'sim' || kept === 'analysis' || kept === 'modes'
+        ? kept
+        : null;
     } catch {
       return null;
     }
@@ -288,6 +294,7 @@ export const useStore = create<AppState>((set) => ({
   simMap: { layer: 'none', flow: 'change', by: 'stop', end: 'origin', side: 'b' },
   simTripColours: false,
   simMapDrawn: 0,
+  analysis: defaultAnalysisView(),
   timeline: CLOSED_TIMELINE,
   view: [6 * 3600, 10 * 3600],
 

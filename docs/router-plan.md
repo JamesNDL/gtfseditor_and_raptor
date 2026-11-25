@@ -1,6 +1,6 @@
 # Journey router build plan (Java, RAPTOR, capacity aware)
 
-Written 13 Nov 2026. Phase 0 (the empty project) was built the same day; its findings are in section 14. Phase 1 (the timetable loader) was built on 15 Nov; its findings and measurements are in section 15. Phase 2 (the search) was built the same day; see section 16. Its results were then checked and improved for quality and speed on journeys inside the Opal area; see section 17, which replaces the speed figures in section 16. Its journeys were then compared with the TfNSW trip planner's; see section 18. Phase 3 (the service) was built on 17 Nov; see section 19. Phase 4 (capacity and bulk requests) was built the same day; see section 20. The benchmark harness, road routing and the website's use of the router are not built.
+Written 13 Nov 2026. Phase 0 (the empty project) was built the same day; its findings are in section 14. Phase 1 (the timetable loader) was built on 15 Nov; its findings and measurements are in section 15. Phase 2 (the search) was built the same day; see section 16. Its results were then checked and improved for quality and speed on journeys inside the Opal area; see section 17, which replaces the speed figures in section 16. Its journeys were then compared with the TfNSW trip planner's; see section 18. Phase 3 (the service) was built on 17 Nov; see section 19. Phase 4 (capacity and bulk requests) was built the same day; see section 20. Arrive-by (a backward search) was added on 26 Nov; see section 22. The benchmark harness, road routing and the website's use of the router are not built.
 
 ## 1. Summary
 
@@ -224,6 +224,8 @@ When the editor gains its own editable transfers (already on its plan), it shoul
 
 ## 7. Road routing
 
+**As built (26 Nov 2026).** Phase 6 is built for cars, as the access analysis epic (`docs/architecture/access-analysis.md` §3, decisions D14 to D19), and section 21 has what was measured. In short: the recommendation of 7.2 was followed (GraphHopper 11.1 embedded in `router-road` behind `RoadRouter`, switched by `ROUTER_ROAD`, with the road-only process available but not needed); the area is the Opal area, not NSW, and only the car profile is built, with no turn costs, so the estimates of 7.3 were far too high (a 98 MB extract, a 31 s import, a 56 MB graph, about 2 ms per drive); the three OSRM-shaped endpoints of 7.5 are built, so the editor no longer uses the public OSRM server. Still not built: walking on the road graph (7.5), "avoid this area" (7.5), and a time-of-day factor in the router (7.4; the access analysis applies its own in the API). The rest of this section is the plan as first written.
+
 ### 7.1 Options
 
 | Option | For | Against |
@@ -279,8 +281,9 @@ Base path `/v1`. JSON throughout. Stop and trip ids are GTFS ids (`gtfs_id` in t
 | `POST /v1/timetables/{id}/loads` | Create a named load state (empty, or from an uploaded CSV). |
 | `GET /v1/timetables/{id}/loads/{name}` | Summary, or the full loads as CSV. |
 | `DELETE /v1/timetables/{id}/loads/{name}` | Discard. |
-| `POST /v1/road/route` | One driving (or walking) route. |
-| `POST /v1/road/bulk` | Many road routes; results streamed. |
+| `POST /v1/road/route` | One driving route (car only; walking was not built, section 21). |
+| `POST /v1/road/table` | Driving times and distances from many starting points to many ends, in one answer. Replaced the streamed `POST /v1/road/bulk` first planned here (decision D17 of `docs/architecture/access-analysis.md`; section 21). |
+| `GET /route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…` | The editor's three road requests, in OSRM's own shape, at the root rather than under `/v1` (section 7.5; section 21). |
 
 ### 8.2 Single journey
 
@@ -461,7 +464,7 @@ Sizes are rough days of focused work.
 | 3. Service | Single journey, health, metadata, load and reload with swap, Docker | Usable over HTTP by any application | 3 |
 | 4. Capacity and bulk | Load state, `check`, `assign` with slices and re-routing, bulk streaming, load upload, capacity tests | The switch working end to end | 6 to 7 |
 | 5. Benchmarks | Demand generator, harness, report, tuning to the targets | The speed comparison the owner asked for | 3 |
-| 6. Road routing | Extract and import, GraphHopper module, road endpoints | Driving results beside public transport results | 3 to 5 |
+| 6. Road routing | Extract and import, GraphHopper module, road endpoints. **Built for cars, 25 Nov 2026 (section 21)**, with the OSRM-shaped endpoints from phase 8 | Driving results beside public transport results | 3 to 5 |
 | 7. Website | Node API forwarding, staleness check, a comparison panel on the map | **First usable version complete** | 3 to 4 |
 | 8. Later, in rough order | Export without shapes; range RAPTOR; database reader with baseline plus scenario changes; job-based bulk; walking times from the road graph; OSRM-shaped endpoints so the editor stops using the public server; area avoidance for closures; crowding penalties | | 2 to 5 each |
 | 9. Separate project | The tap-data simulator | | Not sized |
@@ -500,7 +503,7 @@ Each has a default, so work can start without answers.
 | 8 | Should the driving time include congestion and parking? | Free-flow, clearly labelled; optional multiplier by time of day; no parking allowance. |
 | 9 | Road data for all of NSW or Greater Sydney only? | All of NSW if the import fits in memory; otherwise Greater Sydney, Newcastle and Wollongong. |
 | 10 | GraphHopper embedded, or a separate OSRM or Valhalla container? | GraphHopper embedded, subject to the phase 0 licence and feature check. |
-| 11 | Should the router also replace the editor's use of the public OSRM server? | Yes, but in phase 8, after the first version. |
+| 11 | Should the router also replace the editor's use of the public OSRM server? | Yes, but in phase 8, after the first version. (Done with phase 6, for the access analysis: section 21.) |
 | 12 | May the Node API gain an export option that leaves out shapes, and later may the router read the database directly? | Yes to both. |
 | 13 | Where should the browser's calls go: through the Node API, or straight to the router? | Through the Node API. |
 | 14 | Will other applications need access control on the router? | None in the first version; it listens on the local network only. |
@@ -905,3 +908,149 @@ Not the benchmark of section 10.2, which is phase 5. One bulk request each on th
 - A bulk request is answered while the caller waits. Jobs (submit, poll, download) are phase 8.
 - The Docker image is still not built or run.
 - One suspicion not followed up, in the search without loads: when a vehicle runs on twice in a row (three trips in one block), the search may offer staying aboard a trip the passenger could not have been on. The brute-force check has not caught it in 10,000 queries, and the weekday has no block of more than two trips.
+
+## 21. Phase 6 findings (road routing) (25 Nov 2026)
+
+Phase 6 is built for driving, as tickets AA-1 to AA-6 of the access analysis epic. The design is `docs/architecture/access-analysis.md` §3 (decisions D14 to D19 there).
+
+- **AA-1:** the `router-road` module. GraphHopper 11.1 embedded behind a small `RoadRouter` interface; car profile only, no turn costs, speed-up index on. Builds a graph from an `.osm.pbf` (`:router-road:roadImport`, writing `road-graph.json` beside it), opens it memory-mapped, plans one drive. A point more than 500 m from a drivable road gets `noRoad`.
+- **AA-2:** many drives at once (one speed-up-index drive per pair, spread over a pool of threads) and up to 3 other routes between two points.
+- **AA-3:** `POST /v1/road/route` and `POST /v1/road/table` on the router; `road` in `/v1/health`; the settings `ROUTER_ROAD` (`auto`, `on`, `off`, `only`), `ROUTER_ROAD_GRAPH`, `ROUTER_ROAD_SNAP_METRES` and `ROUTER_ROAD_TABLE_LIMIT`; the road-only process (`npm run router:road`, 512 MB heap). The main router's heap went from 768 MB to 1 GB.
+- **AA-4:** the editor's three road requests (`/route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…`) answered in OSRM's own shape, so `ROUTER_URL` can point at the router with no change to `roads.ts`.
+- **AA-5:** `npm run road:data`: cuts the Australia extract to the Opal area with osmium (in a small Docker image built from Debian's package) and builds the graph into `data/router/road/opal`, swapping it in only when the build succeeds.
+- **AA-6:** `npm run test:roads`, which sends the editor's requests, as `roads.ts` builds them, to `ROUTER_URL`.
+
+### How it was checked
+
+`npm run test:roads` against the main router with roads on (port 3102) and against the road-only process: 7 checks, all passing on both.
+
+```
+ok  ROUTER_URL names this machine (localhost)
+ok  route Mayfield to the city: 7.2 min, 5656 m, 168 points
+ok  route through three stops has a leg between each
+ok  route with alternatives=3: 2 route(s)
+ok  table of 5 points: 5 by 5 distances
+ok  nearest road to Mayfield: 151.73601, -32.89701
+ok  POST /v1/road/table 100 by 3: 300 values, 300 with a time
+```
+
+With the weekday timetable loaded beside the roads, `/v1/health` gave `"timetables": ["m1"]` and `"road": {"available": true, "builtFrom": "opal.osm.pbf", "mode": "on"}`.
+
+### Measured
+
+On the development machine (12 processor threads, 16 GB, about 3 GB free at the start), with VS Code and another developer agent working on TypeScript at the same time, so timings are rough. Working set and private bytes are from `Get-Process`; heap from `jcmd GC.heap_info`, committed / in use.
+
+**Building the road data** (`npm run road:data`, 25 Nov, 23:43):
+
+| Item | Measured | Estimate (§7.3; architecture §3.4) |
+|---|---|---|
+| Whole command | 166 s | |
+| Cut to the Opal area (osmium) | about 2 minutes | 2 to 5 minutes |
+| `data/osm/opal.osm.pbf` | 102,432,006 bytes (98 MB) | 150 to 300 MB |
+| Graph build | 31 s (`road-graph.json`); Gradle task 56 s in all | 5 to 15 minutes |
+| Memory while building | Java's working set peaked at about 2,075 MB; GraphHopper reported 1,566 MB heap, 757 MB in use | up to 2 GB heap (2 to 4 GB for NSW with walking) |
+| Graph on disk (`data/router/road/opal`) | 56 MB: 478,835 nodes, 578,309 edges, 383,759 shortcuts | 300 to 700 MB (0.5 to 1.5 GB for NSW with walking) |
+| Area covered | 150.0044, -34.7842 to 151.8595, -32.5221 | asked for 150.10, -34.75 to 151.85, -32.70; osmium keeps roads that cross the edge whole |
+
+**Serving.** The main router (`npm run router:dev`, 1 GB heap, `ROUTER_ROAD=on`) and the road-only process (`npm run router:road`, 512 MB heap). Each measured in this order: idle; after `test:roads`; after two 5,000 × 1 tables; for the main router, after loading the weekday timetable, then after a 5,000-journey bulk request; last, after a forced full garbage collection.
+
+| Moment | Main router: working set / private | Main router: heap | Road-only: working set / private | Road-only: heap |
+|---|---|---|---|---|
+| Idle, nothing loaded | 116 / 155 MB | 29 / 23 MB | 117 / 161 MB | 30 / 23 MB |
+| After `test:roads` | 127 / 165 MB | 31 / 23 MB | 150 / 184 MB | 32 / 22 MB |
+| After two 5,000 × 1 tables | 730 / 760 MB | 597 / 253 MB | 565 / 592 MB | 426 / 238 MB |
+| Weekday timetable loaded (3.2 s; 87 MB) | 734 / 763 MB | 613 / 267 MB | (refused: roads only) | |
+| After a 5,000-journey bulk request | 753 / 789 MB | 617 / 413 MB | | |
+| After a full garbage collection | 736 / 770 MB | 617 / 341 MB | 162 / 186 MB | 54 / 11 MB |
+| Highest working set seen | 762 MB | | 565 MB | |
+
+Free memory on the machine never went below about 1.9 GB.
+
+**One 5,000 × 1 table.** 5,000 starting points on a 100 × 50 grid over Newcastle (latitude -32.86 to -32.98, longitude 151.66 to 151.80) to Newcastle city centre (-32.9270, 151.7720), 10 threads:
+
+| Router | Run 1 (wall / router's own) | Run 2 |
+|---|---|---|
+| Main, roads only loaded | 1,157 / 1,017 ms | 1,026 / 980 ms |
+| Main, weekday timetable loaded too | 883 / 785 ms | 838 / 805 ms |
+| Road-only | 998 / 869 ms | 938 / 897 ms |
+
+3,918 points got a time (median 11.4 minutes, longest 42.4); 1,082 were more than 500 m from a road (the grid's east side is sea, harbour and the Kooragang wetlands), so got `null`. That is 5,000 to 6,000 drives a second, or about 2 ms per drive on each thread, as §7.3 expected.
+
+**For comparison, public transport (NFR-1).** The same 5,000 points to the same place, leaving at 08:00, as one `/v1/journeys/bulk` request on the weekday timetable, capacity `off`: 1,956 ms wall, 1.853 s in the router, 2,698 a second. 3,986 found a journey, 1,014 none (the same sea and wetland points, and points more than 1,200 m from a stop).
+
+### What this means for memory (NFR-2, A5)
+
+- **The graph is small and the heap is what matters.** At 56 MB the memory-mapped graph costs little file cache. The live heap is small too (341 MB with the weekday timetable and roads, 11 MB road-only), but a big table makes short-lived objects fast, and the garbage collector lets the heap grow to about 600 MB in the main router (430 MB road-only) before it tidies up. It gives the memory back to Windows only slowly, or not at all in the main router.
+- **The main router with roads on, at 1 GB, fits** beside the dev servers on this machine; the road-only process is not needed. The A5 fallback still works with no code change.
+- Not tried: a table near the 100,000-pair limit on the road-only process's 512 MB heap. The access analysis asks 1,000 pairs at a time (D22), so it will not meet that.
+
+### What differs from the plan
+
+- **The area is the Opal area, not NSW** (D18), and only the car profile is built, with no turn costs (D14). That is why the import took 31 s rather than several minutes, and the graph is 56 MB rather than 0.5 to 1.5 GB (§7.3).
+- **`/v1/road/table` replaced `/v1/road/bulk`** (§8.1, D17). It answers in one JSON object, not a stream: rows are starting points, columns ends, `null` where there is no way or no road.
+- **`/v1/road/route` takes no `depart` and no stop ids** (§8.4). It gives the free-flow time only; the access analysis applies its time-of-day factors (D34) in the API, not the router. It takes `via` points instead, and its answer gives the snap distances.
+- **The OSRM-shaped endpoints are at the root**, not under `/v1`, so that `roads.ts` works unchanged (D16).
+- **Up to 3 other routes are offered, not always 3.** Between Mayfield and the city, 3 were asked for and 2 came back: GraphHopper finds only those it judges different enough.
+- **`npm run router:road` ignored `ROUTER_PORT`.** The `runRoad` Gradle task set `ROUTER_PORT=3003` itself, which overrode the one given, so the road-only process for these measurements ran on 3003, not the 3103 the ticket asked for. Fixed when AA-7 was merged: `runRoad` uses 3003 only when `ROUTER_PORT` is not set (`router-server/build.gradle.kts`).
+- **The graph leaves out footways, cycleways, paths, steps and the like**, and in the real data a point is not placed on an island of road with fewer than 200 links (GraphHopper's minimum network size; 0 in the tests). A point is placed on the road once, then the drive is planned on the speed-up index.
+- **The OSRM-shaped `route` takes a missing `geometries` as `geojson`**, and its request line may be up to 32 KB (Jetty's header size raised), room for a route through 500 points.
+
+### Not done in phase 6
+
+- **Avoiding an area** (§7.5): no "avoid this area" option yet, so `routedAround` in `roads.ts` still searches for a detour by trial.
+- **The foot profile**, and with it walking times for RAPTOR in place of straight lines (§7.5).
+- A time-of-day factor inside the router (§7.4); the access analysis applies one in the API.
+- The owner's `.env` named the public OSRM server when this was written. Pointing `ROUTER_URL` at `http://localhost:3002`, as `.env.example` now does, is the owner's step.
+
+## 22. Arrive-by (26 Nov 2026)
+
+Built for FR-21 of BRD `access-analysis` 1.1 ("If I want to arrive at Westfield for work at 8"). Decision D38 in `docs/architecture/system.md`. The router side only; the API and web app follow in a later ticket.
+
+### What it answers
+
+The latest departure from the start that still arrives at the end by a time, within the query's limits, and the journey that makes it. A request gives `arriveBy` in place of `depart` (see `services/router/README.md`). The journey has the forward answer's shape and its real `depart` and `arrive`, plus `arriveBy` and `earlyWait` (arriveBy less the arrival).
+
+### How
+
+Two steps (`ArriveBy.java`):
+
+1. **A backward search** (`BackwardSearch.java`, with `BackwardTimes.java`, `RunOnOffers.java` and `BackwardLinks.java`). RAPTOR run the other way, in rounds of rides, latest first. Each stop keeps the latest time to get off a vehicle there (from the walk to the end; or from a later boarding there less the time to change; or one walking link away, less the walk and never less than the time to change) and the latest time to board there. A round rides back along every pattern through a stop whose time to get off improved, from the highest such position, keeping the latest trip that reaches a stop ahead in time (a binary search on that stop's arrivals, which are in order as trips never overtake) and recording its departures behind. The walking links are used backwards (`BackwardLinks` groups them by the stop they lead to; `Router` used to keep them itself). The answer for a start is the latest boarding time at its first stops less the walk to each, or the walk of the whole way.
+2. **The forward search from that departure**, keeping its journeys that arrive in time and recommending the cheapest of those. The fastest always arrives in time; if it ever did not, the two searches would disagree, and the request fails with that message rather than giving a wrong answer.
+
+Rebuilding the legs from the backward search's own labels was not done: the forward search already builds journeys (with the "leave later" step and staying aboard), and its legs are what every caller reads, so the arrive-by answer is a forward answer by construction. The cost is one forward search per start, which is what a depart-at request costs anyway.
+
+**The same rules as forward.** The time to change at one stop or on foot, the longest walk between stops (`maxLinkSecs`), the most rides, the kinds of vehicle avoided, the walks to the first stop and from the last (the same `Access` lists, so the same 1.3 detour, 1.03 m/s and longest walk), and staying aboard a vehicle that runs on. For that last, boarding a trip at its first stop offers, to the next round, the trips whose vehicle runs on into it, or into an earlier trip of its pattern that leaves after this one's departure less the time to change; earlier ones are covered by getting off and boarding again. This relies on what the loader guarantees of a vehicle that runs on (from the same stop, and no sooner than it arrives), as the forward search does. **Loads are not looked at**: arrive-by needs capacity `off`.
+
+**No longest journey.** As for depart-at, the router has no limit on a journey's length; the access analysis applies its own (D34). A departure hours before the arrive-by time is returned as the answer.
+
+### Many starts, one end
+
+The access analysis asks for every sample point to one point of interest at one time. Arrive-by queries in a bulk request that share their end (the same walks from the last stops), time and limits share one backward search, which reads off each start's departure. The search stops looking at a stop once its time is no later than every start's best departure so far, so a single query prunes as the forward search does with its target. Forward bulk does not share searches between queries. Each arrive-by query still gets its own forward search for its legs.
+
+### How it was checked
+
+- `ArriveByTest`, on a hand-made network (`ArriveByNetwork`): the latest departure; a later bus that would arrive a minute late is not chosen, and one that arrives on the minute is; a change, with its legs in order; the time to change; a walk between rides; walking the whole way; nothing in time; the limits on rides, kinds of vehicle and longest walk; times past 24:00; staying aboard (on `TestTimetables.tiny()`, where only staying aboard makes it); one backward search for many starts.
+- `ArriveByPropertyTest`: AC-FR-21.2 on 7,500 random queries over the random timetables of `BruteForceTest`, with fixed seeds. The forward search leaving at the answer arrives in time, and leaving one second later does not (the BRD asks for 60 s; one second is stronger); no answer means leaving at 00:00 does not arrive in time either. Also 2,400 starts in groups of 12 sharing an end, each agreeing with its own search. Turning off staying aboard in the backward search makes both fail.
+- `ArriveByApiTest`: the request and answer over HTTP, one journey and bulk (mixed with depart-at queries), and the refusals.
+
+**Real data.** The published weekday (`data/exports/check/export.zip`), Mayfield (-32.897, 151.736) to Westfield Kotara (-32.940, 151.698), arriving by 08:00, walks up to 800 m, at most 4 rides (`route` with `-32.897,151.736 -32.940,151.698 08:00 --arrive-by --walk 800 --rides 4`):
+
+```
+Arriving by 08:00:00: leave at 07:16:43, early wait 12 min
+fastest: leave 07:16:43, arrive 07:47:40, 31 min, 2 rides, 1 change, 12 min walking, 3 min waiting
+    07:16:43 to 07:19:00  walk 108 m to Maitland Rd At Hanbury St
+    07:19:00 to 07:27:00  bus 140 to Newcastle Interchange, Stand B: Maitland Rd At Hanbury St to Maitland Rd Opp Beaumont St
+    07:27:00 to 07:31:45  walk 169 m to Hamilton Station, Platform 1
+    07:34:18 to 07:42:30  train CCN to Central Via Strathfield: Hamilton Station, Platform 1 to Kotara Station, Platform 1
+    07:42:30 to 07:47:40  walk 174 m to the destination
+```
+
+Leaving at 07:16:44 instead (depart-at) arrives at 08:15:10. The arrive-by query took 8.9 ms (backward and forward); the depart-at query from 07:16:43 alone took 6.3 ms. Loaded without the water file.
+
+**Speed in bulk.** 500 points on a grid over Newcastle (about 22 km north to south by 17 km) to Westfield Kotara on the published weekday, at most 4 rides, walks up to 800 m, 4 threads, three passes: arriving by 08:00 took 217 (the first pass, warming up), 62 and 41 ms; departing at 07:00 took 60, 59 and 54 ms. The one backward search for all 500 took 5 to 8 ms. Measured with a throwaway program, not kept.
+
+### Not done
+
+- Arrive-by with loads (`check` or `assign`) or refused boardings.
+- Alternatives that leave earlier with fewer changes: the answer is the forward search's journeys from the latest departure that arrive in time.
+- The API and web app (which count the time as `arriveBy - depart`).

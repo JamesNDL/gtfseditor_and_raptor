@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * The router's HTTP service: health, loading and unloading timetables, their metadata, and one
  * journey at a time or many, load states, and simulation runs as jobs. See section 8 of
- * docs/router-plan.md and section 5.1 of docs/simulator-plan.md. Road routing is not built.
+ * docs/router-plan.md and section 5.1 of docs/simulator-plan.md. Road routing is in {@link RoadApi}.
  */
 public final class RouterServer implements AutoCloseable {
 
@@ -58,20 +58,26 @@ public final class RouterServer implements AutoCloseable {
     private final Timetables timetables;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Simulations simulations;
+    private final RoadApi road;
     private final Javalin app;
 
     public static void main(String[] args) {
         Settings settings;
+        RouterServer server;
         try {
             settings = Settings.from(System.getenv());
-        } catch (IllegalArgumentException e) {
+            server = new RouterServer(settings).start();
+        } catch (IllegalArgumentException | IllegalStateException e) {
             System.err.println(e.getMessage());
             System.exit(2);
             return;
         }
-        RouterServer server = new RouterServer(settings).start();
         Runtime.getRuntime().addShutdownHook(new Thread(server::close, "router-shutdown"));
         settings.preload().forEach((id, path) -> {
+            if (settings.road() == Settings.RoadMode.ONLY) {
+                System.err.println("Timetable " + id + " was not loaded: " + RoadApi.ROADS_ONLY);
+                return;
+            }
             try {
                 server.loadFile(id, null, path, 0);
             } catch (ApiException e) {
@@ -80,7 +86,9 @@ public final class RouterServer implements AutoCloseable {
         });
     }
 
+    /** @throws IllegalStateException if road routing must be on and cannot be (see {@link RoadApi#open}) */
     public RouterServer(Settings settings) {
+        this.road = RoadApi.open(settings, mapper); // first, so that a refusal leaves nothing running
         this.settings = settings;
         this.timetables = new Timetables(settings);
         this.simulations = new Simulations(settings, timetables, mapper);
@@ -104,6 +112,12 @@ public final class RouterServer implements AutoCloseable {
             config.routes.get("/v1/simulations/{id}", this::simulation);
             config.routes.get("/v1/simulations/{id}/files/{name}", this::simulationFile);
             config.routes.delete("/v1/simulations/{id}", this::deleteSimulation);
+            road.register(config.routes);
+            OsrmApi osrm = new OsrmApi(road);
+            config.routes.get("/route/v1/driving/{coordinates}", osrm::route);
+            config.routes.get("/table/v1/driving/{coordinates}", osrm::table);
+            config.routes.get("/nearest/v1/driving/{coordinates}", osrm::nearest);
+            config.jetty.modifyHttpConfiguration(http -> http.setRequestHeaderSize(OsrmApi.REQUEST_BYTES));
             config.routes.exception(ApiException.class,
                     (e, ctx) -> ctx.status(e.status()).json(error(e.getMessage())));
             config.routes.exception(JsonProcessingException.class,
@@ -128,6 +142,7 @@ public final class RouterServer implements AutoCloseable {
         app.stop();
         simulations.close();
         timetables.close();
+        road.close();
     }
 
     private static ObjectNode error(String message) {
@@ -144,7 +159,7 @@ public final class RouterServer implements AutoCloseable {
                 ids.add(view.id());
             }
         }
-        body.putObject("road").put("available", false);
+        body.set("road", road.health());
         ctx.json(body);
     }
 

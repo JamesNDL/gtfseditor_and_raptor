@@ -22,8 +22,8 @@ const CHART: Record<Theme, typeof COLORS> = {
 
 type Rgba = [number, number, number, number];
 
+/** The colours the map draws with, chosen by the basemap's tone (map/basemaps.ts). */
 export interface MapPalette {
-  basemap: string;
   /** Fill behind small markers and the halo round labels. */
   ink: string;
   soft: string;
@@ -41,7 +41,6 @@ export interface MapPalette {
 
 export const MAP_PALETTE: Record<Theme, MapPalette> = {
   dark: {
-    basemap: 'https://tiles.openfreemap.org/styles/dark',
     ink: '#0e1116',
     soft: '#b6c0cc',
     paper: '#f4f6f8',
@@ -53,7 +52,6 @@ export const MAP_PALETTE: Record<Theme, MapPalette> = {
     bright: [255, 255, 255, 255],
   },
   light: {
-    basemap: 'https://tiles.openfreemap.org/styles/positron',
     ink: '#ffffff',
     soft: '#5b6676',
     paper: '#1b2330',
