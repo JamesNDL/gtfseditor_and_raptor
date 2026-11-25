@@ -14,7 +14,7 @@ import {
   typicalChange,
   type ReshapeBody,
 } from './edits/reshape.ts';
-import { closureRoutes } from './edits/closure.ts';
+import { closureRoutes } from './edits/closure/routes.ts';
 import { deleteStopRoutes } from './edits/delete-stop.ts';
 import { scheduleRoutes } from './edits/schedule.ts';
 import { closureDeps, deleteStopDeps } from './edits/deps.ts';
