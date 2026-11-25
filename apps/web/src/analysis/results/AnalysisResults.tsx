@@ -1,8 +1,9 @@
 // The results screen of the Access pane (FR-14, FR-20; docs/architecture/access-analysis.md §5.2):
 // the points of interest to switch between, 'Lines at' to change the breaks, the summary table
-// for the point of interest on show, the sample point picked on the map (PointDetail.tsx), and
-// the legend on the map. The map's layers draw from the
-// same results (map/use-analysis-result-layers.ts).
+// for the point of interest on show, the sample point picked on the map (PointDetail.tsx), the
+// legend on the map, 'Compare with…' (CompareView.tsx) and the downloads (FR-18). While comparing,
+// the comparison takes the place of the lines, summary and legend. The map's layers draw from the
+// same results (map/use-analysis-result-layers.ts, use-analysis-compare-layers.ts).
 import { useEffect, useState, type FormEvent } from 'react';
 import { useStore } from '../../app/store.ts';
 import {
@@ -13,8 +14,16 @@ import {
   type ShownSummary,
 } from '../analysis-results.ts';
 import { AnalysisLegend } from './AnalysisLegend.tsx';
+import { CompareView } from './CompareView.tsx';
 import { PointDetail } from './PointDetail.tsx';
-import { breaksText, ratioText, readBreaks, summaryBreaks, summaryRows } from './results-text.ts';
+import {
+  breaksText,
+  downloadLinks,
+  ratioText,
+  readBreaks,
+  summaryBreaks,
+  summaryRows,
+} from './results-text.ts';
 
 /** Changes what the results screen shows; a sample point picked before is let go. */
 function show(change: { poiSeq?: number; breaks?: number[] }): void {
@@ -27,6 +36,7 @@ export function AnalysisResults() {
   const poiSeq = useStore((s) => s.analysis.poiSeq);
   const asked = useStore((s) => s.analysis.breaks);
   const pointSeq = useStore((s) => s.analysis.pointSeq);
+  const comparing = useStore((s) => s.analysis.screen === 'compare');
   const { detail, lines, error } = useAnalysisResults();
 
   useEffect(() => {
@@ -65,7 +75,7 @@ export function AnalysisResults() {
         </div>
       </div>
       {error && <p className="error-text small">{error}</p>}
-      {pointSeq !== null && <PointDetail analysis={detail} seq={pointSeq} />}
+      {pointSeq !== null && !comparing && <PointDetail analysis={detail} seq={pointSeq} />}
 
       <section className="analysis-section" aria-label="Point of interest">
         <h3 className="analysis-section-title">Point of interest</h3>
@@ -82,22 +92,41 @@ export function AnalysisResults() {
         ))}
       </section>
 
-      <LinesAt
-        key={`${detail.id}|${breaksText(breaks)}`}
-        breaks={breaks}
-        check={(text) => readBreaks(text, detail.settings)}
-      />
+      {!comparing && (
+        <LinesAt
+          key={`${detail.id}|${breaksText(breaks)}`}
+          breaks={breaks}
+          check={(text) => readBreaks(text, detail.settings)}
+        />
+      )}
 
-      {lines && (
+      {lines && !comparing && (
         <section className="analysis-section" aria-label="Summary">
           <h3 className="analysis-section-title">Summary</h3>
           <SummaryTable summary={lines.summary} breaks={drawn} />
         </section>
       )}
 
-      <p className="muted small">Downloads of these results come in a later update.</p>
+      {poi && <CompareView detail={detail} poiSeq={poi.seq} />}
 
-      {lines && poi && <AnalysisLegend detail={detail} poiName={poi.name} breaks={drawn} />}
+      {poi && (
+        <section className="analysis-section" aria-label="Downloads">
+          <h3 className="analysis-section-title">Downloads</h3>
+          <ul className="analysis-downloads small">
+            {downloadLinks(detail.id, poi.seq, drawn).map((link) => (
+              <li key={link.label}>
+                <a href={link.href} download title={link.title}>
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {lines && poi && !comparing && (
+        <AnalysisLegend detail={detail} poiName={poi.name} breaks={drawn} />
+      )}
     </div>
   );
 }

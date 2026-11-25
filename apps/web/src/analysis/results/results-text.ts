@@ -1,6 +1,7 @@
 // What the results screen and the legend say (FR-14, FR-19, FR-20): the band ranges, the settings
 // in one line, the credit for the drive times, 'Lines at' read and checked by the same rules as
-// the API (`breaksOf` in apps/api/src/analysis/results-read.ts), and the summary table's rows.
+// the API (`breaksOf` in apps/api/src/analysis/results-read.ts), the summary table's rows, and the
+// downloads (FR-18).
 import {
   formatSecs,
   settingsProblem,
@@ -103,4 +104,41 @@ export function summaryRows(
     { label: 'No road', count: summary.noRoad, colour: NO_ROAD_COLOUR },
   );
   return { rows, total: rows.reduce((sum, row) => sum + row.count, 0) };
+}
+
+/** A download of the open analysis (FR-18): its words, what it holds, and the API's export. */
+export interface DownloadLink {
+  label: string;
+  title: string;
+  href: string;
+}
+
+/**
+ * The three downloads (AC-FR-18.1): every sample point and point of interest as CSV and as
+ * GeoJSON points, and the lines on show (this point of interest, these breaks) as GeoJSON.
+ */
+export function downloadLinks(
+  id: number,
+  poiSeq: number,
+  breaks: readonly number[],
+): DownloadLink[] {
+  const base = `/api/analyses/${id}/export`;
+  return [
+    {
+      label: 'Download results (CSV)',
+      title:
+        'One row per sample point and point of interest: both times, how they split up, and the ratio',
+      href: `${base}/results.csv`,
+    },
+    {
+      label: 'Sample points (GeoJSON)',
+      title: 'The same rows as points, to open in a GIS',
+      href: `${base}/points.geojson`,
+    },
+    {
+      label: 'Lines (GeoJSON)',
+      title: 'The lines of equal ratio on show, for this point of interest',
+      href: `${base}/lines.geojson?poi=${poiSeq}&breaks=${breaks.join(',')}`,
+    },
+  ];
 }
