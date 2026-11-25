@@ -1,6 +1,7 @@
 // End-to-end check of the access analysis API against a running API (FR-4, FR-5): zones and points
 // of interest saved, listed, renamed, moved and deleted, and bad bodies refused with plain-English
-// messages. Run by `npm run test:e2e:fixture`, which passes API and DATABASE_URL.
+// messages; then analysis-runs.e2e.mjs (making and running analyses). Run by
+// `npm run test:e2e:fixture`, which passes API, DATABASE_URL and FAKE_ROUTER.
 // Usage: node apps/api/test/analysis.e2e.mjs   (needs an API with the 0010 migration run)
 import assert from 'node:assert/strict';
 import postgres from 'postgres';
@@ -202,5 +203,9 @@ try {
   await send('DELETE', `${pois}/${poi.id}`);
 }
 assert.equal((await get(pois)).length, poisBefore, 'the test leaves no points of interest behind');
+
+// ---- analyses: made, refused, queued, cancelled and deleted (AA-14) ------------------------------
+// In a file of its own to keep each under 300 lines.
+await import('./analysis-runs.e2e.mjs');
 
 console.log('all analysis checks passed');
