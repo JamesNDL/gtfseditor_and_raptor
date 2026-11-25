@@ -169,19 +169,25 @@ final class JourneyApi {
     /**
      * One journey asked for.
      *
-     * @param id    the caller's name for it, or null
-     * @param error why it cannot be planned, or null; then the other values mean nothing
+     * @param id       the caller's name for it, or null
+     * @param depart   when to set off; for an arrive-by journey, the time to arrive by
+     * @param arriveBy the time to arrive by, or -1 to set off at {@code depart} (see {@link ArriveByApi})
+     * @param error    why it cannot be planned, or null; then the other values mean nothing
      */
-    record Item(String id, Spot from, Spot to, int depart, int group, String error) {
+    record Item(String id, Spot from, Spot to, int depart, int arriveBy, int group, String error) {
 
         /** @throws ApiException if the journey cannot be read */
         static Item read(JsonNode node) {
             if (node == null || !node.isObject()) {
                 throw ApiException.bad("a query must be a JSON object");
             }
+            if (node.hasNonNull("depart") && node.hasNonNull("arriveBy")) {
+                throw ApiException.bad("give depart or arriveBy, not both");
+            }
+            int arriveBy = node.hasNonNull("arriveBy") ? time(node.get("arriveBy"), "arriveBy") : -1;
             return new Item(node.hasNonNull("id") ? node.get("id").asText() : null, Spot.read(node.get("from"), "from"),
-                    Spot.read(node.get("to"), "to"), time(node.get("depart")), (int) number(node, "group", 1, 1, 10_000),
-                    null);
+                    Spot.read(node.get("to"), "to"), arriveBy >= 0 ? arriveBy : time(node.get("depart"), "depart"),
+                    arriveBy, (int) number(node, "group", 1, 1, 10_000), null);
         }
 
         /** The same, but a journey that cannot be read is kept, with the reason, to be reported in its turn. */
@@ -190,7 +196,7 @@ final class JourneyApi {
                 return read(node);
             } catch (ApiException e) {
                 String id = node != null && node.hasNonNull("id") ? node.get("id").asText() : null;
-                return new Item(id, null, null, 0, 1, e.getMessage());
+                return new Item(id, null, null, 0, -1, 1, e.getMessage());
             }
         }
     }
@@ -247,7 +253,7 @@ final class JourneyApi {
         return loads;
     }
 
-    private static Query query(Router router, Options options, Place from, Place to, int depart) {
+    static Query query(Router router, Options options, Place from, Place to, int depart) {
         Query query = router.query(from, to, depart,
                 options.maxRides() == 0 ? router.maxRides() : options.maxRides(), options.maxWalkMetres());
         if (options.avoid() != null) {
@@ -307,6 +313,56 @@ final class JourneyApi {
         Timetable t = router.timetable();
         Place from = item.from().place(t, "from");
         Place to = item.to().place(t, "to");
+        Assignment.Outcome outcome = item.arriveBy() >= 0
+                ? ArriveByApi.single(router, options, !refused.isEmpty(), from, to, item.arriveBy())
+                : departing(loaded, options, item, refused, from, to);
+        Result result = outcome.result();
+
+        ObjectNode answer = JSON.objectNode();
+        answer.putObject("timetable").put("id", loaded.id()).put("version", loaded.version());
+        answer.put("capacityMode", options.mode().wireName());
+        if (options.loads() != null) {
+            answer.put("loads", options.loads());
+        }
+        if (item.arriveBy() >= 0) {
+            answer.put("arriveBy", item.arriveBy());
+        }
+        answer.put("status", status(outcome.status()));
+        if (outcome.journey() == null) {
+            answer.put("reason", reason(outcome, options, item.arriveBy() >= 0));
+        }
+        if (item.depart() < SMALL_HOURS_END) {
+            // "00:20" is the small hours at the start of the service day, when little runs; the
+            // caller may have meant twenty past midnight at the end of it, which is "24:20".
+            answer.put("warning", "The time asked for is before 04:00 at the start of the service day. For a journey"
+                    + " after midnight at the end of the day, keep counting past 24:00: \"24:20\", not \"00:20\".");
+        }
+        // What was found is listed even when the passenger could not be given any of it.
+        answer.put("recommended", result.recommended());
+        if (options.mode() == CapacityMode.ASSIGN) {
+            answer.put("assigned", outcome.journey() == null ? -1 : result.recommended());
+            answer.put("tries", outcome.tries());
+        }
+        ArrayNode journeys = answer.putArray("journeys");
+        ObjectNode start = describe(t, from);
+        ObjectNode end = describe(t, to);
+        Capacity crowding = crowdingFor(loaded, options, item.group());
+        for (int i = 0; i < result.journeys().size(); i++) {
+            Journey found = result.journeys().get(i);
+            ObjectNode journey = journey(t, outcome.query(), found, start, end, options.legs(), crowding);
+            ArriveByApi.mark(journey, found, item.arriveBy());
+            journey.put("recommended", i == result.recommended());
+            journeys.add(journey);
+        }
+        answer.put("computeMicros", result.computeNanos() / 1000);
+        return answer;
+    }
+
+    /** Plans one journey that sets off at the time asked for. */
+    private static Assignment.Outcome departing(Timetables.Loaded loaded, Options options, Item item,
+            List<Refused> refused, Place from, Place to) {
+        Router router = loaded.router();
+        Timetable t = router.timetable();
         Assignment.Requests one = new Assignment.Requests() {
             @Override
             public int count() {
@@ -339,42 +395,7 @@ final class JourneyApi {
         one.capacity(0, Capacity.OFF); // so that a refusal that cannot be read is reported before anything is planned
         Assignment.Outcome[] settled = new Assignment.Outcome[1];
         run(loaded, options, one, () -> { }, (request, outcome) -> settled[0] = outcome);
-        Assignment.Outcome outcome = settled[0];
-        Result result = outcome.result();
-
-        ObjectNode answer = JSON.objectNode();
-        answer.putObject("timetable").put("id", loaded.id()).put("version", loaded.version());
-        answer.put("capacityMode", options.mode().wireName());
-        if (options.loads() != null) {
-            answer.put("loads", options.loads());
-        }
-        answer.put("status", status(outcome.status()));
-        if (outcome.journey() == null) {
-            answer.put("reason", reason(outcome, options));
-        }
-        if (item.depart() < SMALL_HOURS_END) {
-            // "00:20" is the small hours at the start of the service day, when little runs; the
-            // caller may have meant twenty past midnight at the end of it, which is "24:20".
-            answer.put("warning", "The time asked for is before 04:00 at the start of the service day. For a journey"
-                    + " after midnight at the end of the day, keep counting past 24:00: \"24:20\", not \"00:20\".");
-        }
-        // What was found is listed even when the passenger could not be given any of it.
-        answer.put("recommended", result.recommended());
-        if (options.mode() == CapacityMode.ASSIGN) {
-            answer.put("assigned", outcome.journey() == null ? -1 : result.recommended());
-            answer.put("tries", outcome.tries());
-        }
-        ArrayNode journeys = answer.putArray("journeys");
-        ObjectNode start = describe(t, from);
-        ObjectNode end = describe(t, to);
-        Capacity crowding = crowdingFor(loaded, options, item.group());
-        for (int i = 0; i < result.journeys().size(); i++) {
-            ObjectNode journey = journey(t, outcome.query(), result.journeys().get(i), start, end, options.legs(), crowding);
-            journey.put("recommended", i == result.recommended());
-            journeys.add(journey);
-        }
-        answer.put("computeMicros", result.computeNanos() / 1000);
-        return answer;
+        return settled[0];
     }
 
     /**
@@ -433,8 +454,9 @@ final class JourneyApi {
 
         long started = System.nanoTime();
         int[] totals = new int[5]; // ok, noJourney, stranded, rerouted, lines since the last flush
+        boolean arriving = items.stream().anyMatch(item -> item.arriveBy() >= 0);
         try {
-            run(loaded, options, requests, () -> {
+            Runnable start = () -> {
                 begun.run();
                 for (int i = 0; i < items.size(); i++) {
                     if (errors[i] != null) {
@@ -445,22 +467,28 @@ final class JourneyApi {
                         write(out, mapper, line.put("status", "error").put("error", errors[i]));
                     }
                 }
-            }, (request, outcome) -> {
+            };
+            Assignment.Sink sink = (request, outcome) -> {
                 int i = which[request];
                 Item item = items.get(i);
                 ObjectNode line = JSON.objectNode();
                 if (item.id() != null) {
                     line.put("id", item.id());
                 }
+                if (item.arriveBy() >= 0) {
+                    line.put("arriveBy", item.arriveBy());
+                }
                 line.put("status", status(outcome.status()));
                 if (options.mode() == CapacityMode.ASSIGN) {
                     line.put("tries", outcome.tries());
                 }
                 if (outcome.journey() == null) {
-                    line.put("reason", reason(outcome, options));
+                    line.put("reason", reason(outcome, options, item.arriveBy() >= 0));
                 } else {
-                    line.set("journey", journey(t, outcome.query(), outcome.journey(), describe(t, from[i]),
-                            describe(t, to[i]), options.legs(), crowdingFor(loaded, options, item.group())));
+                    ObjectNode journey = journey(t, outcome.query(), outcome.journey(), describe(t, from[i]),
+                            describe(t, to[i]), options.legs(), crowdingFor(loaded, options, item.group()));
+                    ArriveByApi.mark(journey, outcome.journey(), item.arriveBy());
+                    line.set("journey", journey);
                 }
                 totals[outcome.status().ordinal()]++;
                 totals[3] += outcome.tries() > 1 ? 1 : 0;
@@ -469,7 +497,12 @@ final class JourneyApi {
                     totals[4] = 0;
                     flush(out);
                 }
-            });
+            };
+            if (arriving) {
+                ArriveByApi.bulk(loaded, options, requests, i -> items.get(which[i]).arriveBy(), start, sink);
+            } else {
+                run(loaded, options, requests, start, sink);
+            }
         } catch (UncheckedIOException e) {
             throw e.getCause(); // the caller has gone away
         }
@@ -524,11 +557,13 @@ final class JourneyApi {
         };
     }
 
-    private static String reason(Assignment.Outcome outcome, Options options) {
+    /** @param arriving whether the journey was asked for by the time to arrive by */
+    private static String reason(Assignment.Outcome outcome, Options options, boolean arriving) {
         Query query = outcome.query();
         if (outcome.result().status() == Result.Status.NO_JOURNEY) {
             return query.access().isEmpty() || query.egress().isEmpty()
                     ? "There is no stop within walking distance of one end."
+                    : arriving ? "Nothing gets there by that time on this service day."
                     : "Nothing gets there on this service day after that time.";
         }
         return outcome.result().status() == Result.Status.STRANDED
@@ -618,8 +653,16 @@ final class JourneyApi {
 
     // ---- reading values
 
-    /** Reads seconds from the start of the service day, or {@code HH:MM} or {@code HH:MM:SS} up to 36:00:00. */
-    static int time(JsonNode node) {
+    /**
+     * Reads seconds from the start of the service day, or {@code HH:MM} or {@code HH:MM:SS} up to 36:00:00.
+     *
+     * @param name the field's name, for the reason it cannot be read
+     */
+    static int time(JsonNode node, String name) {
+        if (node == null || node.isNull()) {
+            throw ApiException.bad("give depart or arriveBy: a time such as \"07:45:00\", up to \"36:00:00\", or"
+                    + " seconds from the start of the service day");
+        }
         int seconds = -1;
         if (node != null && node.isIntegralNumber() && node.canConvertToInt()) {
             seconds = node.asInt();
@@ -639,7 +682,7 @@ final class JourneyApi {
             }
         }
         if (seconds < 0 || seconds > MAX_DEPART) {
-            throw ApiException.bad("depart must be a time such as \"07:45:00\", up to \"36:00:00\", or seconds from"
+            throw ApiException.bad(name + " must be a time such as \"07:45:00\", up to \"36:00:00\", or seconds from"
                     + " the start of the service day");
         }
         return seconds;

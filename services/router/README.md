@@ -109,7 +109,8 @@ curl -X POST localhost:3002/v1/journeys -H "Content-Type: application/json" -d "
 |---|---|---|
 | `timetable` | The id to plan on. | The only one loaded. |
 | `from`, `to` | `{"stop": id}`, `{"station": id}` or `{"lat": .., "lon": ..}`. Ids are GTFS ids. A `stop` that names a station is taken as the station. | Required. |
-| `depart` | `"HH:MM"`, `"HH:MM:SS"` or seconds from the start of the service day, up to `36:00:00`. After midnight keep counting: `"24:30"`. | Required. |
+| `depart` | `"HH:MM"`, `"HH:MM:SS"` or seconds from the start of the service day, up to `36:00:00`. After midnight keep counting: `"24:30"`. | Required, unless `arriveBy` is given. |
+| `arriveBy` | In place of `depart`: the time to arrive by, written the same way. Plans the journey that leaves latest and still arrives by then; see "Arriving by a time" below. Giving both is a `400`. | |
 | `maxRides` | Most vehicles to board. | 8 |
 | `maxWalkMetres` | Furthest to walk to the first stop or from the last, as straight lines (one, or two by way of a bridge); up to 5000. | 1200 |
 | `avoid` | Kinds of vehicle to leave out: `train`, `metro`, `light_rail`, `ferry`, `bus`, `coach`, `school_bus`, `other`. `[]` leaves out nothing. | `["school_bus"]` |
@@ -134,6 +135,28 @@ which one is `recommended` (its place in the list, or -1), the timetable's id an
   latitude and longitude, time, and `position`: the stop's place in the trip, counting from 0),
   `stops` (every stop from boarding to alighting, with latitude, longitude and times), and
   `stayAboard`.
+
+### Arriving by a time
+
+```
+curl -X POST localhost:3002/v1/journeys -H "Content-Type: application/json" -d "{\"from\":{\"lat\":-32.897,\"lon\":151.736},\"to\":{\"lat\":-32.940,\"lon\":151.698},\"arriveBy\":\"08:00\"}"
+```
+
+With `arriveBy` in place of `depart`, the router finds the latest departure that still arrives by
+then, within the request's limits, and plans the journey forwards from it. The answer has the same
+shape as for `depart`, and also:
+
+- `arriveBy` at the top, echoed;
+- on each journey, `arriveBy` and `earlyWait`: the seconds between arriving and `arriveBy`.
+  `depart` and `arrive` are the journey's real times.
+
+Only journeys that arrive in time are listed. None in time is `noJourney`, with the reason
+"Nothing gets there by that time on this service day." There is no limit on how long before
+`arriveBy` the journey may leave, as there is none on how long a journey may take.
+
+Arrive-by takes no account of how full vehicles are: it needs `capacity` `off` (the default) and
+no `blocked`, or the request is refused with `400`. How it works: section 22 of
+`docs/router-plan.md`.
 
 ### Walks
 
@@ -251,7 +274,14 @@ curl -X POST localhost:3002/v1/journeys/bulk -H "Content-Type: application/json"
 
 The settings of one journey (`maxRides`, `maxWalkMetres`, `avoid`, `changeSecs`, `lessWalking`,
 `detail`, `capacity`) are given once and apply to every query. Each query has `from`, `to`,
-`depart`, and optionally `id` and `group`. At most `ROUTER_BULK_LIMIT` queries per request.
+`depart` (or `arriveBy`), and optionally `id` and `group`. At most `ROUTER_BULK_LIMIT` queries per
+request.
+
+A query may give `arriveBy` in place of `depart` (see "Arriving by a time"); its line then has
+`arriveBy`, and its journey `arriveBy` and `earlyWait`. Arrive-by and depart-at queries may be
+mixed in one request, which then needs `capacity` `off`. Arrive-by queries with the same `to`,
+time and settings share one backward search, so many starting points to one end cost little more
+than the same number of depart-at queries. The lines are in the order asked.
 
 The answer is lines of JSON (`application/x-ndjson`), one per query, then one of totals:
 
@@ -430,6 +460,13 @@ sets the threads for the all-at-once run, `--area all` uses the whole state.
 
 `--change 120` sets the least time, in seconds, to change vehicles (2 minutes unless said), at one
 stop or by a walk to another. Staying aboard a vehicle that runs on as another trip takes no time.
+
+`--arrive-by` takes the time as the time to arrive by, and plans the journey that leaves latest
+and still arrives then:
+
+```
+.\gradlew -q :router-gtfs:route -ProuteArgs="-32.897,151.736 -32.940,151.698 08:00 --arrive-by --walk 800 --rides 4"
+```
 
 To compare with the TfNSW trip planner, write test journeys to a file and hand it to the comparer.
 It needs `API_KEY` in `.env`, sends only stop positions, a date and a time, and keeps TfNSW's
