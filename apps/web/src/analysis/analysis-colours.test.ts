@@ -5,12 +5,16 @@ import { describe, expect, it } from 'vitest';
 import {
   BAND_COLOURS,
   BAND_OPACITY,
+  COMPARE_BETTER,
+  COMPARE_SAME,
+  COMPARE_WORSE,
   LINE_COLOUR,
   LINE_WIDTH_PX,
   NO_ROAD_COLOUR,
   NO_SERVICE_COLOUR,
   NO_SERVICE_RING,
   bandColours,
+  compareStyle,
 } from './analysis-colours.ts';
 
 const SIX = ['#2c7bb6', '#abd9e9', '#ffffbf', '#fdae61', '#f46d43', '#d73027'];
@@ -67,5 +71,52 @@ describe('the fixed styles (AC-FR-14.1, AC-FR-12.1)', () => {
     expect(NO_SERVICE_COLOUR).toBe('#7f7f7f');
     expect(NO_SERVICE_RING).toBe('#ffffff');
     expect(NO_ROAD_COLOUR).toBe('#cccccc');
+  });
+});
+
+// AA-23 (FR-17, AC-FR-17.1; §5.2 'Colours'): a compared sample point's style. Better is green and
+// worse orange to red, lighter at a change of 0.25 or less and full at a change of 1 or more;
+// gained service is a green ring and lost service a red ring.
+describe('compareStyle (AC-FR-17.1)', () => {
+  it('keeps the comparison colours', () => {
+    expect(COMPARE_BETTER).toEqual(['#a6d96a', '#1a9641']);
+    expect(COMPARE_WORSE).toEqual(['#fdae61', '#d7191c']);
+    expect(COMPARE_SAME).toBe('#ffffbf');
+  });
+
+  it('colours a small fall light green and a fall of 1 or more full green', () => {
+    expect(compareStyle('better', -0.1)).toEqual({ fill: '#a6d96a', ring: null });
+    expect(compareStyle('better', -0.25)).toEqual({ fill: '#a6d96a', ring: null });
+    expect(compareStyle('better', -1)).toEqual({ fill: '#1a9641', ring: null });
+    expect(compareStyle('better', -3.5)).toEqual({ fill: '#1a9641', ring: null });
+  });
+
+  it('colours a small rise orange and a rise of 1 or more red', () => {
+    expect(compareStyle('worse', 0.1)).toEqual({ fill: '#fdae61', ring: null });
+    expect(compareStyle('worse', 0.25)).toEqual({ fill: '#fdae61', ring: null });
+    expect(compareStyle('worse', 1)).toEqual({ fill: '#d7191c', ring: null });
+    expect(compareStyle('worse', 2)).toEqual({ fill: '#d7191c', ring: null });
+  });
+
+  it('mixes between the two colours for changes between 0.25 and 1', () => {
+    const fill = compareStyle('better', -0.625).fill ?? '';
+    const [r, g, b] = rgb(fill);
+    expect(r).toBeCloseTo((0xa6 + 0x1a) / 2, -0.5);
+    expect(g).toBeCloseTo((0xd9 + 0x96) / 2, -0.5);
+    expect(b).toBeCloseTo((0x6a + 0x41) / 2, -0.5);
+    expect(compareStyle('worse', 0.5).fill).not.toBe(compareStyle('worse', 0.75).fill);
+  });
+
+  it('colours about the same pale yellow', () => {
+    expect(compareStyle('same', 0.02)).toEqual({ fill: '#ffffbf', ring: null });
+  });
+
+  it('rings gained service green and lost service red, with no fill', () => {
+    expect(compareStyle('gainedService', null)).toEqual({ fill: null, ring: '#1a9641' });
+    expect(compareStyle('lostService', null)).toEqual({ fill: null, ring: '#d7191c' });
+  });
+
+  it('draws no service in either as no service is drawn', () => {
+    expect(compareStyle('bothNone', null)).toEqual({ fill: '#7f7f7f', ring: '#ffffff' });
   });
 });
