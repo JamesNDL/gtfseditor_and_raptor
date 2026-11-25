@@ -162,6 +162,9 @@ export interface PointDetail {
   driveMetres: number | null;
   /** The drive with the traffic factor and the parking allowance. */
   carSecs: number | null;
+  /** The traffic factor and the parking allowance the car time was worked out with. */
+  trafficFactor: number;
+  parkingSecs: number;
   ratio: number | null;
   /** The drive's path from the road router, or null with the reason in `carPathMessage`. */
   carPath: GeoJsonPosition[] | null;
@@ -185,6 +188,48 @@ export interface GeoJsonFeature<G, P> {
 export interface GeoJsonFeatureCollection<G, P> {
   type: 'FeatureCollection';
   features: GeoJsonFeature<G, P>[];
+}
+
+/** A GeoJSON multi-polygon: polygons, each a list of rings. */
+export interface GeoJsonMultiPolygon {
+  type: 'MultiPolygon';
+  coordinates: GeoJsonPosition[][][];
+}
+
+/** A GeoJSON multi-line: lines, each a list of positions. */
+export interface GeoJsonMultiLineString {
+  type: 'MultiLineString';
+  coordinates: GeoJsonPosition[][];
+}
+
+/** One sample point's result for one point of interest, as drawn on the results map (FR-14). */
+export interface SamplePointProperties {
+  seq: number;
+  status: PairStatus;
+  /** Times in minutes, to a tenth; null when there is none. */
+  ptMins: number | null;
+  carMins: number | null;
+  ratio: number | null;
+}
+
+/** A band of equal ratio: from `from` up to `to`; null for the open end below or above. */
+export interface RatioBandProperties {
+  from: number | null;
+  to: number | null;
+}
+
+/** A line of equal ratio. */
+export interface RatioLineProperties {
+  ratio: number;
+}
+
+/** The bands and lines of equal ratio for one point of interest and some breaks (FR-14, FR-20). */
+export interface AnalysisLines {
+  /** One feature per band, below the first break up to above the last. */
+  bands: GeoJsonFeatureCollection<GeoJsonMultiPolygon, RatioBandProperties>;
+  /** One feature per break. */
+  lines: GeoJsonFeatureCollection<GeoJsonMultiLineString, RatioLineProperties>;
+  summary: PoiSummary;
 }
 
 /** How one sample point changed from the first analysis to the second (FR-17). */
