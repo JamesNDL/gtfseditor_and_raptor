@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A hand-made map of a few made-up streets near Mayfield, Newcastle, for the router-road tests.
+  Not real roads.
+
+  Grid: 4 x 4 corners, rows about 100 m apart (0.0009 degrees of latitude), columns about 100 m
+  apart (0.00107 degrees of longitude). Node id = 1 + row * 4 + column, row 0 in the north,
+  column 0 in the west.
+    row 0  -32.8970     column 0  151.73600
+    row 1  -32.8979     column 1  151.73707
+    row 2  -32.8988     column 2  151.73814
+    row 3  -32.8997     column 3  151.73921
+  - Rows 0, 1 and 3 and every column are residential streets.
+  - Row 1 is one-way, west to east (5 to 8).
+  - Row 2 is a primary road, running one column further out on each side (nodes 17 and 18).
+  - A footway runs diagonally from corner 13 (south-west) to corner 4 (north-east), through
+    node 19, joined to no street in between.
+  - An island: a drivable square about 1.8 km south (nodes 31 to 34), linked to nothing.
+-->
+<osm version="0.6" generator="hand-written">
+  <node id="1" version="1" lat="-32.8970" lon="151.73600"/>
+  <node id="2" version="1" lat="-32.8970" lon="151.73707"/>
+  <node id="3" version="1" lat="-32.8970" lon="151.73814"/>
+  <node id="4" version="1" lat="-32.8970" lon="151.73921"/>
+  <node id="5" version="1" lat="-32.8979" lon="151.73600"/>
+  <node id="6" version="1" lat="-32.8979" lon="151.73707"/>
+  <node id="7" version="1" lat="-32.8979" lon="151.73814"/>
+  <node id="8" version="1" lat="-32.8979" lon="151.73921"/>
+  <node id="9" version="1" lat="-32.8988" lon="151.73600"/>
+  <node id="10" version="1" lat="-32.8988" lon="151.73707"/>
+  <node id="11" version="1" lat="-32.8988" lon="151.73814"/>
+  <node id="12" version="1" lat="-32.8988" lon="151.73921"/>
+  <node id="13" version="1" lat="-32.8997" lon="151.73600"/>
+  <node id="14" version="1" lat="-32.8997" lon="151.73707"/>
+  <node id="15" version="1" lat="-32.8997" lon="151.73814"/>
+  <node id="16" version="1" lat="-32.8997" lon="151.73921"/>
+  <node id="17" version="1" lat="-32.8988" lon="151.73493"/>
+  <node id="18" version="1" lat="-32.8988" lon="151.74028"/>
+  <node id="19" version="1" lat="-32.89835" lon="151.737605"/>
+  <node id="31" version="1" lat="-32.9160" lon="151.73600"/>
+  <node id="32" version="1" lat="-32.9160" lon="151.73707"/>
+  <node id="33" version="1" lat="-32.9169" lon="151.73707"/>
+  <node id="34" version="1" lat="-32.9169" lon="151.73600"/>
+
+  <way id="101" version="1">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Row Nought Street"/>
+  </way>
+  <way id="102" version="1">
+    <nd ref="5"/><nd ref="6"/><nd ref="7"/><nd ref="8"/>
+    <tag k="highway" v="residential"/><tag k="oneway" v="yes"/><tag k="name" v="One Way Street"/>
+  </way>
+  <way id="103" version="1">
+    <nd ref="17"/><nd ref="9"/><nd ref="10"/><nd ref="11"/><nd ref="12"/><nd ref="18"/>
+    <tag k="highway" v="primary"/><tag k="name" v="Main Road"/>
+  </way>
+  <way id="104" version="1">
+    <nd ref="13"/><nd ref="14"/><nd ref="15"/><nd ref="16"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Row Three Street"/>
+  </way>
+  <way id="111" version="1">
+    <nd ref="1"/><nd ref="5"/><nd ref="9"/><nd ref="13"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Column Nought Street"/>
+  </way>
+  <way id="112" version="1">
+    <nd ref="2"/><nd ref="6"/><nd ref="10"/><nd ref="14"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Column One Street"/>
+  </way>
+  <way id="113" version="1">
+    <nd ref="3"/><nd ref="7"/><nd ref="11"/><nd ref="15"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Column Two Street"/>
+  </way>
+  <way id="114" version="1">
+    <nd ref="4"/><nd ref="8"/><nd ref="12"/><nd ref="16"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Column Three Street"/>
+  </way>
+  <way id="121" version="1">
+    <nd ref="13"/><nd ref="19"/><nd ref="4"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="131" version="1">
+    <nd ref="31"/><nd ref="32"/><nd ref="33"/><nd ref="34"/><nd ref="31"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Island Square"/>
+  </way>
+</osm>
