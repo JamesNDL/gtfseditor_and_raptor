@@ -1,0 +1,88 @@
+/* One sample point picked on the results map (FR-15): its times, the walk/wait/ride bar and its
+   legs. Kept beside PointDetail.tsx, as analysis.css is near its length limit. */
+
+.analysis-point {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.analysis-point-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.analysis-point-head .icon-button {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.analysis-split {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-split-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.analysis-split-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--muted);
+}
+
+.analysis-split-walk {
+  background: var(--muted);
+}
+
+.analysis-split-wait {
+  background: var(--warn);
+}
+
+.analysis-split-ride {
+  background: var(--series-1);
+}
+
+.analysis-legs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-leg {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* A ride's mark is its mode colour, set on the element; walks, waits and changes are hollow. */
+.analysis-leg-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  box-sizing: border-box;
+}
+
+.analysis-leg-ride .analysis-leg-mark {
+  border: none;
+}
+
+.analysis-leg-wait {
+  color: var(--muted);
+}

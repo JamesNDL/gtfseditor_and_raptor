@@ -1,6 +1,7 @@
 // The results screen of the Access pane (FR-14, FR-20; docs/architecture/access-analysis.md §5.2):
 // the points of interest to switch between, 'Lines at' to change the breaks, the summary table
-// for the point of interest on show, and the legend on the map. The map's layers draw from the
+// for the point of interest on show, the sample point picked on the map (PointDetail.tsx), and
+// the legend on the map. The map's layers draw from the
 // same results (map/use-analysis-result-layers.ts).
 import { useEffect, useState, type FormEvent } from 'react';
 import { useStore } from '../../app/store.ts';
@@ -12,6 +13,7 @@ import {
   type ShownSummary,
 } from '../analysis-results.ts';
 import { AnalysisLegend } from './AnalysisLegend.tsx';
+import { PointDetail } from './PointDetail.tsx';
 import { breaksText, ratioText, readBreaks, summaryBreaks, summaryRows } from './results-text.ts';
 
 /** Changes what the results screen shows; a sample point picked before is let go. */
@@ -24,6 +26,7 @@ export function AnalysisResults() {
   const openId = useStore((s) => s.analysis.openId);
   const poiSeq = useStore((s) => s.analysis.poiSeq);
   const asked = useStore((s) => s.analysis.breaks);
+  const pointSeq = useStore((s) => s.analysis.pointSeq);
   const { detail, lines, error } = useAnalysisResults();
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function AnalysisResults() {
         </div>
       </div>
       {error && <p className="error-text small">{error}</p>}
+      {pointSeq !== null && <PointDetail analysis={detail} seq={pointSeq} />}
 
       <section className="analysis-section" aria-label="Point of interest">
         <h3 className="analysis-section-title">Point of interest</h3>
