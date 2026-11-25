@@ -1,6 +1,7 @@
 import compress from '@fastify/compress';
 import Fastify from 'fastify';
 import { connect, migrate } from '@gtfs-editor/gtfs/db';
+import { registerAnalysisPlaceRoutes } from './analysis/places-routes.ts';
 import { registerExportRoutes } from './export/routes.ts';
 import { registerFleetRoutes } from './catalogue/routes.ts';
 import { registerBaselineRoutes } from './network/baselines.ts';
@@ -29,6 +30,7 @@ registerFleetRoutes(app, sql);
 registerExportRoutes(app, sql);
 registerSimRoutes(app, sql);
 registerSimResultRoutes(app, sql);
+registerAnalysisPlaceRoutes(app, sql);
 
 app.get('/api/health', async () => ({ ok: true }));
 
