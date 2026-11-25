@@ -199,3 +199,91 @@
   gap: 4px;
   font-size: 12.5px;
 }
+
+/* The results: points of interest, Lines at and the summary (AA-20). */
+
+.analysis-section .check {
+  margin: 0;
+}
+
+.analysis-lines-at {
+  display: flex;
+  gap: 6px;
+}
+
+.analysis-lines-at .day-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.analysis-summary {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.analysis-summary td {
+  padding: 2px 0;
+}
+
+.analysis-summary td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-summary-total td {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+  font-weight: 600;
+}
+
+/* A band's colour, and a sample point's style, in the summary and the legend. */
+.analysis-swatch,
+.analysis-dot {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -1px;
+  box-sizing: border-box;
+}
+
+.analysis-swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.analysis-dot {
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  margin-right: 8px;
+  border: 2px solid;
+  border-radius: 50%;
+}
+
+/* The key to the results map, on the map to the right of the pane, above the time bar. */
+.analysis-legend {
+  position: fixed;
+  left: 414px;
+  bottom: 118px;
+  z-index: 9;
+  width: 260px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.analysis-legend-title {
+  font-weight: 600;
+}
+
+.analysis-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
