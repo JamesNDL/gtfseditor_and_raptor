@@ -1,7 +1,7 @@
 // Keeps a re-import from silently deleting scenarios. Importing a day replaces that day's baseline,
 // and its scenarios go with it (on delete cascade), so a day with scenarios is refused unless the
 // caller asks to replace it.
-import type { Sql } from '../db.ts';
+import type { Queryable, Sql } from '../db.ts';
 
 /** Why `date` is not a usable YYYYMMDD service day, or undefined when it is one. */
 export function dateProblem(date: string): string | undefined {
@@ -23,7 +23,11 @@ export function isoDate(date: string): string {
 }
 
 /** Counts the scenarios on the baseline that importing `date` (YYYYMMDD) from this feed would delete. */
-export async function countScenariosOnDay(sql: Sql, feedId: string, date: string): Promise<number> {
+export async function countScenariosOnDay(
+  sql: Queryable,
+  feedId: string,
+  date: string,
+): Promise<number> {
   const [{ n }] = await sql`
     select count(*)::int as n from scenarios s join baselines b on b.id = s.baseline_id
     where b.feed_id = ${feedId} and b.service_date = ${isoDate(date)}`;
@@ -59,7 +63,7 @@ export async function findRefusals(sql: Sql, feedId: string, dates: string[]): P
  * `replace` is not set; otherwise logs how many scenarios are about to be deleted, if any.
  */
 export async function guardReplace(
-  sql: Sql,
+  sql: Queryable,
   feedId: string,
   date: string,
   replace: boolean,

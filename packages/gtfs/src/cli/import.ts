@@ -91,11 +91,16 @@ async function importDays(sql: Sql): Promise<boolean> {
   for (const date of days) {
     const started = Date.now();
     log(`Importing ${date} ...`);
-    // importBaseline checks the day again, as the last line of defence.
-    const baseline = await importBaseline(sql, feed, date, log, { replace });
-    await importVehicleDays(sql, baseline.id, log);
+    // One transaction per day (FR-8, D12): if any step fails, the old day and its scenarios are
+    // kept, and other users see the old day until it commits. importBaseline checks the day
+    // again, as the last line of defence.
+    const { baseline, stats } = await sql.begin(async (tx) => {
+      const baseline = await importBaseline(tx, feed, date, log, { replace });
+      await importVehicleDays(tx, baseline.id, log);
+      return { baseline, stats: await finishBaseline(tx, baseline.id) };
+    });
+    // Packs are files, which a rollback could not undo, so they are written after the commit.
     await buildPacks(sql, baseline.id, log);
-    const stats = await finishBaseline(sql, baseline.id);
     log(
       `Baseline ${baseline.id} ready: ${baseline.label} in ${((Date.now() - started) / 1000).toFixed(0)}s`,
     );
