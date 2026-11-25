@@ -27,15 +27,16 @@ tasks.named<JavaExec>("run") {
     maxHeapSize = "1g"
 }
 
-// The road-only router (A5, D15): the same service with roads and health only, on port 3003.
+// The road-only router (A5, D15): the same service with roads and health only, on port 3003
+// unless ROUTER_PORT says otherwise.
 tasks.register<JavaExec>("runRoad") {
     group = "application"
-    description = "Runs the router with road routing only, on port 3003."
+    description = "Runs the router with road routing only, on port 3003 or ROUTER_PORT."
     classpath = project.the<SourceSetContainer>()["main"].runtimeClasspath
     mainClass = application.mainClass
     workingDir = rootProject.projectDir.parentFile.parentFile
     environment("ROUTER_ROAD", "only")
-    environment("ROUTER_PORT", "3003")
+    environment("ROUTER_PORT", System.getenv("ROUTER_PORT") ?: "3003")
     maxHeapSize = "512m"
 }
 
