@@ -1,11 +1,13 @@
-// The Access pane, in the left column: the day's access analyses with where each stands, Open and
-// Delete, and "New analysis". The setup shows the zone and points of interest (AA-18); its
-// settings and Run, and the results screens, come in later tickets (AA-19, AA-20).
+// The Access pane, in the left column: the day's access analyses with where each stands, a
+// progress bar, Open, Cancel and Delete, and "New analysis", which opens the setup (AA-19). The
+// results screens come in a later ticket (AA-20). While any analysis is waiting or running, the
+// list is fetched again every 2 s, which carries each one's progress.
 // See docs/architecture/access-analysis.md §5.2.
 import type { AnalysisListItem } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store.ts';
 import {
+  cancelAnalysis,
   deleteAnalysis,
   refreshAnalyses,
   useAnalysisList,
@@ -21,8 +23,7 @@ import {
   stateText,
   timetableText,
 } from './analysis-state.ts';
-import { PoiPicker } from './setup/PoiPicker.tsx';
-import { ZonePicker } from './setup/ZonePicker.tsx';
+import { AnalysisSetup } from './setup/AnalysisSetup.tsx';
 import './analysis.css';
 
 /** How often the list is fetched again while an analysis is waiting or running. */
@@ -112,12 +113,7 @@ export function AnalysisPanel() {
               Back to the list
             </button>
           </div>
-          {screen === 'setup' && (
-            <div className="analysis-body">
-              <ZonePicker />
-              <PoiPicker />
-            </div>
-          )}
+          {screen === 'setup' && <AnalysisSetup />}
         </>
       )}
     </div>
@@ -174,6 +170,17 @@ function AnalysisRow({
                 }}
               >
                 Open
+              </button>
+            )}
+            {isAnalysisActive(item) && (
+              <button
+                className="button small-button"
+                title="Stop this analysis; it is kept, marked cancelled"
+                onClick={() =>
+                  cancelAnalysis(item.id).then(onChange, (e: Error) => onError(e.message))
+                }
+              >
+                Cancel
               </button>
             )}
             <button

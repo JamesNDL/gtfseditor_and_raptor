@@ -150,3 +150,52 @@
   width: 100%;
   box-sizing: border-box;
 }
+
+/* The setup's settings, count line and Run (AA-19). */
+
+.analysis-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* A label, its box and its unit on one line. */
+.analysis-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 44px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.analysis-number {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.analysis-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+
+/* The count line, why Run is refused, and Run: kept in view below the scrolling settings. */
+.analysis-run {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.analysis-run p {
+  margin: 0;
+}
+
+.analysis-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}

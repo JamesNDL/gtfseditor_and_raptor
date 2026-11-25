@@ -255,8 +255,15 @@ const STATE_WORDS: Record<AnalysisState, string> = {
   cancelled: 'Cancelled',
 };
 
-/** Where the analysis stands, in plain words, with the reason when it failed. */
+const STAGE_WORDS: Record<NonNullable<AnalysisListItem['progress']>['stage'], string> = {
+  timetable: 'Loading the timetable',
+  drives: 'Drives',
+  journeys: 'Journeys',
+};
+
+/** Where the analysis stands, in plain words: the stage it is at, or the reason it failed. */
 export function stateText(item: AnalysisListItem): string {
+  if (isAnalysisActive(item) && item.progress) return STAGE_WORDS[item.progress.stage];
   const words = STATE_WORDS[item.state];
   return item.state === 'failed' && item.error ? `${words}: ${item.error}` : words;
 }

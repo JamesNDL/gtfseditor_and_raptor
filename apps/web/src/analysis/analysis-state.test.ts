@@ -216,6 +216,14 @@ describe('stateText', () => {
     expect(stateText(item({ state: 'cancelled' }))).toBe('Cancelled');
   });
 
+  it('names the stage a run is at (AA-19, AC-FR-10.1)', () => {
+    const at = (state: 'preparing' | 'running', stage: 'timetable' | 'drives' | 'journeys') =>
+      stateText(item({ state, progress: { stage, done: 5, total: 10 } }));
+    expect(at('preparing', 'timetable')).toBe('Loading the timetable');
+    expect(at('running', 'drives')).toBe('Drives');
+    expect(at('running', 'journeys')).toBe('Journeys');
+  });
+
   it('gives the reason a run failed', () => {
     expect(stateText(item({ state: 'failed', error: 'The road router is not running' }))).toBe(
       'Failed: The road router is not running',
