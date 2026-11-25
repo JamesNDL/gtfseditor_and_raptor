@@ -5,7 +5,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../app/store.ts';
 import { startAnalysis, usePlaces } from '../analysis-api.ts';
-import { backToList, isMapBusy } from '../analysis-state.ts';
+import { backToList } from '../analysis-state.ts';
+import { isMapBusy } from '../map-work.ts';
 import { AnalysisSettingsForm } from './AnalysisSettingsForm.tsx';
 import { PoiPicker } from './PoiPicker.tsx';
 import { nameSetup, pickTimetable } from './setup-choices.ts';
@@ -46,7 +47,7 @@ function TimetablePicker() {
 export function AnalysisSetup() {
   const baselineId = useStore((s) => s.baselineId);
   const setup = useStore((s) => s.analysis.setup);
-  const busy = useStore((s) => isMapBusy(s.analysis));
+  const busy = useStore((s) => isMapBusy(s.analysis.work));
   const set = useStore((s) => s.set);
   const zones = usePlaces((s) => s.zones);
   const [starting, setStarting] = useState(false);

@@ -1,0 +1,75 @@
+/* The basemap picker, beside MapLibre's zoom buttons in the bottom-left corner (map.css moves
+   those to 8px off the bottom, and each control sits 10px in). It looks like them. */
+.basemap-picker {
+  position: absolute;
+  left: 48px;
+  bottom: 18px;
+  z-index: 12;
+}
+
+.basemap-button {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.basemap-button:hover {
+  background: #f2f2f2;
+}
+
+.basemap-button:focus-visible,
+.basemap-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.basemap-list {
+  position: absolute;
+  left: 0;
+  bottom: 37px;
+  min-width: 140px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.basemap-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.basemap-item:hover {
+  background: var(--surface-2);
+}
+
+.basemap-item.on {
+  color: var(--accent);
+}
+
+.basemap-tick {
+  width: 14px;
+  text-align: center;
+}
+
+/* Hidden with the zoom buttons while the timeline covers the bottom of the map. */
+.app.timeline-open .basemap-picker {
+  display: none;
+}

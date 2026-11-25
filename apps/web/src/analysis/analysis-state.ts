@@ -2,12 +2,11 @@
 // change it, and how an analysis reads in the list. See docs/architecture/access-analysis.md §5.2.
 import {
   DEFAULT_ANALYSIS_SETTINGS,
-  ringProblem,
   type AnalysisListItem,
   type AnalysisSettings,
   type AnalysisState,
-  type GeoJsonPosition,
 } from '@gtfs-editor/core';
+import { NO_MAP_WORK, forgetPoiWork, type MapWork } from './map-work.ts';
 
 /** The screens of the Access pane. */
 export type AnalysisScreen = 'list' | 'setup' | 'results' | 'compare';
@@ -26,16 +25,8 @@ export interface AnalysisSetupChoices {
 /** The Access pane's state: `analysis` in the app store. */
 export interface AnalysisView {
   screen: AnalysisScreen;
-  /** The corners of a zone being drawn, or null when none is. */
-  drawing: GeoJsonPosition[] | null;
-  /** The outline being drawn is closed and waits for its name. */
-  drawingClosed: boolean;
-  /** Why the outline being drawn could not be closed (AC-FR-4.2), or null. */
-  drawingProblem: string | null;
-  /** The name of a point of interest waiting for a click on the map to place it, or null. */
-  placingPoi: string | null;
-  /** The point of interest whose next click on the map is its new place, or null. */
-  movingPoiId: number | null;
+  /** What the map editor's tools are doing (map-work.ts). */
+  work: MapWork;
   setup: AnalysisSetupChoices;
   /** The analysis whose results are shown. */
   openId: number | null;
@@ -53,11 +44,7 @@ export interface AnalysisView {
 export function defaultAnalysisView(): AnalysisView {
   return {
     screen: 'list',
-    drawing: null,
-    drawingClosed: false,
-    drawingProblem: null,
-    placingPoi: null,
-    movingPoiId: null,
+    work: NO_MAP_WORK,
     setup: {
       name: '',
       scenarioId: null,
@@ -74,14 +61,8 @@ export function defaultAnalysisView(): AnalysisView {
   };
 }
 
-/** Leaving a screen stops anything waiting for a click on the map. */
-const stopMapWork = {
-  drawing: null,
-  drawingClosed: false,
-  drawingProblem: null,
-  placingPoi: null,
-  movingPoiId: null,
-} as const;
+/** Leaving a screen puts down the map editor's tool. */
+const stopMapWork = { work: NO_MAP_WORK } as const;
 
 /** Nothing of an open analysis is shown. */
 const closeResults = {
@@ -124,84 +105,6 @@ export function forgetMissing(view: AnalysisView, listedIds: number[]): Analysis
   return view;
 }
 
-// ---- map work: drawing a zone, placing or moving a point of interest (FR-4, FR-5) -------------
-
-/** How near the first corner, in pixels, a click closes the outline being drawn. */
-export const CLOSE_REACH_PX = 10;
-
-/** True while a click on the map belongs to the Access pane, and so does nothing else. */
-export const isMapBusy = (view: AnalysisView): boolean =>
-  view.drawing !== null || view.placingPoi !== null || view.movingPoiId !== null;
-
-/** Stops drawing, placing or moving (Escape or Cancel). */
-export const cancelMapWork = (view: AnalysisView): AnalysisView => ({ ...view, ...stopMapWork });
-
-/** Starts drawing a zone with no corners yet. */
-export const startDrawing = (view: AnalysisView): AnalysisView => ({
-  ...view,
-  ...stopMapWork,
-  drawing: [],
-});
-
-/** Waits for a click to place a new point of interest with this name. */
-export const startPlacingPoi = (view: AnalysisView, name: string): AnalysisView => ({
-  ...view,
-  ...stopMapWork,
-  placingPoi: name,
-});
-
-/** Waits for a click to move a saved point of interest. */
-export const startMovingPoi = (view: AnalysisView, id: number): AnalysisView => ({
-  ...view,
-  ...stopMapWork,
-  movingPoiId: id,
-});
-
-const samePlace = (a: GeoJsonPosition, b: GeoJsonPosition): boolean =>
-  a[0] === b[0] && a[1] === b[1];
-
-/** Adds a corner to an open outline. A corner repeating the last one (a double click) is dropped. */
-export function addCorner(view: AnalysisView, corner: GeoJsonPosition): AnalysisView {
-  const corners = view.drawing;
-  if (corners === null || view.drawingClosed) return view;
-  const last = corners[corners.length - 1];
-  if (last && samePlace(last, corner)) return view;
-  return { ...view, drawing: [...corners, corner], drawingProblem: null };
-}
-
-/** Opens a closed outline again, or else takes off its last corner. */
-export function undoCorner(view: AnalysisView): AnalysisView {
-  if (view.drawing === null) return view;
-  if (view.drawingClosed) return { ...view, drawingClosed: false };
-  return { ...view, drawing: view.drawing.slice(0, -1), drawingProblem: null };
-}
-
-/**
- * Closes the outline, ready to be named, or keeps it open with the reason it cannot be a zone
- * (AC-FR-4.2). The first corner clicked again at the end is not a corner of its own.
- */
-export function closeDrawing(view: AnalysisView): AnalysisView {
-  if (view.drawing === null || view.drawingClosed) return view;
-  const corners = view.drawing;
-  const ring =
-    corners.length > 1 && samePlace(corners[0], corners[corners.length - 1])
-      ? corners.slice(0, -1)
-      : corners;
-  const problem = ringProblem(ring);
-  if (problem) return { ...view, drawingProblem: problem };
-  return { ...view, drawing: ring, drawingClosed: true, drawingProblem: null };
-}
-
-/** Whether a click closes the outline: it has three corners and the click is by the first. */
-export function closesOutline(
-  view: AnalysisView,
-  pixelsTo: (corner: GeoJsonPosition) => number,
-): boolean {
-  const corners = view.drawing;
-  if (corners === null || view.drawingClosed || corners.length < 3) return false;
-  return pixelsTo(corners[0]) <= CLOSE_REACH_PX;
-}
-
 // ---- the setup's zone and points of interest -----------------------------------------------
 
 const withSetup = (view: AnalysisView, setup: Partial<AnalysisSetupChoices>): AnalysisView => ({
@@ -223,10 +126,10 @@ export function togglePoi(view: AnalysisView, id: number): AnalysisView {
 export const forgetZone = (view: AnalysisView, id: number): AnalysisView =>
   view.setup.zoneId === id ? pickZone(view, null) : view;
 
-/** Lets go of a deleted point of interest, and stops moving it. */
+/** Lets go of a deleted point of interest, and closes its name box. */
 export function forgetPoi(view: AnalysisView, id: number): AnalysisView {
   const next = withSetup(view, { poiIds: view.setup.poiIds.filter((p) => p !== id) });
-  return view.movingPoiId === id ? { ...next, movingPoiId: null } : next;
+  return { ...next, work: forgetPoiWork(view.work, id) };
 }
 
 const ACTIVE_STATES: AnalysisState[] = ['queued', 'preparing', 'running'];

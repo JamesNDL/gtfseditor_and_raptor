@@ -5,6 +5,7 @@
 import type {
   AnalysisCreateBody,
   AnalysisListEntry,
+  GeoJsonPosition,
   PoiBody,
   PointOfInterest,
   Zone,
@@ -118,6 +119,12 @@ export async function saveZone(body: ZoneBody): Promise<Zone> {
 /** Renames a zone. */
 export async function renameZone(id: number, name: string): Promise<void> {
   await send<Zone>(`${ZONES}/${id}`, 'PATCH', { name });
+  await refreshZones();
+}
+
+/** Gives a zone a new outline; analyses already made keep their own copy (D25). */
+export async function reshapeZone(id: number, ring: GeoJsonPosition[]): Promise<void> {
+  await send<Zone>(`${ZONES}/${id}`, 'PATCH', { ring });
   await refreshZones();
 }
 

@@ -10,7 +10,8 @@ import { compareStyle } from '../analysis/analysis-colours.ts';
 import { useComparison } from '../analysis/analysis-compare.ts';
 import { useAnalysisResults } from '../analysis/analysis-results.ts';
 import { useStore } from '../app/store.ts';
-import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
+import type { MapPalette } from '../app/theme.ts';
+import { useMapPalette } from './basemap-choice.ts';
 
 const ZONE = 'aa-compare-zone';
 const POINTS = 'aa-compare-points';
@@ -136,7 +137,7 @@ export function useAnalysisCompareLayers(
   mapRef: RefObject<maplibregl.Map | null>,
   whenLoaded: (fn: () => void) => void,
 ): void {
-  const theme = useStore((s) => s.theme);
+  const palette = useMapPalette();
   const paneOpen = useStore((s) => s.leftPane === 'analysis');
   const screen = useStore((s) => s.analysis.screen);
   const openId = useStore((s) => s.analysis.openId);
@@ -152,7 +153,7 @@ export function useAnalysisCompareLayers(
     const map = mapRef.current;
     if (!map) return;
     onceLoaded(() => {
-      if (!map.getSource(POINTS)) addLayers(map, MAP_PALETTE[theme]);
+      if (!map.getSource(POINTS)) addLayers(map, palette);
       for (const id of LAYER_IDS) {
         map.moveLayer(id);
         // Hidden layers also take the credit off the map's credit line.
@@ -175,5 +176,5 @@ export function useAnalysisCompareLayers(
         .getSource<maplibregl.GeoJSONSource>(POINTS)
         ?.setData(collection(shown ? pointFeatures(result, poi) : []));
     });
-  }, [mapRef, shown, detail, poiSeq, result, theme]);
+  }, [mapRef, shown, detail, poiSeq, result, palette]);
 }

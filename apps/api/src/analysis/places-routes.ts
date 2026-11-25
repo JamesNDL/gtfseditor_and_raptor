@@ -48,11 +48,8 @@ const isLat = (value: unknown): value is number =>
 
 const RANGE = 'a longitude from -180 to 180 and a latitude from -90 to 90';
 
-/** A zone body checked: a name and an outline that `ringProblem` accepts. */
-function zoneBodyOf(body: unknown): ZoneBody {
-  const fields = fieldsOf(body);
-  const name = nameOf(fields.name, 'zone');
-  const given = fields.ring;
+/** An outline checked: corners as [longitude, latitude] that `ringProblem` accepts, stored open. */
+function ringOf(given: unknown): GeoJsonPosition[] {
   if (!Array.isArray(given)) {
     throw fail(400, 'A zone needs an outline: a list of corners, each [longitude, latitude]');
   }
@@ -64,7 +61,26 @@ function zoneBodyOf(body: unknown): ZoneBody {
   });
   const problem = ringProblem(ring);
   if (problem) throw fail(400, problem);
-  return { name, ring: openRing(ring).map(([lon, lat]) => [lon, lat]) };
+  return openRing(ring).map(([lon, lat]) => [lon, lat]);
+}
+
+/** A zone body checked: a name and an outline. */
+function zoneBodyOf(body: unknown): ZoneBody {
+  const fields = fieldsOf(body);
+  const name = nameOf(fields.name, 'zone');
+  return { name, ring: ringOf(fields.ring) };
+}
+
+/** The changes a PATCH to a zone asks for: a new name, a new outline (D37), or both. */
+function zoneChangesOf(body: unknown): { name?: string; ring?: GeoJsonPosition[] } {
+  const fields = fieldsOf(body);
+  if (fields.name === undefined && fields.ring === undefined) {
+    throw fail(400, 'Give a new name, or a new outline, for the zone');
+  }
+  return {
+    ...(fields.name !== undefined && { name: nameOf(fields.name, 'zone') }),
+    ...(fields.ring !== undefined && { ring: ringOf(fields.ring) }),
+  };
 }
 
 /** A longitude and latitude given together, or a 400 saying what is wrong. */
@@ -149,11 +165,15 @@ export function registerAnalysisPlaceRoutes(app: FastifyInstance, sql: Sql): voi
     return oneZone(row.id);
   });
 
+  // A new outline changes no analysis already made: each keeps its own copy (D25).
   app.patch('/api/analysis/zones/:id', async (req): Promise<Zone> => {
     const id = idOf(req.params);
-    const name = nameOf(fieldsOf(req.body).name, 'zone');
+    const { name, ring } = zoneChangesOf(req.body);
+    const geom = ring ? sql`st_makepolygon(st_geomfromtext(${lineWkt(ring)}, 4326))` : sql`geom`;
     const updated = await sql`
-      update analysis_zones set name = ${name}, updated_at = now() where id = ${id} returning id`;
+      update analysis_zones
+      set name = coalesce(${name ?? null}, name), geom = ${geom}, updated_at = now()
+      where id = ${id} returning id`;
     if (updated.length === 0) throw notFound('Zone');
     return oneZone(id);
   });
