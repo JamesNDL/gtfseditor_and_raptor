@@ -123,6 +123,22 @@ describe('ratioBands', () => {
     }
   });
 
+  it('repeats no corner when breaks land exactly on grid points', () => {
+    const grid = gridOf(9, 5);
+    const bands = ratioBands(
+      grid,
+      valuesOf(grid, (i) => i),
+      [1, 2],
+    );
+    const areas = bands.map((b) => b.polygons.reduce((sum, ring) => sum + areaM2(ring), 0));
+    expect(areas.map((a) => Math.round(a / 1000) * 1000)).toEqual([250_000, 250_000, 1_500_000]);
+    for (const ring of bands.flatMap((b) => b.polygons)) {
+      const corners = ring.slice(0, -1).map(([lon, lat]) => `${lon},${lat}`);
+      expect(new Set(corners).size).toBe(corners.length);
+      expect(corners.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('counts a square lying exactly on a break once, in the band that starts there', () => {
     const grid = gridOf(2, 2);
     const bands = ratioBands(grid, [2, 2, 2, 2], [1, 2, 3]);

@@ -14,3 +14,4 @@ export * from './analysis/defaults.ts';
 export * from './analysis/ratio.ts';
 export * from './analysis/summary.ts';
 export * from './analysis/compare.ts';
+export * from './analysis/contours.ts';
