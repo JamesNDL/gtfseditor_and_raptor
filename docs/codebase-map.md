@@ -50,7 +50,9 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `src/http.ts` | `fail()` (an error with its HTTP status), `int()` and `notFound()`, used by every route file | | | n/a |
 | `src/network/` | The baseline's read routes, moved out of `server.ts`: `baselines.ts` (days, modes, the lines of a day), `map-data.ts` (packs from `PACKS_DIR`, waits, vector tiles), `inspector.ts` (line, trip, vehicle day, station summary), `timelines.ts` (trip diagram, platforms, a line's vehicles) | scenarios (`scenarioOf`, `visible`), core waits | `inspector.ts` | e2e |
 | `src/scenarios/engine.ts` | **The scenario engine.** `Scenario`, `scenarioOf()`, `visible()` (the copy-on-write rule), `applyEdit` (transaction, 409, confirm), `cloneTrips`, `removeTrips`, `requireLive`, and for now the fleet and day figures (`fleetFigures`, `dayFigures`), which `applyEdit` needs for its confirm message. Imports no edit kind and not `scenarios.ts` | http | `applyEdit`, `visible` | e2e |
-| `src/scenarios/scenarios.ts` | `assignVehicles`, the stats and impact, the **clash rules** (`conflictsIn`, around lines 1126-1493), ten edit kinds plus the reshape wrapper, and the scenario routes. `POST /edits` dispatches all 19 kinds (around lines 1610-1640). Split up further in stage 3. | core; engine; the edit modules below | `registerScenarioRoutes` | e2e |
+| `src/scenarios/scenarios.ts` | The stats and impact, ten edit kinds plus the reshape wrapper, and the scenario routes. `POST /edits` dispatches all 19 kinds (around lines 1033-1069). Split up further in stage 3. | core; engine; clashes; vehicles; the edit modules below | `registerScenarioRoutes` | e2e |
+| `src/scenarios/clashes.ts` | **The clash rules.** `conflictsIn` (and `findConflicts`, the route's way in) turns the rows read by `clashes-read.ts` (platform, vehicle, waiting vehicle, trips with no vehicle) and `clashes-reality.ts` (speed, place, closure) into clashes, with the fix suggested for each. Also `minutes()`, which the edit summaries share | core; engine; clashes-read; clashes-reality; edits/schedule (`bestFree`, `platformChoices`) | `conflictsIn` | e2e |
+| `src/scenarios/vehicles.ts` | `assignVehicles`: which vehicle runs each new trip (one with spare time, or a new one) | core; engine | `assignVehicles` | e2e |
 | `src/scenarios/stops-visible.ts` | `stopVisible` (hides deleted stops) and `stopDeleted` | engine (`Scenario` type) | `stopVisible` | e2e |
 | `src/scenarios/stops.ts` | `addStop` edits, new stops as GeoJSON | engine, stops-visible, routing/roads (`nearestRoad`) | `editAddStop` | e2e |
 | `src/scenarios/edits/reshape.ts` | Reshape planning and applying (`planReshape`, `applyReshape`), also used by closures | routing, core/edits/reshape | `planReshape` | `core/edits/reshape.test.ts`, e2e |
@@ -99,7 +101,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | Baseline (one service date) | `migrations/0001_initial.sql` `baselines` | Postgres | importer |
 | Routes, patterns, trips, stop times, stops, shapes, vehicle days | `migrations/0001_initial.sql` | Postgres; scenario rows carry `scenario_id` and `created_edit` | importer; edit engine |
 | Scenario, edit | `migrations/0001_initial.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios/engine.ts` (`applyEdit`), `scenarios.ts` and the edit modules in `scenarios/edits/` |
-| Clash | `scenarios/scenarios.ts` `Conflict`, `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
+| Clash | `scenarios/clashes.ts` `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
 | Vehicle type | `migrations/0001_initial.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `catalogue/routes.ts` |
 | Pack | `packages/core/src/pack.ts` | `data/packs/<baseline>/<mode>.bin` | `import/packs.ts` |
 | Demand set | `migrations/0001_initial.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim/sim.ts`; the router generates made-up sets |
@@ -111,7 +113,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 - **Adding an edit kind:** write the function in `apps/api/src/scenarios/scenarios.ts`, or in a module in `scenarios/edits/` wired in from there. Add it to the dispatch in `POST /api/scenarios/:id/edits`, send it from the web with `applyEdit({ kind, … })`, and cover it in `apps/api/test/scenarios.e2e.mjs`. Put any logic that needs no database in `packages/core` with a unit test.
 - **Adding an API route:** register it in the relevant `register*Routes` or `*Routes` function under `apps/api/src/` (baseline reads in `network/`), and take `?s=` through `scenarioOf()` if it reads timetable data.
 - **What a scenario can see:** `visible()` in `apps/api/src/scenarios/engine.ts`; for stops, `stopVisible()` in `apps/api/src/scenarios/stops-visible.ts`.
-- **Clash rules:** `conflictsIn` in `apps/api/src/scenarios/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/scenarios/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
+- **Clash rules:** `conflictsIn` in `apps/api/src/scenarios/clashes.ts`, reading from `clashes-read.ts` and `clashes-reality.ts` beside it. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/scenarios/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
 - **Run times for new stretches:** `apps/api/src/routing/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
 - **Road and track paths:** `apps/api/src/routing/roads.ts` (OSRM) and `apps/api/src/routing/tracks.ts`.
 - **Database tables:** `packages/gtfs/sql/migrations/0001_initial.sql`, plus any later numbered migrations beside it. Sim partitions are created at runtime in `apps/api/src/sim/sim.ts`.
@@ -222,7 +224,7 @@ apps/api/src/
 
 **Built so far (stage 2, T-6):** `server.ts`, `http.ts`, `network/` (as four files: `baselines.ts`, `map-data.ts`, `inspector.ts`, `timelines.ts`), `routing/`, `catalogue/routes.ts`, `export/routes.ts`, `scenarios/scenarios.ts` and `scenarios/stops.ts`, `scenarios/edits/` (`closure.ts`, `delete-stop.ts`, `reshape.ts`, `schedule.ts`), `sim/sim.ts` and `sim/results-read.ts`. `scenarios.ts` and `sim.ts` moved whole; stage 3 splits them into the files above.
 
-**Stage 3 so far:** T-10 took `scenarios/engine.ts` out of `scenarios.ts` and `scenarios/stops-visible.ts` out of `stops.ts`, which broke the API import circles. The fleet and day figures sit in `engine.ts` for now, not `vehicles.ts`, because `applyEdit` uses them and `vehicles.ts` would need `visible()` back from the engine.
+**Stage 3 so far:** T-10 took `scenarios/engine.ts` out of `scenarios.ts` and `scenarios/stops-visible.ts` out of `stops.ts`, which broke the API import circles. The fleet and day figures sit in `engine.ts` for now, not `vehicles.ts`, because `applyEdit` uses them and `vehicles.ts` would need `visible()` back from the engine. T-11 took the clash rules into `scenarios/clashes.ts` (with `clashes-read.ts` and `clashes-reality.ts` beside it, to keep each file under 300 lines) and `assignVehicles` into `scenarios/vehicles.ts`; both import the engine, not `scenarios.ts`.
 
 ### packages (planned)
 
