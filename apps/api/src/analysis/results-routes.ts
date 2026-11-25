@@ -43,8 +43,8 @@ const position = ([lon, lat]: LonLat): GeoJsonPosition => [lon, lat];
 /** An open band end (±Infinity) is null, as JSON has no infinity. */
 const bandEnd = (value: number): number | null => (Number.isFinite(value) ? value : null);
 
-/** The bands and lines of equal ratio for one point of interest's pairs (FR-14). */
-function linesOf(
+/** The bands and lines of equal ratio for one point of interest's pairs (FR-14, and FR-18's export). */
+export function linesOf(
   analysis: FinishedAnalysis,
   pairs: PairRow[],
   breaks: number[],

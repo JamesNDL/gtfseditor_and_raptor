@@ -1,8 +1,10 @@
 // The access analysis routes (FR-6, FR-10, FR-16; docs/architecture/access-analysis.md §4.4): list
-// a day's analyses, make one, read one, cancel one and delete one. The run itself is runner.ts.
+// a day's analyses (each with the others it can be compared with, FR-17), make one, read one,
+// cancel one and delete one. The run itself is runner.ts.
 import type { FastifyInstance } from 'fastify';
 import type {
   AnalysisDetail,
+  AnalysisListEntry,
   AnalysisListItem,
   AnalysisPoi,
   AnalysisSettings,
@@ -11,6 +13,7 @@ import type {
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { fail, int, notFound } from '../http.ts';
+import { comparableWithOf } from './compare-read.ts';
 import { createAnalysis } from './create.ts';
 import { summariesOf } from './results-read.ts';
 import { ACTIVE_STATES, analysisRunner, type AnalysisRunner } from './runner.ts';
@@ -60,12 +63,16 @@ export function registerAnalysisRoutes(app: FastifyInstance, sql: Sql): Analysis
     return row.state;
   }
 
-  app.get('/api/analyses', async (req): Promise<AnalysisListItem[]> => {
+  app.get('/api/analyses', async (req): Promise<AnalysisListEntry[]> => {
     const baseline = int(fieldsOf(req.query).baseline);
     const rows = await sql<ListRow[]>`
       select ${listColumns} from analyses where baseline_id = ${baseline}
       order by created_at desc, id desc`;
-    return rows.map(listItemOf);
+    const comparable = await comparableWithOf(sql, baseline);
+    return rows.map((row) => ({
+      ...listItemOf(row),
+      comparableWith: comparable.get(row.id) ?? [],
+    }));
   });
 
   app.post('/api/analyses', async (req, reply): Promise<{ id: number }> => {
