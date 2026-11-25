@@ -851,7 +851,7 @@ export function deleteStopRoutes(
   app: FastifyInstance,
   sql: Sql,
   ctx: {
-    loadScenario: (id: number) => Promise<Scenario>;
+    loadScenario: (sql: Sql, id: number) => Promise<Scenario>;
     idParam: (req: never) => number;
     deps: DeleteStopDeps;
   },
@@ -883,7 +883,7 @@ export function deleteStopRoutes(
    * in the map tiles. A bus stop's station row is left out, as it is from the tiles.
    */
   app.get('/api/scenarios/:id/deleted-stops', async (req) => {
-    const sc = await ctx.loadScenario(ctx.idParam(req as never));
+    const sc = await ctx.loadScenario(sql, ctx.idParam(req as never));
     const rows = await sql`
       select s.id, s.name, s.mode_ids[1] as mode, s.location_type, s.parent_id, s.platform_code,
              (s.mode_ids && ${RAIL_MODES}::text[]) as rail, ST_X(s.geom) as lon, ST_Y(s.geom) as lat, g.edit_seq
