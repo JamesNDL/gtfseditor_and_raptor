@@ -235,6 +235,21 @@ class GtfsLoaderTest {
         assertTrue(t.notes.stream().anyMatch(note -> note.contains("no vehicle files")), t.notes.toString());
     }
 
+    /** The editor's export says which published trip each trip came from; the router reads by name and ignores it. */
+    @Test
+    void theOriginTripColumnIsIgnored() throws Exception {
+        Timetable t = load(feed().file("editor_trip_vehicles.txt",
+                "trip_id,origin_trip_id,vehicle_id,vehicle_label,vehicle_source,vehicle_type_id,vehicle_type_assumed",
+                "T1,T1,5,train 1,inferred,1,1",
+                "T2,T9,6,train 2,feed,2,0",
+                "T7,,7,bus 9,feed,1,0"));
+        assertEquals(1200, t.tripCapacity[t.tripIndex("T1")]);
+        assertEquals(Timetable.CAPACITY_PLACEHOLDER | Timetable.CAPACITY_TYPE_ASSUMED,
+                t.tripCapacityFlags[t.tripIndex("T1")]);
+        assertEquals(450, t.tripCapacity[t.tripIndex("T2")]);
+        assertEquals(0, t.tripCapacityFlags[t.tripIndex("T2")]);
+    }
+
     @Test
     void aFeedCoveringManyDaysNeedsADate() throws Exception {
         Feed week = feed()
