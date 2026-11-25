@@ -296,6 +296,14 @@ Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the a
 | D33 | 25 Nov 2026 | Developers may run Gradle on the access analysis router tickets, one Gradle build at a time | Owner-run only | The owner asked for the epic to be built overnight |
 | D34 | 25 Nov 2026 | Starting values: walk 800 m, longest journey 120 min, 3 changes, all modes but school buses, parking 5 min, traffic 1.0/1.4/1.2/1.4/1.0, spacing 250 m, lines at 1, 1.5, 2, 3, 4, departure 08:00 | | BRD Q1, Q2 and the router's settled walking rules |
 
+Decisions D35 to D37 answer the owner's request of 26 Nov 2026 to make the Access pane feel like a map editor and to choose the map's look. The owner chose satellite from Esri World Imagery and full editing; the rest was decided by the developer under the owner's delegation (`docs/architecture/access-analysis.md` §12, "Map editor").
+
+| # | Date | Decision | Options considered | Reason |
+|---|---|---|---|---|
+| D35 | 26 Nov 2026 | The basemap is chosen apart from the theme, for the whole app: Light (OpenFreeMap positron), Streets (liberty), Dark (dark) and Satellite (Esri World Imagery, no key, with Esri's Boundaries and Places labels over it and Esri's credit). It follows the theme until one is picked, and the pick is kept in the browser (`localStorage`, key `basemap`). The map is rebuilt on a change, as for the theme; the map's colours come from the basemap's tone (light set over Light and Streets, dark set over Dark and Satellite). Code: `apps/web/src/map/basemaps.ts`, `basemap-choice.ts`, `BasemapPicker.tsx` | Tied to the theme; a picker; Mapbox or MapTiler satellite (needs a key) | The owner could not see buildings (liberty draws them, with house numbers); Esri's imagery needs no key. Esri's terms want the credit shown, which the attribution does; heavy use would need an ArcGIS account |
+| D36 | 26 Nov 2026 | The Access pane's zone and points of interest are made on the map: a tool bar floating beside the side panel (Draw zone, Place point of interest; Z, P, Escape, Backspace, Enter), and a name box on the map over what is to be named. The name box is a plain positioned div placed with `map.project` and moved as the map moves, not a MapLibre popup, so that it is ordinary React. The side panel keeps the lists (pick, tick, rename, delete) and a hint | Keep the side-panel forms; a MapLibre popup with a React portal; a positioned div | The owner found naming first and clicking after awkward; a div needs no portal and follows the app's styles |
+| D37 | 26 Nov 2026 | A saved zone is reshaped in place: the picked zone shows corner handles (drag to move) and handles mid-side (drag to add a corner); the new outline is sent as `ring` in the zone's PATCH, checked by the same rules as a new zone, and a name alone still renames. Analyses keep their own copy (D25), so reshaping changes none. A pin is dragged to move it (the PATCH with `lon` and `lat` that already existed) | A new outline as a new zone; PATCH with `ring` | Full editing was asked for; no migration or change to how analyses store zones is needed |
+
 ## 11. Issues and discrepancies
 
 ### Open
@@ -370,6 +378,7 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | Added D10 to D13, the copy-on-write rule in 5.3, issues I6 and I7, and section 14 (project structure and coding standards); pointed to the glossary and BRDs | Design of BRD `trustworthy-edits` v1.0 (`docs/architecture/trustworthy-edits.md`) |
 | 25 Nov 2026 | Added D14 to D34, marked D5 superseded by D16, added issues I8 and I9. The context and component sections are updated when the work is built (AA-25), not before. | Design of BRD `access-analysis` v1.0 (`docs/architecture/access-analysis.md`) |
 | 26 Nov 2026 | Access analysis built: §1, §3 (OSRM replaced by the journey router's road side; Geofabrik added), §4 (`router-road`, `apps/api/src/analysis/`, `apps/web/src/analysis/`), §5.1 (road graph and the five analysis entities), §6 (road and analysis interfaces), §8 (privacy, configuration, long-running work), §9, R1, I8 updated; two stale README lines corrected | Epic close-out, ticket AA-25 (access-analysis AAI-6) |
+| 26 Nov 2026 | Added D35 (basemap picker), D36 (the Access pane's map editor) and D37 (reshaping a zone with PATCH `ring`) | The owner's request for a map editor and map views (branch `feature/aa-map-editor`) |
 
 ## 14. Project structure and coding standards
 

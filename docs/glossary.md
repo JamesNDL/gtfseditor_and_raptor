@@ -25,6 +25,11 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *Business rules*: one day type at a time. Importing the same date again deletes the baseline and every scenario on it, so the importer refuses unless given `--replace`.
 - *Related*: Scenario, Feed.
 
+**Basemap** (built 26 Nov 2026, D35): the picture of streets, land, water and place names under everything the editor draws on the map. One of four: Light, Streets (with buildings and house numbers), Dark and Satellite (aerial photos).
+- *Also known as*: map style, background map. Not the same as the *theme* (the light or dark version of the interface), which it follows only until a basemap is chosen.
+- *In code*: `apps/web/src/map/basemaps.ts`, `basemap-choice.ts`, `BasemapPicker.tsx`.
+- *Business rules*: chosen for the whole app and remembered in the browser. Light, Streets and Dark come from OpenFreeMap; Satellite from Esri World Imagery, whose credit is always shown with it. Lines, stops and analysis layers are drawn in light-map colours over Light and Streets and dark-map colours over Dark and Satellite.
+
 **Call**: one stop that a trip makes: the stop, the platform, and the arrival and departure times there.
 - *Also known as*: stop time (GTFS `stop_times`). Do not confuse with *Stop*, the place itself.
 - *In code*: `stop_times` table.

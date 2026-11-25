@@ -36,6 +36,7 @@ import { mapView } from '../sim/sim-api.ts';
 import { mapScale } from '../sim/SimMapKey.tsx';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
 import { AnalysisMapEditor } from '../analysis/AnalysisMapEditor.tsx';
+import { isMapBusy } from '../analysis/map-work.ts';
 import { BasemapPicker } from './BasemapPicker.tsx';
 import { useShownBasemap } from './basemap-choice.ts';
 import { basemapStyle, basemapTone } from './basemaps.ts';
@@ -363,6 +364,11 @@ export function MapView({ onVehicleCount }: Props) {
       if (now - lastMove < 50) return;
       lastMove = now;
       const tooltip = tooltipRef.current!;
+      // The Access pane's map editor has the pointer: nothing under it is named.
+      if (isMapBusy(useStore.getState().analysis.work)) {
+        tooltip.style.display = 'none';
+        return;
+      }
       const { routes } = useStore.getState();
       let text = '';
       const closing = useStore.getState().closing;
@@ -1888,11 +1894,16 @@ export function MapView({ onVehicleCount }: Props) {
           document.querySelector('.rail')?.getBoundingClientRect().right ??
           40,
       ) + 20;
+    // Below the Access pane's tool bar on the map, when it is showing.
+    const top = Math.max(
+      110,
+      (document.querySelector('.aa-tools')?.getBoundingClientRect().bottom ?? 0) + 30,
+    );
     map.fitBounds(fitBounds, {
       padding:
         room - left - right > 200
-          ? { top: 110, bottom: 150, left, right }
-          : { top: 110, bottom: 150, left: 60, right: 60 },
+          ? { top, bottom: 150, left, right }
+          : { top, bottom: 150, left: 60, right: 60 },
       maxZoom: 14,
       duration: 900,
     });
