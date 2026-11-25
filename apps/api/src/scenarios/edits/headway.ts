@@ -1,6 +1,6 @@
 // headway edits: how often one stop pattern runs in one time band.
 import { formatSecs } from '@gtfs-editor/core';
-import { platformNote, settlePlatforms } from './deps.ts';
+import { platformNote, settlePlatforms } from '../platforms.ts';
 import { describe } from '../describe.ts';
 import { assignVehicles } from '../vehicles.ts';
 import { fleetNote, minutes } from '../wording.ts';

@@ -1,8 +1,19 @@
 // A trip as the edit summaries name it: line, departure time, and where it runs from and to.
 import { formatSecs } from '@gtfs-editor/core';
-import type { Described } from './edits/schedule.ts';
 import type { Tx } from './engine.ts';
 import { fail } from '../http.ts';
+
+interface Described {
+  label: string;
+  line: string;
+  start_secs: number;
+  route_id: number;
+  direction_id: number | null;
+  pattern_id: number | null;
+  vehicle_day_id: number | null;
+  baseline_id: number;
+  rule_set: string;
+}
 
 /** The row `describe` reads, before it adds the label. */
 type DescribeRow = Omit<Described, 'label'> & {

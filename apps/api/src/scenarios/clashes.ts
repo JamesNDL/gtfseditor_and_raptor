@@ -4,7 +4,7 @@ import { formatSecs } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { readTripClashes } from './clashes-read.ts';
 import { readRealityChecks } from './clashes-reality.ts';
-import { bestFree, platformChoices } from './edits/schedule.ts';
+import { bestFree, platformChoices } from './platforms.ts';
 import type { Scenario } from './engine.ts';
 import { minutes } from './wording.ts';
 

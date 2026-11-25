@@ -1,5 +1,5 @@
 // lineFrequency edits: how often a whole line runs, both ways, across several time bands.
-import { platformNote, settlePlatforms } from './deps.ts';
+import { platformNote, settlePlatforms } from '../platforms.ts';
 import { assignVehicles } from '../vehicles.ts';
 import { fleetNote } from '../wording.ts';
 import { removeTrips, TRIP_COLUMNS, visible, type Scenario, type Tx } from '../engine.ts';

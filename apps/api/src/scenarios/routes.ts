@@ -16,7 +16,7 @@ import {
 } from './edits/reshape.ts';
 import { closureRoutes } from './edits/closure.ts';
 import { deleteStopRoutes } from './edits/delete-stop.ts';
-import { scheduleRoutes } from './edits/schedule.ts';
+import { scheduleRoutes } from './schedule-routes.ts';
 import { closureDeps, deleteStopDeps } from './edits/deps.ts';
 import { isEditKind, runEdit, type EditRequest } from './edits/registry.ts';
 import { describeMethod, linePath } from '../routing/roads.ts';
