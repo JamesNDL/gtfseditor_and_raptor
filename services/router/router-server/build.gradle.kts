@@ -23,7 +23,20 @@ tasks.named<JavaExec>("run") {
     // Run from the repository root, so that data/router and data/exports are found, and inside
     // the heap limit of section 5 of the plan.
     workingDir = rootProject.projectDir.parentFile.parentFile
-    maxHeapSize = "768m"
+    // 1 GB with road routing on (architecture §3.4, D15); the road graph itself is memory-mapped.
+    maxHeapSize = "1g"
+}
+
+// The road-only router (A5, D15): the same service with roads and health only, on port 3003.
+tasks.register<JavaExec>("runRoad") {
+    group = "application"
+    description = "Runs the router with road routing only, on port 3003."
+    classpath = project.the<SourceSetContainer>()["main"].runtimeClasspath
+    mainClass = application.mainClass
+    workingDir = rootProject.projectDir.parentFile.parentFile
+    environment("ROUTER_ROAD", "only")
+    environment("ROUTER_PORT", "3003")
+    maxHeapSize = "512m"
 }
 
 tasks.withType<Test>().configureEach {
