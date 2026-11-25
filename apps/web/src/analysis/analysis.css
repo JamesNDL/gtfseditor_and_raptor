@@ -1,0 +1,80 @@
+/* The Access pane: the day's access analyses. */
+
+.analysis-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.analysis-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.analysis-title {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analysis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.analysis-body p {
+  margin: 0;
+}
+
+.analysis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.analysis-item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.analysis-item-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-progress {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.analysis-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}

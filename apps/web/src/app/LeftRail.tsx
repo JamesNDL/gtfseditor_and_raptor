@@ -1,9 +1,11 @@
 // The left edge of the screen: a narrow rail of buttons, and beside it the one panel that is open.
-// The two tools that change the network are always on the rail; the timetable, the simulation and
-// the layers each fold out when their button is pressed and away when it is pressed again, so that
+// The two tools that change the network are always on the rail; the timetable, the simulation, the
+// access analysis and the layers each fold out when their button is pressed and away when it is pressed again, so that
 // the map is not buried under panels nobody is using.
 import type React from 'react';
 import { useEffect } from 'react';
+import { AnalysisPanel } from '../analysis/AnalysisPanel.tsx';
+import { useAnalysisRunning } from '../analysis/analysis-api.ts';
 import { startClosing } from '../editing/builder.ts';
 import { ModePanel } from '../map/ModePanel.tsx';
 import { ScenarioPanel } from '../scenarios/ScenarioPanel.tsx';
@@ -46,6 +48,19 @@ const PANES: { id: LeftPane; label: string; title: string; icon: React.ReactNode
     ),
   },
   {
+    id: 'analysis',
+    label: 'Access',
+    title: 'Access analysis: how public transport compares with driving',
+    icon: icon(
+      <>
+        <path d="M7 17.5s-4.5-4.4-4.5-8a4.5 4.5 0 0 1 9 0c0 3.6-4.5 8-4.5 8z" />
+        <circle cx="7" cy="9.5" r="1.5" />
+        <circle cx="14.5" cy="13.5" r="3.5" />
+        <path d="M14.5 11.8v1.9l1.2.8" />
+      </>,
+    ),
+  },
+  {
     id: 'modes',
     label: 'Layers',
     title: 'Show or hide trains, buses and the other modes',
@@ -61,6 +76,7 @@ export function LeftRail() {
   const info = useStore((s) => s.scenarioInfo);
   const editError = useStore((s) => s.editError);
   const simGoing = useStore((s) => s.simRuns.some(isActive));
+  const analysisGoing = useAnalysisRunning();
   const set = useStore((s) => s.set);
 
   const show = (next: LeftPane | null) => {
@@ -154,6 +170,9 @@ export function LeftRail() {
             {p.id === 'sim' && simGoing && (
               <span className="rail-badge going" title="A simulation is running" />
             )}
+            {p.id === 'analysis' && analysisGoing && (
+              <span className="rail-badge going" title="An access analysis is running" />
+            )}
           </button>
         ))}
         {pane !== null && (
@@ -185,6 +204,9 @@ export function LeftRail() {
         </div>
         <div className="left-pane" hidden={pane !== 'sim'}>
           <SimPanel />
+        </div>
+        <div className="left-pane" hidden={pane !== 'analysis'}>
+          <AnalysisPanel />
         </div>
         <div className="left-pane" hidden={pane !== 'modes'}>
           <ModePanel />
