@@ -1751,6 +1751,30 @@ try {
     step(
       'the scenario exports as valid GTFS (references, order of times and distances, speeds, blocks)',
     );
+    // FR-9 (AC-FR-9.2): each changed trip says which published trip it came from. The trip id is
+    // the first column and origin_trip_id the last, so a comma in a vehicle's label does no harm.
+    const { readFile } = await import('node:fs/promises');
+    const exportsDir = process.env.EXPORTS_DIR ?? 'data/exports';
+    const [vehicleHeader, ...vehicleRows] = (
+      await readFile(`${exportsDir}/check-e2e/editor_trip_vehicles.txt`, 'utf8')
+    )
+      .trimEnd()
+      .split('\n')
+      .map((line) => line.split(','));
+    assert.equal(vehicleHeader[0], 'trip_id');
+    assert.equal(
+      vehicleHeader.at(-1),
+      'origin_trip_id',
+      'editor_trip_vehicles.txt says where each trip came from',
+    );
+    const changedWithOrigin = vehicleRows.filter(
+      (row) => row[0].includes('~') && row.at(-1) === row[0].split('~')[0],
+    );
+    assert.ok(
+      changedWithOrigin.length > 0,
+      'the changed trips name the published trip they came from',
+    );
+    step(`${changedWithOrigin.length} changed trips in the export name their published trip`);
 
     for (;;) if ((await send('POST', `/api/scenarios/${R}/undo`)).status !== 200) break;
     info = await get(`/api/scenarios/${R}`);
