@@ -51,34 +51,39 @@ describe('pairStatus', () => {
   const settings = { maxJourneyMins: 120 };
 
   it('is ok with a journey within the limits and a drive', () => {
-    expect(pairStatus({ journeyFound: true, ptSecs: 40 * MIN, driveSecs: 600 }, settings)).toBe(
-      'ok',
-    );
+    expect(pairStatus({ journeyFound: true, ptSecs: 40 * MIN, carSecs: 600 }, settings)).toBe('ok');
   });
 
   it('AC-FR-12.1: no journey is no service', () => {
-    expect(pairStatus({ journeyFound: false, ptSecs: null, driveSecs: 600 }, settings)).toBe(
+    expect(pairStatus({ journeyFound: false, ptSecs: null, carSecs: 600 }, settings)).toBe(
       'noService',
     );
   });
 
   it('AC-FR-12.1: a journey longer than the longest journey is no service', () => {
-    expect(pairStatus({ journeyFound: true, ptSecs: 121 * MIN, driveSecs: 600 }, settings)).toBe(
+    expect(pairStatus({ journeyFound: true, ptSecs: 121 * MIN, carSecs: 600 }, settings)).toBe(
       'noService',
     );
-    expect(pairStatus({ journeyFound: true, ptSecs: 120 * MIN, driveSecs: 600 }, settings)).toBe(
+    expect(pairStatus({ journeyFound: true, ptSecs: 120 * MIN, carSecs: 600 }, settings)).toBe(
       'ok',
     );
   });
 
   it('AC-FR-12.1: no drive is no road', () => {
-    expect(pairStatus({ journeyFound: true, ptSecs: 40 * MIN, driveSecs: null }, settings)).toBe(
+    expect(pairStatus({ journeyFound: true, ptSecs: 40 * MIN, carSecs: null }, settings)).toBe(
+      'noRoad',
+    );
+  });
+
+  it('AC-FR-20.1: a car time of zero is no road, so every ok pair has a ratio', () => {
+    // A sample point on the same road spot as its point of interest, with no parking allowance.
+    expect(pairStatus({ journeyFound: true, ptSecs: 10 * MIN, carSecs: 0 }, settings)).toBe(
       'noRoad',
     );
   });
 
   it('AC-FR-12.1: no service wins over no road', () => {
-    expect(pairStatus({ journeyFound: false, ptSecs: null, driveSecs: null }, settings)).toBe(
+    expect(pairStatus({ journeyFound: false, ptSecs: null, carSecs: null }, settings)).toBe(
       'noService',
     );
   });

@@ -7,28 +7,10 @@ import type {
   AnalysisLines,
   GeoJsonFeatureCollection,
   GeoJsonPoint,
-  PoiSummary,
-  RatioBand,
   SamplePointProperties,
 } from '@gtfs-editor/core';
 import { create } from 'zustand';
 import { getJson } from '../shared/api-client.ts';
-
-/** A summary band as JSON brings it: the open ends (±Infinity in core) arrive as null. */
-export interface ShownBand extends Omit<RatioBand, 'from' | 'to'> {
-  from: number | null;
-  to: number | null;
-}
-
-/** A point of interest's summary (FR-20) as JSON brings it. */
-export interface ShownSummary extends Omit<PoiSummary, 'bands'> {
-  bands: ShownBand[];
-}
-
-/** The bands, lines and summary for one point of interest and some breaks. */
-export interface ShownLines extends Omit<AnalysisLines, 'summary'> {
-  summary: ShownSummary;
-}
 
 /** One point of interest's sample points, with their status and ratio. */
 export type SamplePoints = GeoJsonFeatureCollection<GeoJsonPoint, SamplePointProperties>;
@@ -38,7 +20,7 @@ interface AnalysisResults {
   detail: AnalysisDetail | null;
   /** The point of interest the lines and points are for, or null before they first arrive. */
   poiSeq: number | null;
-  lines: ShownLines | null;
+  lines: AnalysisLines | null;
   points: SamplePoints | null;
   /** Why the last fetch failed, or null. */
   error: string | null;
@@ -94,7 +76,7 @@ export async function loadPoiResults(
   const asked = breaks === null ? '' : `&breaks=${breaks.join(',')}`;
   try {
     const [lines, points] = await Promise.all([
-      getJson<ShownLines>(`/api/analyses/${id}/lines?poi=${poiSeq}${asked}`),
+      getJson<AnalysisLines>(`/api/analyses/${id}/lines?poi=${poiSeq}${asked}`),
       getJson<SamplePoints>(`/api/analyses/${id}/points?poi=${poiSeq}`),
     ]);
     if (ticket === latestPoi) useAnalysisResults.setState({ poiSeq, lines, points, error: null });

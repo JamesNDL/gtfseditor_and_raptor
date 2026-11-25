@@ -210,10 +210,14 @@ export function analysisRunner(sql: Sql, log: Log): AnalysisRunner {
       }
       const at = waiting.indexOf(id);
       if (at >= 0) waiting.splice(at, 1);
-      await sql`delete from analysis_results where analysis_id = ${id}`;
+      // One statement: the results go only if this cancel is what ended an active analysis, so a
+      // cancel that loses the race with the run finishing leaves the done analysis as it is.
       await sql`
-        update analyses set state = 'cancelled', finished_at = now(), progress = '{}'
-        where id = ${id} and state = any(${ACTIVE_STATES})`;
+        with ended as (
+          update analyses set state = 'cancelled', finished_at = now(), progress = '{}'
+          where id = ${id} and state = any(${ACTIVE_STATES})
+          returning id)
+        delete from analysis_results where analysis_id in (select id from ended)`;
     },
 
     async resume() {

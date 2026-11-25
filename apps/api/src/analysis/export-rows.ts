@@ -101,9 +101,15 @@ export function exportRowOf(pair: ExportPair, settings: AnalysisSettings): Expor
   };
 }
 
-/** A name as a CSV cell: quoted, with its quotes doubled, when it holds a comma, quote or break. */
-const nameCell = (name: string): string =>
-  /[",\r\n]/.test(name) ? `"${name.replaceAll('"', '""')}"` : name;
+/**
+ * A name as a CSV cell. One that starts with =, +, -, @, a tab or a carriage return gets a quote
+ * mark first, so a spreadsheet shows it as text rather than running it as a formula. Then it is
+ * quoted, with its quotes doubled, when it holds a comma, quote or break.
+ */
+function nameCell(name: string): string {
+  const text = /^[=+\-@\t\r]/.test(name) ? `'${name}` : name;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
 
 /** One cell: empty for null, a number with its column's places, or the text. */
 function cell(row: ExportRow, column: keyof ExportRow): string {

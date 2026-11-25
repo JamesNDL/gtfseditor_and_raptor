@@ -27,7 +27,7 @@ import type { AfterBatch } from './run-drives.ts';
 /** Pairs per bulk request (D21): about a second each, for progress and cancel. */
 const JOURNEY_BATCH = 500;
 
-/** A pending pair: its two ends and its drive, already worked out. */
+/** A pending pair: its two ends and its car time, already worked out. */
 interface PendingRow {
   poiSeq: number;
   pointSeq: number;
@@ -35,7 +35,6 @@ interface PendingRow {
   lat: number;
   poiLon: number;
   poiLat: number;
-  driveSecs: number | null;
   carSecs: number | null;
 }
 
@@ -100,7 +99,7 @@ function resultOf(
   const journey = line.status === 'ok' ? line.journey : null;
   const split = journey ? ptSplit(journey, settings.departSecs) : null;
   const status = pairStatus(
-    { journeyFound: journey !== null, ptSecs: split?.ptSecs ?? null, driveSecs: row.driveSecs },
+    { journeyFound: journey !== null, ptSecs: split?.ptSecs ?? null, carSecs: row.carSecs },
     settings,
   );
   const ratio =
@@ -161,7 +160,7 @@ export async function runJourneys(
     const rows = await sql<PendingRow[]>`
       select r.poi_seq as "poiSeq", r.point_seq as "pointSeq", p.lon, p.lat,
              st_x(o.geom) as "poiLon", st_y(o.geom) as "poiLat",
-             r.drive_secs as "driveSecs", r.car_secs as "carSecs"
+             r.car_secs as "carSecs"
       from analysis_results r
       join analysis_points p on p.analysis_id = r.analysis_id and p.seq = r.point_seq
       join analysis_pois o on o.analysis_id = r.analysis_id and o.seq = r.poi_seq

@@ -60,8 +60,8 @@ export type JourneyLine =
   | { id: string; status: 'ok'; journey: BulkJourney }
   | { id: string; status: 'noJourney' | 'stranded' | 'error'; reason: string };
 
-/** The router's kinds of vehicle, the words `avoid` takes. */
-const ROUTER_MODES: readonly string[] = [
+/** The router's kinds of vehicle, the words `avoid` takes and an analysis's modes are chosen from. */
+export const ROUTER_MODES: readonly string[] = [
   'train',
   'metro',
   'light_rail',
