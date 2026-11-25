@@ -52,7 +52,8 @@ describe('planRoadData: the graph', () => {
   it('builds into opal.new with gradlew.bat on Windows, from services/router', () => {
     const graph = step(planRoadData(noArgs, win()).steps, 'build-graph');
     expect(graph).toMatchObject({
-      command: 'gradlew.bat',
+      // .\ because cmd.exe may be set not to look in the current folder for commands.
+      command: '.\\gradlew.bat',
       cwd: `${WIN_ROOT}\\services\\router`,
       shell: true,
       from: `${WIN_DATA}\\osm\\opal.osm.pbf`,
@@ -106,7 +107,7 @@ describe('commandLine', () => {
   it('quotes the Gradle property as one argument for cmd.exe', () => {
     const graph = commandStep(planRoadData(noArgs, win()).steps, 'build-graph');
     expect(commandLine(graph)).toBe(
-      'gradlew.bat :router-road:roadImport "-ProadArgs=data/osm/opal.osm.pbf data/router/road/opal.new"',
+      '.\\gradlew.bat :router-road:roadImport "-ProadArgs=data/osm/opal.osm.pbf data/router/road/opal.new"',
     );
   });
 
