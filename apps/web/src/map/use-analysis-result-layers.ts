@@ -17,6 +17,7 @@ import {
 import { useAnalysisResults } from '../analysis/analysis-results.ts';
 import { useStore } from '../app/store.ts';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
+import { useAnalysisPointLayers } from './use-analysis-point-layers.ts';
 
 const BANDS = 'aa-bands';
 const LINES = 'aa-lines';
@@ -238,11 +239,12 @@ export function useAnalysisResultLayers(
   // The map's helper is made afresh on each render; drawing should not rerun because of that.
   const onceLoaded = useEffectEvent(whenLoaded);
 
+  const detail = results.detail;
+  const shown = paneOpen && screen === 'results' && detail !== null && detail.id === openId;
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const detail = results.detail;
-    const shown = paneOpen && screen === 'results' && detail !== null && detail.id === openId;
     onceLoaded(() => {
       if (!map.getSource(BANDS)) addLayers(map, MAP_PALETTE[theme]);
       // Layers the network adds later (a day chosen again) would cover these: keep them on top.
@@ -265,5 +267,7 @@ export function useAnalysisResultLayers(
       }
       if (!shown && openId === null) fitted.current = null;
     });
-  }, [mapRef, paneOpen, screen, openId, poiSeq, results, theme]);
+  }, [mapRef, shown, detail, openId, poiSeq, results, theme]);
+  // Called after the effect above, so the picked point's layers go on top of these.
+  useAnalysisPointLayers(mapRef, whenLoaded, shown);
 }
