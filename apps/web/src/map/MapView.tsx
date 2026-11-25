@@ -43,6 +43,7 @@ import {
   waitingUntil,
 } from '../vehicles/vehicles.ts';
 import { useAnalysisLayers } from './use-analysis-layers.ts';
+import { useAnalysisResultLayers } from './use-analysis-result-layers.ts';
 import './map.css';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -1391,6 +1392,7 @@ export function MapView({ onVehicleCount }: Props) {
   }, [simDrawing]);
 
   useAnalysisLayers(mapRef, whenLoaded);
+  useAnalysisResultLayers(mapRef, whenLoaded);
 
   // The results of a simulation run, drawn over the network: passengers on each stretch between
   // stops, or where the people who gain and lose time are. See docs/simulator-plan.md, section 18.

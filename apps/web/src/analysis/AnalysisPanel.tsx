@@ -1,7 +1,7 @@
 // The Access pane, in the left column: the day's access analyses with where each stands, a
-// progress bar, Open, Cancel and Delete, and "New analysis", which opens the setup (AA-19). The
-// results screens come in a later ticket (AA-20). While any analysis is waiting or running, the
-// list is fetched again every 2 s, which carries each one's progress.
+// progress bar, Open, Cancel and Delete, and "New analysis", which opens the setup (AA-19). Open
+// shows the results (AA-20). While any analysis is waiting or running, the list is fetched again
+// every 2 s, which carries each one's progress.
 // See docs/architecture/access-analysis.md §5.2.
 import type { AnalysisListItem } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
@@ -23,6 +23,7 @@ import {
   stateText,
   timetableText,
 } from './analysis-state.ts';
+import { AnalysisResults } from './results/AnalysisResults.tsx';
 import { AnalysisSetup } from './setup/AnalysisSetup.tsx';
 import './analysis.css';
 
@@ -114,6 +115,7 @@ export function AnalysisPanel() {
             </button>
           </div>
           {screen === 'setup' && <AnalysisSetup />}
+          {screen === 'results' && <AnalysisResults />}
         </>
       )}
     </div>
