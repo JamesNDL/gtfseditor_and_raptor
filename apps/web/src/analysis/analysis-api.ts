@@ -2,7 +2,14 @@
 // and the list of the day's analyses, kept here rather than in the app store so that the store
 // gains only its one `analysis` field (D29). The rail reads it for its "running" badge. The saved
 // zones and points of interest are kept here too, for the setup and the map.
-import type { AnalysisListItem, PoiBody, PointOfInterest, Zone, ZoneBody } from '@gtfs-editor/core';
+import type {
+  AnalysisCreateBody,
+  AnalysisListItem,
+  PoiBody,
+  PointOfInterest,
+  Zone,
+  ZoneBody,
+} from '@gtfs-editor/core';
 import { create } from 'zustand';
 import { useStore } from '../app/store.ts';
 import { getJson } from '../shared/api-client.ts';
@@ -38,6 +45,22 @@ export async function deleteAnalysis(id: number): Promise<void> {
   if (res.ok) return;
   const body = (await res.json().catch(() => ({}))) as { message?: string };
   throw new Error(body.message ?? `The analysis could not be deleted (${res.status})`);
+}
+
+/**
+ * Makes an analysis and queues it to run (FR-10), then fetches the list again so its progress
+ * shows. A refusal fails with the API's reason: the limits, or which router is not running (503).
+ */
+export async function startAnalysis(body: AnalysisCreateBody): Promise<number> {
+  const { id } = await send<{ id: number }>('/api/analyses', 'POST', body);
+  await refreshAnalyses();
+  return id;
+}
+
+/** Stops a waiting or running analysis; it is kept, marked cancelled. */
+export async function cancelAnalysis(id: number): Promise<void> {
+  await send<{ ok: true }>(`/api/analyses/${id}/cancel`, 'POST');
+  await refreshAnalyses();
 }
 
 // ---- zones and points of interest (FR-4, FR-5; apps/api/src/analysis/places-routes.ts) -------
