@@ -8,10 +8,13 @@ export interface PairResult {
   ratio: number | null;
 }
 
-/** A ratio band: ratios from `from` (included) up to `to` (not included). */
+/**
+ * A ratio band: ratios from `from` (included) up to `to` (not included). The open end below the
+ * first line and above the last is null, as it goes over the wire (JSON has no infinity).
+ */
 export interface RatioBand {
-  from: number;
-  to: number;
+  from: number | null;
+  to: number | null;
   label: string;
   count: number;
 }
@@ -31,15 +34,15 @@ function emptyBands(breaks: number[]): RatioBand[] {
   const first = breaks[0];
   const last = breaks[breaks.length - 1];
   if (first === undefined || last === undefined) {
-    return [{ from: -Infinity, to: Infinity, label: 'all', count: 0 }];
+    return [{ from: null, to: null, label: 'all', count: 0 }];
   }
-  const bands: RatioBand[] = [{ from: -Infinity, to: first, label: `<${first}`, count: 0 }];
+  const bands: RatioBand[] = [{ from: null, to: first, label: `<${first}`, count: 0 }];
   for (let k = 1; k < breaks.length; k++) {
     const from = breaks[k - 1] ?? first;
     const to = breaks[k] ?? last;
     bands.push({ from, to, label: `${from}-${to}`, count: 0 });
   }
-  bands.push({ from: last, to: Infinity, label: `${last} or more`, count: 0 });
+  bands.push({ from: last, to: null, label: `${last} or more`, count: 0 });
   return bands;
 }
 
@@ -66,7 +69,9 @@ export function summarise(pairs: PairResult[], breaks: number[]): PoiSummary {
     else if (pair.status === 'noRoad') noRoad++;
     else if (pair.status === 'ok' && pair.ratio !== null) {
       const ratio = pair.ratio;
-      const band = bands.find((b) => ratio >= b.from && ratio < b.to);
+      const band = bands.find(
+        (b) => (b.from === null || ratio >= b.from) && (b.to === null || ratio < b.to),
+      );
       if (band) band.count++;
       ratios.push(ratio);
     }

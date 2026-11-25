@@ -4,6 +4,7 @@
 // legend on the map, 'Compare with…' (CompareView.tsx) and the downloads (FR-18). While comparing,
 // the comparison takes the place of the lines, summary and legend. The map's layers draw from the
 // same results (map/use-analysis-result-layers.ts, use-analysis-compare-layers.ts).
+import type { PoiSummary } from '@gtfs-editor/core';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useStore } from '../../app/store.ts';
 import {
@@ -11,7 +12,6 @@ import {
   loadAnalysis,
   loadPoiResults,
   useAnalysisResults,
-  type ShownSummary,
 } from '../analysis-results.ts';
 import { AnalysisLegend } from './AnalysisLegend.tsx';
 import { CompareView } from './CompareView.tsx';
@@ -171,7 +171,7 @@ function LinesAt({
 }
 
 /** The summary for the point of interest on show (FR-20): counts per band, and the median. */
-function SummaryTable({ summary, breaks }: { summary: ShownSummary; breaks: readonly number[] }) {
+function SummaryTable({ summary, breaks }: { summary: PoiSummary; breaks: readonly number[] }) {
   const { rows, total } = summaryRows(summary, breaks);
   return (
     <table className="analysis-summary small">

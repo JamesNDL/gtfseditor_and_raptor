@@ -8,9 +8,9 @@ import {
   trafficFactorAt,
   type AnalysisDetail,
   type AnalysisSettings,
+  type PoiSummary,
 } from '@gtfs-editor/core';
 import { NO_ROAD_COLOUR, NO_SERVICE_COLOUR, bandColours } from '../analysis-colours.ts';
-import type { ShownSummary } from '../analysis-results.ts';
 
 /** The credit the drive times need (FR-19, A4). */
 export const OSM_CREDIT = 'Driving times © OpenStreetMap contributors (ODbL)';
@@ -67,7 +67,7 @@ export function readBreaks(
 }
 
 /** The breaks a summary was made for: where each band after the first starts. */
-export const summaryBreaks = (summary: ShownSummary): number[] =>
+export const summaryBreaks = (summary: PoiSummary): number[] =>
   summary.bands.slice(1).flatMap((band) => (band.from === null ? [] : [band.from]));
 
 /** Breaks as 'Lines at' shows them. */
@@ -89,7 +89,7 @@ export interface SummaryRow {
  * total, which is every sample point of a finished analysis (AC-FR-20.1).
  */
 export function summaryRows(
-  summary: ShownSummary,
+  summary: PoiSummary,
   breaks: readonly number[],
 ): { rows: SummaryRow[]; total: number } {
   const ranges = bandRanges(breaks);

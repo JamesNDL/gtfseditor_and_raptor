@@ -9,6 +9,7 @@ import {
   type TrafficFactors,
 } from '@gtfs-editor/core';
 import { fail, int } from '../http.ts';
+import { ROUTER_MODES } from './journeys-client.ts';
 
 /** The longest name kept, as for zones and points of interest. */
 const MAX_NAME = 80;
@@ -34,13 +35,22 @@ function numberOf(given: Fields, key: NumberSetting): number {
   return value;
 }
 
-/** The modes allowed: a list of the journey router's mode ids, at least one. */
+/** The modes allowed: a list of the journey router's mode ids, at least one, each one it knows. */
 function modesOf(value: unknown): string[] {
   if (value === undefined) return [...DEFAULT_ANALYSIS_SETTINGS.modes];
   if (!Array.isArray(value) || !value.every((mode) => typeof mode === 'string')) {
     throw fail(400, 'The setting modes must be a list of modes, such as ["bus", "train"]');
   }
   if (value.length === 0) throw fail(400, 'Allow at least one mode.');
+  // An unknown word would be stored and run with every pair no service, so it is refused here.
+  const unknown = value.filter((mode) => !ROUTER_MODES.includes(mode));
+  if (unknown.length > 0) {
+    throw fail(
+      400,
+      `Unknown mode${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}. ` +
+        `The modes are ${ROUTER_MODES.join(', ')}.`,
+    );
+  }
   return value;
 }
 

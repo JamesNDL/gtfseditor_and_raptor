@@ -44,7 +44,8 @@ export interface PtSplit {
 export interface PairTimes {
   journeyFound: boolean;
   ptSecs: number | null;
-  driveSecs: number | null;
+  /** The car time (FR-9): null when no drive was found. */
+  carSecs: number | null;
 }
 
 /** The traffic factor for the part of the day (DAY_BANDS) the departure falls in. */
@@ -65,15 +66,18 @@ export function accessRatio(ptSecs: number, carTimeSecs: number): number | null 
 
 /**
  * A worked-out pair's status (FR-12). No journey, or one longer than the longest journey, is no
- * service; no drive is no road. No service wins when both apply.
+ * service; no drive is no road. A car time of zero (a sample point on its point of interest's road
+ * spot, with no parking allowance) has no ratio, so it is no road too: every ok pair then has a
+ * ratio and the summary counts add up to the sample points (AC-FR-20.1). No service wins when both
+ * apply.
  */
 export function pairStatus(
   times: PairTimes,
   settings: Pick<AnalysisSettings, 'maxJourneyMins'>,
 ): Exclude<PairStatus, 'pending'> {
-  const { journeyFound, ptSecs, driveSecs } = times;
+  const { journeyFound, ptSecs, carSecs } = times;
   if (!journeyFound || ptSecs === null || ptSecs > settings.maxJourneyMins * 60) return 'noService';
-  if (driveSecs === null) return 'noRoad';
+  if (carSecs === null || carSecs <= 0) return 'noRoad';
   return 'ok';
 }
 
