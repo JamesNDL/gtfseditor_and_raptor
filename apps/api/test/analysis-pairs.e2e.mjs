@@ -47,12 +47,14 @@ function expected(point, poi) {
   const rideSecs = Math.round(d / 6);
   const boardAt = DEPART + 240 + 150;
   const pt = found ? 240 + 150 + rideSecs + 150 : null;
-  const stop = (p, time) => ({ name: 'Fake stop', lat: p.lat, lon: p.lon, time });
+  // The trip and stop ids are kept so the ride can be drawn along its path (D35).
+  const stop = (p, time) => ({ stop: 'F', name: 'Fake stop', lat: p.lat, lon: p.lon, time });
   const legs = found
     ? [
         { type: 'walk', secs: 150, metres: 155 },
         {
           type: 'ride',
+          trip: 'F1-1',
           route: 'F1',
           mode: 'bus',
           board: stop(point, boardAt),

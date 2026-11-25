@@ -11,13 +11,16 @@
 //   timetables 404 until a PUT, then ready with the version asked for.
 //
 // A test steers it with POST /fake/control {down?, road?, hold?, bulkAnswers?, tableAnswers?,
-// bulkError?, resetCounts?}:
+// bulkError?, ride?, resetCounts?}:
 //   down  true: every other request has its connection dropped, as if the router were stopped.
 //   road  false: health says the road side is not available.
 //   hold  true: timetables stay loading until it is set false again.
 //   bulkAnswers, tableAnswers  a number: answer that many more bulk journey (or road table)
 //         requests, then hold the next ones until it is raised or set to null (no limit).
 //   bulkError  words: bulk journey requests are refused with 400 and these words; null to stop.
+//   ride  a ride leg as the real router gives it (trip, route, routeId, mode, board and alight
+//         with stop id, name, lat, lon, time and position): every journey found rides it instead
+//         of the made-up ride, walking 150 s to it and from it; null to go back to the made-up one.
 //   resetCounts  true: the counts below start again from 0.
 // GET /fake/state gives {lastBulk, counts}: the last bulk journey request as sent, and how many
 // requests, journey queries and drive sources have been answered (a request held and then given
@@ -40,32 +43,41 @@ function metresBetween(a, b) {
 const tenths = (value) => Math.round(value * 10) / 10;
 const multipleOf = (value, n) => Math.round(value * 1e4) % n === 0;
 
-/** One line of a bulk answer for one query. */
-function journeyLine(query) {
+/** The made-up ride from `from` to `to` for a journey leaving at `depart` (see the top). */
+function madeUpRide(from, to, depart) {
+  const boardAt = depart + 240 + 150;
+  const alightAt = boardAt + Math.round(metresBetween(from, to) / 6);
+  const place = (p, time) => ({ stop: 'F', name: 'Fake stop', lat: p.lat, lon: p.lon, time });
+  return {
+    trip: 'F1-1',
+    route: 'F1',
+    routeId: 'F1',
+    mode: 'bus',
+    board: { ...place(from, boardAt), position: 0 },
+    alight: { ...place(to, alightAt), position: 1 },
+  };
+}
+
+/** One line of a bulk answer for one query, riding `fixedRide` when it is given. */
+function journeyLine(query, fixedRide) {
   const { id, from, to, depart } = query;
   if (multipleOf(from.lat, 7)) return { id, status: 'noJourney', reason: 'No journey was found' };
-  const d = metresBetween(from, to);
-  const start = depart + 240;
-  const boardAt = start + 150;
-  const alightAt = boardAt + Math.round(d / 6);
+  const ride = fixedRide ?? madeUpRide(from, to, depart);
+  const boardAt = ride.board.time;
+  const alightAt = ride.alight.time;
+  const start = boardAt - 150;
   const arrive = alightAt + 150;
-  const place = (p, time) => ({ stop: 'F', name: 'Fake stop', lat: p.lat, lon: p.lon, time });
   const legs = [
-    { type: 'walk', from, to: place(from), depart: start, arrive: boardAt, metres: 155 },
+    { type: 'walk', from, to: ride.board, depart: start, arrive: boardAt, metres: 155 },
     {
       type: 'ride',
-      trip: 'F1-1',
-      route: 'F1',
-      routeId: 'F1',
-      mode: 'bus',
       headsign: 'Fake',
+      ...ride,
       depart: boardAt,
       arrive: alightAt,
-      board: { ...place(from, boardAt), position: 0 },
-      alight: { ...place(to, alightAt), position: 1 },
       stayAboard: false,
     },
-    { type: 'walk', from: place(to), to, depart: alightAt, arrive, metres: 155 },
+    { type: 'walk', from: ride.alight, to, depart: alightAt, arrive, metres: 155 },
   ];
   const journey = {
     label: 'fastest',
@@ -81,14 +93,14 @@ function journeyLine(query) {
   return { id, status: 'ok', journey };
 }
 
-function bulk(res, body, counts) {
+function bulk(res, body, counts, ride) {
   const queries = body.queries ?? [];
   counts.bulkRequests++;
   counts.journeys += queries.length;
   res.writeHead(200, { 'content-type': 'application/x-ndjson' });
   let ok = 0;
   for (const query of queries) {
-    const line = journeyLine(query);
+    const line = journeyLine(query, ride);
     if (line.status === 'ok') ok++;
     res.write(`${JSON.stringify(line)}\n`);
   }
@@ -150,6 +162,7 @@ export async function startFakeRouter(port = 0) {
     bulkAnswers: null,
     tableAnswers: null,
     bulkError: null,
+    ride: null,
   };
   const zeroCounts = () => ({ bulkRequests: 0, journeys: 0, tableRequests: 0, drives: 0 });
   let counts = zeroCounts();
@@ -179,7 +192,7 @@ export async function startFakeRouter(port = 0) {
     if (req.method === 'POST' && pathname === '/fake/control') {
       for (const key of ['down', 'road', 'hold'])
         if (key in body) control[key] = Boolean(body[key]);
-      for (const key of ['bulkAnswers', 'tableAnswers', 'bulkError'])
+      for (const key of ['bulkAnswers', 'tableAnswers', 'bulkError', 'ride'])
         if (key in body) control[key] = body[key];
       if (body.resetCounts) counts = zeroCounts();
       return json(res, 200, control);
@@ -204,7 +217,7 @@ export async function startFakeRouter(port = 0) {
     if (req.method === 'POST' && pathname === '/v1/journeys/bulk') {
       lastBulk = body;
       if (control.bulkError !== null) return json(res, 400, { error: control.bulkError });
-      if (await allowed('bulkAnswers', res)) bulk(res, body, counts);
+      if (await allowed('bulkAnswers', res)) bulk(res, body, counts, control.ride);
       return;
     }
     if (req.method === 'POST' && pathname === '/v1/road/table') {

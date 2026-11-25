@@ -1,8 +1,9 @@
-// AA-21 (FR-15, D30; AC 2): one sample point's journey as drawn on the map: straight lines between
-// the ends of its legs, rides in their mode colour and labelled with the line, walks joining the
-// sample point, the stops and the point of interest, and the car path.
+// AA-21 (FR-15, D30, D35; AC 2): one sample point's journey as drawn on the map: rides along the
+// path the API gives (the vehicle's path, or a straight line when it is not known), in their mode
+// colour and labelled with the line; walks as straight lines joining the sample point, the stops
+// and the point of interest; and the car path.
 import type { Mode } from '../shared/api-client.ts';
-import type { PointDetail, StoredRideLeg } from '@gtfs-editor/core';
+import type { PointDetail, PointRideLeg } from '@gtfs-editor/core';
 import { describe, expect, it } from 'vitest';
 import { journeyPieces, modeLook } from './point-journey.ts';
 
@@ -17,7 +18,7 @@ const ride = (
   mode: string,
   from: [number, number],
   to: [number, number],
-): StoredRideLeg => ({
+): PointRideLeg => ({
   type: 'ride',
   route,
   mode,
@@ -25,6 +26,9 @@ const ride = (
   alight: { name: 'B', lon: to[0], lat: to[1], time: 29600 },
   secs: 600,
   metres: 3000,
+  // Along the vehicle's path: north first, then east, by way of a corner.
+  path: [from, [from[0], to[1]], to],
+  pathFrom: 'shape',
 });
 
 const POI = { lon: 151.3, lat: -33.8 };
@@ -68,7 +72,7 @@ describe('modeLook', () => {
 });
 
 describe('journeyPieces (AC 2)', () => {
-  it('draws walks and rides as straight lines between leg ends, rides in their mode colour', () => {
+  it('draws rides along their paths in their mode colour, and walks straight between them', () => {
     const pieces = journeyPieces(detail(), POI, look).filter((p) => p.kind !== 'car');
     expect(pieces).toEqual([
       {
@@ -86,6 +90,7 @@ describe('journeyPieces (AC 2)', () => {
         label: '333',
         line: [
           [151.21, -33.9],
+          [151.21, -33.85],
           [151.25, -33.85],
         ],
       },
@@ -95,6 +100,7 @@ describe('journeyPieces (AC 2)', () => {
         label: 'T1',
         line: [
           [151.25, -33.85],
+          [151.25, -33.8],
           [151.29, -33.8],
         ],
       },
@@ -108,6 +114,19 @@ describe('journeyPieces (AC 2)', () => {
         ],
       },
     ]);
+  });
+
+  it('draws a ride whose path is not known as the straight line the API gives', () => {
+    const straight: PointRideLeg = {
+      ...ride('333', 'bus', [151.21, -33.9], [151.25, -33.85]),
+      path: [
+        [151.21, -33.9],
+        [151.25, -33.85],
+      ],
+      pathFrom: 'straight',
+    };
+    const pieces = journeyPieces(detail({ legs: [straight], carPath: null }), POI, look);
+    expect(pieces.find((p) => p.kind === 'ride')?.line).toEqual(straight.path);
   });
 
   it('adds the car path as it came from the road router', () => {

@@ -1,7 +1,7 @@
 // AA-21 (FR-15, NFR-6; AC-FR-15.1, AC 3): what one sample point's detail says: each walk, wait
 // and ride of its journey in plain words, the walk/wait/ride split, the car time, and what is said
 // when there is no journey or the car path could not be fetched.
-import type { PointDetail, PtSplit, StoredLeg } from '@gtfs-editor/core';
+import type { PointDetail, PointLeg, PointRideLeg, PtSplit } from '@gtfs-editor/core';
 import { describe, expect, it } from 'vitest';
 import type { ModeLook } from '../point-journey.ts';
 import {
@@ -19,8 +19,18 @@ const look = (modeId: string): ModeLook =>
 
 const stop = (name: string, time: number) => ({ name, lat: -33.9, lon: 151.2, time });
 
+/** A ride's path as the API gives it: along its trip unless said otherwise. */
+const along: Pick<PointRideLeg, 'path' | 'pathFrom'> = {
+  path: [
+    [151.2, -33.9],
+    [151.21, -33.91],
+    [151.2, -33.9],
+  ],
+  pathFrom: 'shape',
+};
+
 /** Leaves at 08:00; walks 6 min, waits, Bus 333 08:10 to 08:22, changes, Train 08:30 to 08:40. */
-const LEGS: StoredLeg[] = [
+const LEGS: PointLeg[] = [
   { type: 'walk', secs: 360, metres: 447 },
   {
     type: 'ride',
@@ -30,6 +40,7 @@ const LEGS: StoredLeg[] = [
     alight: stop('Central', 8 * 3600 + 1320),
     secs: 720,
     metres: 6100,
+    ...along,
   },
   { type: 'transfer', secs: 180, metres: 160 },
   {
@@ -40,6 +51,7 @@ const LEGS: StoredLeg[] = [
     alight: stop('Strathfield', 8 * 3600 + 2400),
     secs: 600,
     metres: 11000,
+    ...along,
   },
   { type: 'walk', secs: 240, metres: 1260 },
 ];
@@ -110,7 +122,7 @@ describe('legRows (AC-FR-15.1)', () => {
   });
 
   it('leaves out an empty walk and a wait of under half a minute', () => {
-    const legs: StoredLeg[] = [
+    const legs: PointLeg[] = [
       { type: 'walk', secs: 0, metres: 0 },
       {
         type: 'ride',
@@ -120,6 +132,7 @@ describe('legRows (AC-FR-15.1)', () => {
         alight: stop('B', 8 * 3600 + 620),
         secs: 600,
         metres: 3000,
+        ...along,
       },
     ];
     expect(legRows(legs, 8 * 3600, look).map((r) => r.text)).toEqual([
@@ -128,12 +141,21 @@ describe('legRows (AC-FR-15.1)', () => {
   });
 
   it('says a change at the same stop without a walk', () => {
-    const legs: StoredLeg[] = [LEGS[1], { type: 'transfer', secs: 0, metres: 0 }, LEGS[3]];
+    const legs: PointLeg[] = [LEGS[1], { type: 'transfer', secs: 0, metres: 0 }, LEGS[3]];
     expect(legRows(legs, 8 * 3600 + 600, look).map((r) => r.text)).toEqual([
       'Bus 333 from Bondi Junction to Central, 12 min',
       'Change at Central',
       'Wait 8 min',
       'Train T1 from Central to Strathfield, 10 min',
+    ]);
+  });
+
+  it('says when a ride is drawn straight because its path is not known (D35)', () => {
+    const ride = LEGS[1];
+    if (ride.type !== 'ride') throw new Error('the test legs changed');
+    const straight: PointLeg = { ...ride, path: [], pathFrom: 'straight' };
+    expect(legRows([straight], 8 * 3600 + 600, look).map((r) => r.text)).toEqual([
+      'Bus 333 from Bondi Junction to Central, 12 min (path not known, drawn straight)',
     ]);
   });
 });
