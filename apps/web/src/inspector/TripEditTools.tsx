@@ -1,4 +1,4 @@
-import { formatSecs } from '@gtfs-editor/core';
+import { formatSecs, nearestShift } from '@gtfs-editor/core';
 import { useState } from 'react';
 import { useApi, type TripDetail } from '../shared/api-client.ts';
 import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
@@ -76,9 +76,8 @@ export function TripEditTools({ trip }: { trip: TripDetail }) {
           disabled={busy || departAt === clock(trip.startSecs) || !departAt}
           onClick={() => {
             const [h, m] = departAt.split(':').map(Number);
-            // Keep the trip on the same side of midnight it is on now.
-            const dayStart = Math.floor(trip.startSecs / 86400) * 86400;
-            const delta = dayStart + h * 3600 + m * 60 - Math.floor(trip.startSecs / 60) * 60;
+            // Move to the nearest such time, either side of midnight (FR-11).
+            const delta = nearestShift(Math.floor(trip.startSecs / 60) * 60, h * 3600 + m * 60);
             if (delta !== 0) void applyEdit({ kind: 'shift', tripIds: [trip.id], delta, ripple });
           }}
         >

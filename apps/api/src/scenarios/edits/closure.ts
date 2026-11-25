@@ -31,7 +31,7 @@ import {
   type ReshapePlan,
 } from './reshape.ts';
 import { entersAvoid, ROAD_MODES, type Avoid } from '../../routing/roads.ts';
-import { scenarioOf, visible, type Scenario } from '../scenarios.ts';
+import { scenarioOf, visible, type Scenario } from '../engine.ts';
 import { trackPath } from '../../routing/tracks.ts';
 import { fail } from '../../http.ts';
 
@@ -954,7 +954,7 @@ export function closureRoutes(
   app: FastifyInstance,
   sql: Sql,
   ctx: {
-    loadScenario: (id: number) => Promise<Scenario>;
+    loadScenario: (sql: Sql, id: number) => Promise<Scenario>;
     idParam: (req: FastifyRequest) => number;
     deps: ClosureDeps;
   },
@@ -1120,7 +1120,7 @@ export function closureRoutes(
 
   /** Closures this scenario has made, as GeoJSON for the map. */
   app.get('/api/scenarios/:id/closures', async (req) => {
-    const sc = await ctx.loadScenario(ctx.idParam(req));
+    const sc = await ctx.loadScenario(sql, ctx.idParam(req));
     const rows = await sql`
       select c.id, c.kind, c.label, c.from_secs, c.to_secs, ST_AsGeoJSON(c.geom) as geometry from scenario_closures c
       where c.scenario_id = ${sc.id} and c.created_edit <= ${sc.head}`;
