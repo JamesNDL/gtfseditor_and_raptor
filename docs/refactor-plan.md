@@ -153,7 +153,7 @@ packages/core/src/
   core.test.ts      split into a test beside each file it covers
 
 packages/gtfs/
-  sql/              schema.sql (later migrations/, stage 6)
+  sql/migrations/   0001_initial.sql, then one numbered file per schema change (stage 6)
   src/
     db.ts
     feed/           feed-cache.ts, unzip.ts, audit.ts, audit-db.ts
@@ -219,7 +219,7 @@ Add Vitest tests for the pure web logic: the scenario client (stale-edit and con
 
 ## Stage 6: Database changes as numbered migrations (1 day)
 
-- Freeze today's `schema.sql` as `packages/gtfs/sql/migrations/0001_initial.sql`, and record which migrations have run in a `schema_migrations` table. Existing databases are marked as already at 0001.
+- Freeze today's `schema.sql` as `packages/gtfs/sql/migrations/0001_initial.sql`, and record which migrations have run in a `schema_migrations` table. A database with nothing recorded runs 0001 once (it is idempotent), so an existing database is brought level with a fresh one.
 - Each later change is a new numbered file that runs once. Do this before the next schema change; note that 4.3 is a schema change, so it can be migration 0002.
 
 ## Stage 7: Docs and way of working (1–2 days)

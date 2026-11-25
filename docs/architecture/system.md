@@ -112,7 +112,7 @@ flowchart TB
 | `apps/web` | Everything the user sees. It holds one zustand store. Vehicle animation, the clock and simulator loads are kept outside React for speed. Every change goes through `scenario.ts` `applyEdit`. | Decide whether an edit is valid, or work out clashes (both are done on the server). |
 | `apps/api` | The HTTP API, the scenario edit engine, the clash rules, map tiles, export, and the simulator back end that drives the router and keeps its results. | Import feeds (that is a CLI). |
 | `packages/core` | Logic with no database or IO: vehicle-day chaining, the pack format, reshape geometry and timing, the delete-stop rule, waits, physical limits, time formatting. Unit-tested. | Depend on anything. |
-| `packages/gtfs` | Download, staging and import of a feed into a baseline; the database schema and migration (`sql/schema.sql`); pack building; the audit and export-check CLIs. | Serve HTTP. |
+| `packages/gtfs` | Download, staging and import of a feed into a baseline; the database schema as numbered migrations (`sql/migrations/`); pack building; the audit and export-check CLIs. | Serve HTTP. |
 | `services/router` | A Java RAPTOR journey router (an algorithm for public transport journey planning) and the passenger simulator, behind an HTTP service. It loads timetables from the editor's GTFS export. | Read the editor's database. It only sees exported zips. |
 
 The router's own modules are `router-core`, `router-gtfs`, `router-sim`, `router-server`, `router-road` (an empty placeholder) and `router-bench` (a placeholder). They are described in `services/router/README.md` and `docs/router-plan.md`.
@@ -341,14 +341,14 @@ This section is placed last so that the section numbers other documents cite sta
 | An edit kind | `apps/api/src/scenarios/edits/<kind>.ts` and one line in the registry (after stage 3) |
 | A clash rule | `apps/api/src/scenarios/clashes.ts` |
 | An API route | the `routes.ts` of its feature folder under `apps/api/src/` |
-| A schema change | a new numbered file in `packages/gtfs/sql/migrations/` (after stage 6) |
+| A schema change | a new numbered file in `packages/gtfs/sql/migrations/` (`NNNN_<what>.sql`, the next free number); never edit a merged one |
 | A panel or component | its feature folder in `apps/web/src/`, with its CSS beside it |
 | A map layer | a hook `apps/web/src/map/use-<thing>-layers.ts` called from `MapView.tsx` |
 | A CLI | `packages/gtfs/src/cli/`, with an npm script |
 
 **The four standards.** Use whichever is stricter of these and the project's own rules.
 1. **Folders by purpose**, as above. Checked by review against `docs/codebase-map.md`; there is no automatic check.
-2. **Short files.** Aim for under about 200 lines; over 300 is too long and is split by responsibility. Exempt: `schema.sql` and migrations, generated files, lock files and large fixture data. Not enforced yet: there are 28 files over 300 lines (I6), shrinking under refactor stages 3 and 5.
+2. **Short files.** Aim for under about 200 lines; over 300 is too long and is split by responsibility. Exempt: migrations, generated files, lock files and large fixture data. Not enforced yet: there are 28 files over 300 lines (I6), shrinking under refactor stages 3 and 5.
 3. **Strong typing, no `any`.** TypeScript `strict` is on (`tsconfig.base.json`), and `tsconfig.node.json` also rejects imports Node can't run. `any`, `as never` and unexplained casts are not allowed in new code, and request bodies get real types (D9). Not enforced yet: 20 uses of `any` and 32 `as never` (I6). Java compiles with `-Xlint:all -Werror`.
 4. **No unused code.** No unused imports, variables, parameters, functions, files or dependencies, and no commented-out code. Not enforced yet: `noUnusedLocals` and `noUnusedParameters` are off, and oxlint runs only its correctness rules (I6).
 

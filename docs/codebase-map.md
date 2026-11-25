@@ -72,8 +72,9 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | Part | Purpose | Used by | Start reading | Tests |
 |---|---|---|---|---|
 | `packages/core/src/` | Pure logic with no IO and no dependencies: `vehicle-days`, `pack`, `waits`, `limits`, `time`, `simplify` at the top; `edits/reshape` and `edits/delete-stop` (the parts of those edit kinds that need no database). Exported as raw `.ts` from `index.ts`. | api, gtfs, web (formatting, packs, waits only) | `index.ts` | `*.test.ts` beside each |
-| `packages/gtfs/sql/schema.sql` | **The whole database schema.** Idempotent, and run at every API start and every import (`migrate()`). | db.ts | | n/a |
-| `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()` | api, CLIs | | n/a |
+| `packages/gtfs/sql/migrations/` | **The database schema**, as numbered migrations `NNNN_<what>.sql`. `0001_initial.sql` is the schema as it was before migrations; a schema change is a new file, and a merged file is never edited. Each runs once, at the first API start or import after it lands (`migrate()`), and is recorded in `schema_migrations`. | db.ts | `0001_initial.sql` | n/a |
+| `packages/gtfs/src/db.ts` | `connect()` (postgres.js, `DATABASE_URL`) and `migrate()`, which keeps `schema_migrations` | api, CLIs | | n/a |
+| `packages/gtfs/src/migrate.ts`, `migration-files.ts` | The migration runner (which numbered files to run, in what order; a database with nothing recorded runs 0001 like a fresh one) and the reading of the files | db.ts | `runMigrations` | `*.test.ts` beside each |
 | `packages/gtfs/src/feed/` | `feed-cache.ts` downloads the TfNSW feed into `data/feeds/` (`API_KEY`), or uses a feed on disk (`FEED_PATH`, `localFeed`); `unzip.ts`; `audit.ts` and `audit-db.ts`, the phase 0 data audit (DuckDB, `feed:audit`) | import, CLIs | `ensureFeed` | n/a |
 | `packages/gtfs/src/import/` | `stage.ts` (COPY into `staging.*`), `baseline.ts` (one service date into the baseline tables), `replace-guard.ts` (refuses a day that has scenarios without `--replace`; date checks), `finish.ts` (counts, marks ready), `vehicle-days.ts`, `packs.ts` (writes under `PACKS_DIR`) | `cli/import.ts`, `cli/packs.ts` | `cli/import.ts` | `replace-guard.test.ts` |
 | `packages/gtfs/src/cli/` | What the npm scripts run: `fetch.ts` (`feed:fetch`), `import.ts` (`import`), `packs.ts` (`packs`), `backup.ts` (`db:backup`, `db:restore`; writes `data/backups/`), and `export-check.ts` with `export-references.ts` (`export:check`: downloads an export from the running API into `data/exports/` or `EXPORTS_DIR` and checks it: references, ids, monotonic times, and that it matches the feed for the published day) | npm scripts, e2e | | n/a |
@@ -95,14 +96,14 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 
 | Entity | Defined in | Stored | Written by |
 |---|---|---|---|
-| Baseline (one service date) | `schema.sql` `baselines` | Postgres | importer |
-| Routes, patterns, trips, stop times, stops, shapes, vehicle days | `schema.sql` | Postgres; scenario rows carry `scenario_id` and `created_edit` | importer; edit engine |
-| Scenario, edit | `schema.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios/engine.ts` (`applyEdit`), `scenarios.ts` and the edit modules in `scenarios/edits/` |
+| Baseline (one service date) | `migrations/0001_initial.sql` `baselines` | Postgres | importer |
+| Routes, patterns, trips, stop times, stops, shapes, vehicle days | `migrations/0001_initial.sql` | Postgres; scenario rows carry `scenario_id` and `created_edit` | importer; edit engine |
+| Scenario, edit | `migrations/0001_initial.sql` `scenarios`, `scenario_edits`, `scenario_removed`, `scenario_removed_stops`, `scenario_closures` | Postgres | `apps/api/src/scenarios/engine.ts` (`applyEdit`), `scenarios.ts` and the edit modules in `scenarios/edits/` |
 | Clash | `scenarios/scenarios.ts` `Conflict`, `conflictsIn` | Not stored (feed clashes: `baseline_conflicts`) | API, on request |
-| Vehicle type | `schema.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `catalogue/routes.ts` |
+| Vehicle type | `migrations/0001_initial.sql` `vehicle_types`, view `trip_vehicle` | Postgres | seed, import, `catalogue/routes.ts` |
 | Pack | `packages/core/src/pack.ts` | `data/packs/<baseline>/<mode>.bin` | `import/packs.ts` |
-| Demand set | `schema.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim/sim.ts`; the router generates made-up sets |
-| Sim run and results | `schema.sql` `sim_*` | Postgres partitions per run; router files in `data/router/sim/` | `sim/sim.ts`, the router |
+| Demand set | `migrations/0001_initial.sql` `demand_sets`; format in `services/router/README.md` | `data/sim/demand/` | `sim/sim.ts`; the router generates made-up sets |
+| Sim run and results | `migrations/0001_initial.sql` `sim_*` | Postgres partitions per run; router files in `data/router/sim/` | `sim/sim.ts`, the router |
 | Router timetable and snapshot | `Timetable.java`, `TimetableSnapshot.java` | Memory; `data/router/snapshots/` | router |
 
 ## Where do I find…
@@ -113,7 +114,7 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 - **Clash rules:** `conflictsIn` in `apps/api/src/scenarios/scenarios.ts`. Limits are in `packages/core/src/limits.ts`. The display is in `apps/web/src/scenarios/ScenarioPanel.tsx` (`ConflictRow`) and `timeline/PlatformView.tsx`.
 - **Run times for new stretches:** `apps/api/src/routing/timings.ts`, with time-of-day bands in `packages/core/src/time.ts` (`DAY_BANDS`).
 - **Road and track paths:** `apps/api/src/routing/roads.ts` (OSRM) and `apps/api/src/routing/tracks.ts`.
-- **Database tables:** `packages/gtfs/sql/schema.sql`. Sim partitions are created at runtime in `apps/api/src/sim/sim.ts`.
+- **Database tables:** `packages/gtfs/sql/migrations/0001_initial.sql`, plus any later numbered migrations beside it. Sim partitions are created at runtime in `apps/api/src/sim/sim.ts`.
 - **Map layers:** `apps/web/src/map/MapView.tsx`. Tiles come from `apps/api/src/network/map-data.ts` `/tiles`.
 - **Vehicle animation:** `apps/web/src/vehicles/vehicles.ts`, `packages/core/src/pack.ts`, `waits.ts`.
 - **Timeline dragging:** `apps/web/src/timeline/TimelineCanvas.tsx`.
@@ -234,9 +235,9 @@ packages/core/src/
                     (core.test.ts is now split into a test beside each file it covers)
 
 packages/gtfs/
-  sql/              schema.sql (later migrations/, stage 6)
+  sql/migrations/   0001_initial.sql, then one numbered file per schema change
   src/
-    db.ts
+    db.ts, migrate.ts, migration-files.ts
     feed/           feed-cache.ts, unzip.ts, audit.ts, audit-db.ts
     import/         as now
     cli/            fetch.ts, import.ts, packs.ts, backup.ts, export-check.ts, export-references.ts
