@@ -1,5 +1,6 @@
 // The Access pane, in the left column: the day's access analyses with where each stands, Open and
-// Delete, and "New analysis". The setup and results screens come in later tickets (AA-19, AA-20).
+// Delete, and "New analysis". The setup shows the zone and points of interest (AA-18); its
+// settings and Run, and the results screens, come in later tickets (AA-19, AA-20).
 // See docs/architecture/access-analysis.md §5.2.
 import type { AnalysisListItem } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
@@ -20,6 +21,8 @@ import {
   stateText,
   timetableText,
 } from './analysis-state.ts';
+import { PoiPicker } from './setup/PoiPicker.tsx';
+import { ZonePicker } from './setup/ZonePicker.tsx';
 import './analysis.css';
 
 /** How often the list is fetched again while an analysis is waiting or running. */
@@ -96,18 +99,26 @@ export function AnalysisPanel() {
           </div>
         </>
       ) : (
-        <div className="analysis-head">
-          <button
-            className="button small-button"
-            title="Back to the day's analyses"
-            onClick={() => {
-              const { analysis, set } = useStore.getState();
-              set({ analysis: backToList(analysis) });
-            }}
-          >
-            Back to the list
-          </button>
-        </div>
+        <>
+          <div className="analysis-head">
+            <button
+              className="button small-button"
+              title="Back to the day's analyses"
+              onClick={() => {
+                const { analysis, set } = useStore.getState();
+                set({ analysis: backToList(analysis) });
+              }}
+            >
+              Back to the list
+            </button>
+          </div>
+          {screen === 'setup' && (
+            <div className="analysis-body">
+              <ZonePicker />
+              <PoiPicker />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

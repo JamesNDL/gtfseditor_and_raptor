@@ -1,7 +1,8 @@
 // The Access pane's calls to the editor's API (docs/architecture/access-analysis.md §4.4, §5.2),
 // and the list of the day's analyses, kept here rather than in the app store so that the store
-// gains only its one `analysis` field (D29). The rail reads it for its "running" badge.
-import type { AnalysisListItem } from '@gtfs-editor/core';
+// gains only its one `analysis` field (D29). The rail reads it for its "running" badge. The saved
+// zones and points of interest are kept here too, for the setup and the map.
+import type { AnalysisListItem, PoiBody, PointOfInterest, Zone, ZoneBody } from '@gtfs-editor/core';
 import { create } from 'zustand';
 import { useStore } from '../app/store.ts';
 import { getJson } from '../shared/api-client.ts';
@@ -37,4 +38,93 @@ export async function deleteAnalysis(id: number): Promise<void> {
   if (res.ok) return;
   const body = (await res.json().catch(() => ({}))) as { message?: string };
   throw new Error(body.message ?? `The analysis could not be deleted (${res.status})`);
+}
+
+// ---- zones and points of interest (FR-4, FR-5; apps/api/src/analysis/places-routes.ts) -------
+
+interface Places {
+  /** The saved zones by name, or null before they are first fetched. */
+  zones: Zone[] | null;
+  /** The saved points of interest by name, or null before they are first fetched. */
+  pois: PointOfInterest[] | null;
+  /** Why the last change to a zone failed, or null. */
+  zoneError: string | null;
+  /** Why the last change to a point of interest failed, or null. */
+  poiError: string | null;
+}
+
+/** The saved zones and points of interest, which belong to no day (D25). */
+export const usePlaces = create<Places>(() => ({
+  zones: null,
+  pois: null,
+  zoneError: null,
+  poiError: null,
+}));
+
+/** Sends a change to the API and answers its reply, or fails with the API's own words. */
+async function send<T>(url: string, method: string, body?: object): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    ...(body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+  const reply = (await res.json().catch(() => ({}))) as T & { message?: string };
+  if (!res.ok) throw new Error(reply.message ?? `${url} responded ${res.status}`);
+  return reply;
+}
+
+const ZONES = '/api/analysis/zones';
+const POIS = '/api/analysis/pois';
+
+/** Fetches the saved zones into the list. */
+export async function refreshZones(): Promise<void> {
+  usePlaces.setState({ zones: await getJson<Zone[]>(ZONES) });
+}
+
+/** Fetches the saved points of interest into the list. */
+export async function refreshPois(): Promise<void> {
+  usePlaces.setState({ pois: await getJson<PointOfInterest[]>(POIS) });
+}
+
+/** Saves a drawn zone and answers it; the list is fetched again. */
+export async function saveZone(body: ZoneBody): Promise<Zone> {
+  const zone = await send<Zone>(ZONES, 'POST', body);
+  await refreshZones();
+  return zone;
+}
+
+/** Renames a zone. */
+export async function renameZone(id: number, name: string): Promise<void> {
+  await send<Zone>(`${ZONES}/${id}`, 'PATCH', { name });
+  await refreshZones();
+}
+
+/** Deletes a zone; analyses that used it keep their own copy (D25). */
+export async function deleteZone(id: number): Promise<void> {
+  await send<{ ok: true }>(`${ZONES}/${id}`, 'DELETE');
+  await refreshZones();
+}
+
+/** Saves a placed point of interest and answers it; the list is fetched again. */
+export async function savePoi(body: PoiBody): Promise<PointOfInterest> {
+  const poi = await send<PointOfInterest>(POIS, 'POST', body);
+  await refreshPois();
+  return poi;
+}
+
+/** Renames a point of interest. */
+export async function renamePoi(id: number, name: string): Promise<void> {
+  await send<PointOfInterest>(`${POIS}/${id}`, 'PATCH', { name });
+  await refreshPois();
+}
+
+/** Moves a point of interest. */
+export async function movePoi(id: number, lon: number, lat: number): Promise<void> {
+  await send<PointOfInterest>(`${POIS}/${id}`, 'PATCH', { lon, lat });
+  await refreshPois();
+}
+
+/** Deletes a point of interest; analyses that used it keep their own copy (D25). */
+export async function deletePoi(id: number): Promise<void> {
+  await send<{ ok: true }>(`${POIS}/${id}`, 'DELETE');
+  await refreshPois();
 }
