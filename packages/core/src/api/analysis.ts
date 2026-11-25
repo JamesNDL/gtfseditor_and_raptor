@@ -86,6 +86,15 @@ export interface AnalysisListItem {
   finishedAt: string | null;
 }
 
+/** An analysis as `GET /api/analyses?baseline=` lists it, with what it can be compared with. */
+export interface AnalysisListEntry extends AnalysisListItem {
+  /**
+   * The other analyses of the day it can be compared with (FR-17, D31): both finished, the same
+   * zone outline and spacing, and at least one saved point of interest in common. Rising ids.
+   */
+  comparableWith: number[];
+}
+
 /** The zone an analysis copied when it was made. */
 export interface AnalysisZone {
   /** The saved zone it came from, or null once that is deleted. */
