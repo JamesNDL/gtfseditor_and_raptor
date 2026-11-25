@@ -7,7 +7,7 @@ import { registerBaselineRoutes } from './network/baselines.ts';
 import { registerInspectorRoutes } from './network/inspector.ts';
 import { registerMapDataRoutes } from './network/map-data.ts';
 import { registerTimelineRoutes } from './network/timelines.ts';
-import { registerScenarioRoutes } from './scenarios/scenarios.ts';
+import { registerScenarioRoutes } from './scenarios/routes.ts';
 import { registerSimRoutes } from './sim/sim.ts';
 import { registerSimResultRoutes } from './sim/results-read.ts';
 

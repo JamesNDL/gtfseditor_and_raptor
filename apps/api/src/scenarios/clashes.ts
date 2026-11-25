@@ -6,11 +6,7 @@ import { readTripClashes } from './clashes-read.ts';
 import { readRealityChecks } from './clashes-reality.ts';
 import { bestFree, platformChoices } from './edits/schedule.ts';
 import type { Scenario } from './engine.ts';
-
-export const minutes = (secs: number) => {
-  const m = Math.abs(secs) / 60;
-  return `${Number.isInteger(m) ? m : m.toFixed(1)} min`;
-};
+import { minutes } from './wording.ts';
 
 // -------------------------------------------------------------------------
 // Conflicts caused by the scenario's own trips
