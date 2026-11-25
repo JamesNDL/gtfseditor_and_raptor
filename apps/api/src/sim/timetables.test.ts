@@ -5,8 +5,9 @@ import type { AddressInfo } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type * as TimetablesModule from './timetables.ts';
 
-type Timetables = typeof import('./timetables.ts');
+type Timetables = typeof TimetablesModule;
 
 /** One call the fake router received. */
 interface Call {

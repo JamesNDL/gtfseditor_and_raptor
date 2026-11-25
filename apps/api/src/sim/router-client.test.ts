@@ -4,8 +4,9 @@ import type { AddressInfo } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type * as RouterClientModule from './router-client.ts';
 
-type RouterClient = typeof import('./router-client.ts');
+type RouterClient = typeof RouterClientModule;
 
 /** What the fake router last received. */
 interface Received {
