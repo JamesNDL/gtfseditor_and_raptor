@@ -227,10 +227,15 @@ export function registerExportRoutes(app: FastifyInstance, sql: Sql) {
         select id as vehicle_type_id, name, mode_id as mode, cars, seated, standing, fleet_size,
                capacity_is_placeholder::int as capacity_is_placeholder
         from vehicle_types order by 1`,
+      // origin_trip_id is the published trip each trip came from, so runs can be compared across
+      // scenarios (FR-9): a published trip's own id, a changed trip's original, and empty for a
+      // trip the scenario made new. Readers find columns by name, so it goes last.
       'editor_trip_vehicles.txt': `
         select t.gtfs_id as trip_id, t.vehicle_day_id as vehicle_id, vd.label as vehicle_label,
-               coalesce(vd.source, '') as vehicle_source, tv.vehicle_type_id, tv.assumed::int as vehicle_type_assumed
+               coalesce(vd.source, '') as vehicle_source, tv.vehicle_type_id, tv.assumed::int as vehicle_type_assumed,
+               case when t.scenario_id is null then t.gtfs_id else og.gtfs_id end as origin_trip_id
         from trips t join trip_vehicle tv on tv.trip_id = t.id left join vehicle_days vd on vd.id = t.vehicle_day_id
+        left join trips og on og.id = t.origin_trip_id
         where ${live} order by 1`,
     };
 

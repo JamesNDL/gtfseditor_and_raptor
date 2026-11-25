@@ -5,7 +5,7 @@
 //                                                  (the same, cut to a box and without shapes.txt: much quicker)
 // Writes to data/exports/<name> (check, or --out=<name>); EXPORTS_DIR=<folder> writes there instead.
 //
-// Checks: every reference resolves; ids are unique; every trip has two or more stop times; times
+// Checks: every reference resolves, also in the editor's vehicle files; ids are unique; every trip has two or more stop times; times
 // and distances never run backwards; and, for the published day, that trips and stop times match
 // the original TfNSW feed exactly. For a scenario it also checks the trips the scenario made or
 // changed against what a vehicle can do: none runs a stretch faster than its mode can go unless a
@@ -18,6 +18,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { checkReferences } from './export-references.ts';
+import { vehicleFileProblems } from './export-vehicles.ts';
 import { unzip } from '../feed/unzip.ts';
 
 const API = process.env.API ?? 'http://localhost:3001';
@@ -92,6 +93,15 @@ console.log('    ', JSON.stringify(sizes));
 
 await checkReferences(count);
 ok('every reference resolves');
+const vehicleProblems = await vehicleFileProblems(outDir);
+assert.deepEqual(
+  vehicleProblems,
+  [],
+  `the vehicle files are wrong:\n${vehicleProblems.join('\n')}`,
+);
+ok(
+  'the vehicle files name only trips and vehicle types in the export, and where each trip came from',
+);
 
 // Uniqueness and ordering.
 assert.equal(await count(`select trip_id from trips group by 1 having count(*) > 1`), 0);
