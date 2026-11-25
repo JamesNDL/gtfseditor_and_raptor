@@ -82,8 +82,8 @@ describe('planRoadData: the extract', () => {
   });
 
   it('takes --data relative to where npm was run', () => {
-    const args = parseRoadDataArgs(['--data', '..\\other data']);
-    expect(planRoadData(args, facts({ cwd: 'D:\\work\\here' })).data).toBe('D:\\work\\other data');
+    const args = parseRoadDataArgs(['--data', '..\\other-data']);
+    expect(planRoadData(args, facts({ cwd: 'D:\\work\\here' })).data).toBe('D:\\work\\other-data');
   });
 });
 
