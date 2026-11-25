@@ -3,6 +3,7 @@
 // counts add up to the sample points.
 import { DEFAULT_ANALYSIS_SETTINGS } from '@gtfs-editor/core';
 import { describe, expect, it } from 'vitest';
+import { bandColours } from '../analysis-colours.ts';
 import type { ShownSummary } from '../analysis-results.ts';
 import {
   OSM_CREDIT,
@@ -108,7 +109,10 @@ describe('summaryRows and ratioText (AC-FR-20.1)', () => {
       ['No service', 4],
       ['No road', 1],
     ]);
-    expect(rows.slice(0, 3).map((r) => r.colour)).toEqual(['#2c7bb6', '#ffffbf', '#d73027']);
+    // Three bands take the scale's two ends and its middle, as the map draws them.
+    expect(rows.slice(0, 3).map((r) => r.colour)).toEqual(bandColours(3));
+    expect(rows[0]?.colour).toBe('#2c7bb6');
+    expect(rows[2]?.colour).toBe('#d73027');
     expect(rows.slice(3).map((r) => r.colour)).toEqual(['#7f7f7f', '#cccccc']);
     expect(total).toBe(15);
   });
