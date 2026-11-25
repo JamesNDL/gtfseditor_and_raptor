@@ -3,8 +3,8 @@
 // the API (`breaksOf` in apps/api/src/analysis/results-read.ts), the summary table's rows, and the
 // downloads (FR-18).
 import {
-  formatSecs,
   settingsProblem,
+  timeText,
   trafficFactorAt,
   type AnalysisDetail,
   type AnalysisSettings,
@@ -36,8 +36,9 @@ export function bandLabel({ from, to }: BandRange): string {
 const n = (value: number): string => value.toLocaleString('en-AU');
 
 /**
- * The analysis's settings in one line for the legend (FR-19): the timetable, departure, spacing,
- * longest walk, parking allowance and the traffic factor used at the departure time.
+ * The analysis's settings in one line for the legend (FR-19): the timetable, the time ("Depart
+ * 08:00" or "Arrive by 08:00", FR-21), spacing, longest walk, parking allowance and the traffic
+ * factor used at that time.
  */
 export function settingsLine({
   scenarioName,
@@ -45,7 +46,7 @@ export function settingsLine({
 }: Pick<AnalysisDetail, 'scenarioName' | 'settings'>): string {
   return [
     scenarioName ?? 'Published day',
-    formatSecs(s.departSecs),
+    timeText(s),
     `${n(s.spacingM)} m`,
     `walk ${n(s.maxWalkM)} m`,
     `parking ${n(s.parkingMins)} min`,

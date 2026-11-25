@@ -5,10 +5,10 @@
 import {
   analysisProblem,
   ANALYSIS_LIMITS,
-  formatSecs,
   gridCount,
   sampleGrid,
   settingsProblem,
+  timeText,
   type AnalysisCreateBody,
   type GeoJsonPosition,
 } from '@gtfs-editor/core';
@@ -126,6 +126,6 @@ export async function createAnalysis(sql: Sql, given: unknown): Promise<number> 
   await checkRouters();
 
   const timetable = scenarioName ?? 'Published day';
-  const name = body.name ?? `${zone.name} · ${formatSecs(body.settings.departSecs)} · ${timetable}`;
+  const name = body.name ?? `${zone.name} · ${timeText(body.settings)} · ${timetable}`;
   return store(sql, body, name, scenarioName, ring);
 }

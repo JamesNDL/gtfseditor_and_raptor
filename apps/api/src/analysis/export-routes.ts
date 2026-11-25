@@ -43,7 +43,8 @@ function exportPairsOf(sql: Sql, analysisId: number): Promise<ExportPair[]> {
     select p.seq, p.i, p.j, p.lon, p.lat, r.poi_seq as "poiSeq", o.name as "poiName", r.status,
            r.pt_secs as "ptSecs", r.walk_secs as "walkSecs", r.wait_secs as "waitSecs",
            r.ride_secs as "rideSecs", r.rides, null as legs, r.drive_secs as "driveSecs",
-           r.drive_metres as "driveMetres", r.car_secs as "carSecs", r.ratio
+           r.drive_metres as "driveMetres", r.car_secs as "carSecs", r.ratio,
+           r.early_wait_secs as "earlyWaitSecs"
     from analysis_points p
     join analysis_results r on r.analysis_id = p.analysis_id and r.point_seq = p.seq
     join analysis_pois o on o.analysis_id = p.analysis_id and o.seq = r.poi_seq

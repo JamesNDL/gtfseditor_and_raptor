@@ -12,6 +12,7 @@ export * from './analysis/grid.ts';
 export * from './analysis/limits.ts';
 export * from './analysis/defaults.ts';
 export * from './analysis/ratio.ts';
+export * from './analysis/time-mode.ts';
 export * from './analysis/summary.ts';
 export * from './analysis/compare.ts';
 export * from './analysis/contours.ts';

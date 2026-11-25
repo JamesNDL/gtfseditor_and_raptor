@@ -1,14 +1,22 @@
 // One sample point picked on the results map (FR-15; docs/architecture/access-analysis.md §5.2):
 // for the point of interest on show, its public transport journey leg by leg with the lines used,
 // both times, the access ratio, and a bar splitting the public transport time into walking,
-// waiting and riding. The journey and the car path are drawn on the map from the same answer
+// waiting and riding, and for arrive-by the early wait, with when the journey arrives (FR-21). The journey and the car path are drawn on the map from the same answer
 // (map/use-analysis-point-layers.ts). Escape, the close button or a click away lets it go.
 import type { AnalysisDetail } from '@gtfs-editor/core';
 import { useEffect } from 'react';
 import { useStore } from '../../app/store.ts';
 import { clearPointDetail, isDetailFor, loadPointDetail, usePointDetail } from '../point-detail.ts';
 import { modeLook } from '../point-journey.ts';
-import { carPathText, carText, journeyText, legRows, splitParts } from './point-detail-text.ts';
+import {
+  arrivalText,
+  carPathText,
+  carText,
+  journeyStartSecs,
+  journeyText,
+  legRows,
+  splitParts,
+} from './point-detail-text.ts';
 import { ratioText } from './results-text.ts';
 import './point-detail.css';
 
@@ -43,6 +51,7 @@ export function PointDetail({ analysis, seq }: { analysis: AnalysisDetail; seq: 
   const poi = analysis.pois.find((p) => p.seq === poiSeq);
   const detail = isDetailFor(shown, key) ? shown.detail : null;
   const look = (modeId: string) => modeLook(modes, modeId);
+  const arrival = detail?.pt ? arrivalText(analysis.settings, detail.pt) : null;
 
   return (
     <section className="analysis-section analysis-point" aria-label="Sample point">
@@ -76,17 +85,25 @@ export function PointDetail({ analysis, seq }: { analysis: AnalysisDetail; seq: 
             </tbody>
           </table>
           {detail.pt && detail.pt.ptSecs > 0 && <SplitBar parts={splitParts(detail.pt)} />}
-          {detail.legs && detail.legs.length > 0 && (
+          {detail.pt && detail.legs && detail.legs.length > 0 && (
             <ol className="analysis-legs small">
-              {legRows(detail.legs, analysis.settings.departSecs, look).map((row, k) => (
-                <li key={k} className={`analysis-leg analysis-leg-${row.kind}`}>
-                  <i
-                    className="analysis-leg-mark"
-                    style={row.colour ? { background: row.colour } : undefined}
-                  />
-                  {row.text}
+              {legRows(detail.legs, journeyStartSecs(analysis.settings, detail.pt), look).map(
+                (row, k) => (
+                  <li key={k} className={`analysis-leg analysis-leg-${row.kind}`}>
+                    <i
+                      className="analysis-leg-mark"
+                      style={row.colour ? { background: row.colour } : undefined}
+                    />
+                    {row.text}
+                  </li>
+                ),
+              )}
+              {arrival && (
+                <li className="analysis-leg analysis-leg-early">
+                  <i className="analysis-leg-mark analysis-split-early" />
+                  {arrival}
                 </li>
-              ))}
+              )}
             </ol>
           )}
           {carPathText(detail) && <p className="muted small">{carPathText(detail)}</p>}

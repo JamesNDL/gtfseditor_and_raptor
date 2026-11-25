@@ -1,7 +1,17 @@
 // The rows of an analysis's results export (FR-18, AC-FR-18.1; docs/architecture/access-analysis.md
-// §5.3): one per sample point and point of interest, with the columns §5.3 gives in that order.
-// results.csv writes them as text; points.geojson puts them on point features.
-import { trafficFactorAt, type AnalysisSettings, type PairStatus } from '@gtfs-editor/core';
+// §5.3): one per sample point and point of interest, with the columns §5.3 gives in that order,
+// then how the time was used, the time, and the early wait (FR-21, D40), added at the end so the
+// columns before keep their places. results.csv writes them as text; points.geojson puts them on
+// point features.
+import {
+  formatSecs,
+  trafficFactorAt,
+  type AnalysisSettings,
+  type PairStatus,
+} from '@gtfs-editor/core';
+
+/** How the time was used, as the export writes it. */
+export type ExportTimeMode = 'depart' | 'arrive_by';
 import type { PairRow } from './results-read.ts';
 
 /** One stored pair with the point of interest it is for. */
@@ -31,9 +41,14 @@ export interface ExportRow {
   parking_mins: number;
   car_mins: number | null;
   ratio: number | null;
+  time_mode: ExportTimeMode;
+  /** The departure or arrive-by time, HH:MM (hours can pass 23). */
+  time: string;
+  /** Arrive-by pairs with a journey only; null otherwise. */
+  early_wait_mins: number | null;
 }
 
-/** The columns, in the order of §5.3. */
+/** The columns, in the order of §5.3, then the three of arrive-by. */
 export const EXPORT_COLUMNS = [
   'point',
   'lat',
@@ -52,6 +67,9 @@ export const EXPORT_COLUMNS = [
   'parking_mins',
   'car_mins',
   'ratio',
+  'time_mode',
+  'time',
+  'early_wait_mins',
 ] as const satisfies readonly (keyof ExportRow)[];
 
 /** How many places the CSV writes a column with; the rest are written as they are. */
@@ -65,6 +83,7 @@ const PLACES: Partial<Record<keyof ExportRow, number>> = {
   parking_mins: 1,
   car_mins: 1,
   ratio: 2,
+  early_wait_mins: 1,
 };
 
 /** Rounded to `places` places. */
@@ -98,6 +117,9 @@ export function exportRowOf(pair: ExportPair, settings: AnalysisSettings): Expor
     parking_mins: roundTo(settings.parkingMins, 1),
     car_mins: mins(pair.carSecs),
     ratio: round(pair.ratio, 2),
+    time_mode: settings.timeMode === 'arriveBy' ? 'arrive_by' : 'depart',
+    time: formatSecs(settings.departSecs),
+    early_wait_mins: settings.timeMode === 'arriveBy' ? mins(pair.earlyWaitSecs) : null,
   };
 }
 

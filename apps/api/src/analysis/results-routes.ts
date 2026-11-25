@@ -144,6 +144,8 @@ export function registerAnalysisResultRoutes(app: FastifyInstance, sql: Sql): vo
     if (!pair) throw notFound('Sample point');
     const { settings } = analysis;
     const { ptSecs, walkSecs, waitSecs, rideSecs, rides } = pair;
+    // Depart-at pairs, and arrive-by ones with no journey, store no early wait (FR-21).
+    const earlyWaitSecs = pair.earlyWaitSecs ?? 0;
     const hasJourney =
       ptSecs !== null &&
       walkSecs !== null &&
@@ -158,7 +160,7 @@ export function registerAnalysisResultRoutes(app: FastifyInstance, sql: Sql): vo
       lat: pair.lat,
       poiSeq,
       status: pair.status,
-      pt: hasJourney ? { ptSecs, walkSecs, waitSecs, rideSecs, rides } : null,
+      pt: hasJourney ? { ptSecs, walkSecs, waitSecs, rideSecs, earlyWaitSecs, rides } : null,
       legs: await legsWithPaths(sql, analysis, pair.legs),
       driveSecs: pair.driveSecs,
       driveMetres: pair.driveMetres,

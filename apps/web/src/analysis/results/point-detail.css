@@ -54,6 +54,16 @@
   background: var(--series-1);
 }
 
+/* Arrive-by's early wait at the point of interest (FR-21): a violet of its own, readable on both
+   themes, apart from waiting (amber) and riding (blue). */
+.analysis-split-early {
+  background: #9b6bd6;
+}
+
+.analysis-leg-early .analysis-leg-mark {
+  border: none;
+}
+
 .analysis-legs {
   display: flex;
   flex-direction: column;

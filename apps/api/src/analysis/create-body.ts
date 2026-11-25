@@ -6,6 +6,7 @@ import {
   DEFAULT_ANALYSIS_SETTINGS,
   type AnalysisCreateBody,
   type AnalysisSettings,
+  type TimeMode,
   type TrafficFactors,
 } from '@gtfs-editor/core';
 import { fail, int } from '../http.ts';
@@ -33,6 +34,13 @@ function numberOf(given: Fields, key: NumberSetting): number {
   if (value === undefined) return DEFAULT_ANALYSIS_SETTINGS[key];
   if (!isNumber(value)) throw fail(400, `The setting ${key} must be a number`);
   return value;
+}
+
+/** How the time is used (FR-21): depart-at when left out. */
+function timeModeOf(value: unknown): TimeMode {
+  if (value === undefined) return DEFAULT_ANALYSIS_SETTINGS.timeMode;
+  if (value === 'depart' || value === 'arriveBy') return value;
+  throw fail(400, 'The setting timeMode must be "depart" or "arriveBy"');
 }
 
 /** The modes allowed: a list of the journey router's mode ids, at least one, each one it knows. */
@@ -81,6 +89,7 @@ function breaksOf(value: unknown): number[] {
 function settingsOf(value: unknown): AnalysisSettings {
   const given = fieldsOf(value);
   return {
+    timeMode: timeModeOf(given.timeMode),
     departSecs: numberOf(given, 'departSecs'),
     spacingM: numberOf(given, 'spacingM'),
     maxWalkM: numberOf(given, 'maxWalkM'),

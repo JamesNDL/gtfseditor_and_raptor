@@ -2,14 +2,15 @@
 // a day's analyses (each with the others it can be compared with, FR-17), make one, read one,
 // cancel one and delete one. The run itself is runner.ts.
 import type { FastifyInstance } from 'fastify';
-import type {
-  AnalysisDetail,
-  AnalysisListEntry,
-  AnalysisListItem,
-  AnalysisPoi,
-  AnalysisSettings,
-  AnalysisState,
-  GeoJsonPosition,
+import {
+  withTimeMode,
+  type AnalysisDetail,
+  type AnalysisListEntry,
+  type AnalysisListItem,
+  type AnalysisPoi,
+  type AnalysisState,
+  type GeoJsonPosition,
+  type StoredAnalysisSettings,
 } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { fail, int, notFound } from '../http.ts';
@@ -26,7 +27,7 @@ interface ListRow extends Omit<AnalysisListItem, 'createdAt' | 'finishedAt'> {
 
 /** The rest of an analysis, read for its detail. */
 interface DetailRow extends ListRow {
-  settings: AnalysisSettings;
+  settings: StoredAnalysisSettings;
   zoneId: number | null;
   zoneRings: GeoJsonPosition[][];
   zoneHash: string;
@@ -49,11 +50,14 @@ export function registerAnalysisRoutes(app: FastifyInstance, sql: Sql): Analysis
   const runner = analysisRunner(sql, (err, message) => app.log.error(err, message));
   const idOf = (params: unknown): number => int(fieldsOf(params).id);
   // The stored progress is an empty object when nothing is going on; the API gives null then.
+  // Settings stored before arrive-by have no time mode: they are depart-at (FR-21, D40).
   const listColumns = sql`
     id, name, baseline_id as "baselineId", scenario_id as "scenarioId",
     scenario_name as "scenarioName", zone_name as "zoneName", state,
     nullif(progress, '{}'::jsonb) as progress, error, sample_count as "sampleCount",
-    created_at as "createdAt", finished_at as "finishedAt"`;
+    created_at as "createdAt", finished_at as "finishedAt",
+    coalesce(settings ->> 'timeMode', 'depart') as "timeMode",
+    (settings ->> 'departSecs')::float8 as "timeSecs"`;
 
   async function stateOf(id: number): Promise<AnalysisState> {
     const [row] = await sql<
@@ -92,7 +96,8 @@ export function registerAnalysisRoutes(app: FastifyInstance, sql: Sql): Analysis
     const pois = await sql<PoiRow[]>`
       select seq, poi_id as "poiId", name, st_x(geom) as lon, st_y(geom) as lat
       from analysis_pois where analysis_id = ${id} order by seq`;
-    const { settings, zoneId, zoneRings, zoneHash, zoneName, ...item } = row;
+    const { settings: stored, zoneId, zoneRings, zoneHash, zoneName, ...item } = row;
+    const settings = withTimeMode(stored);
     // Each point of interest's summary for the analysis's own lines, once it is done (FR-20).
     const summaries = row.state === 'done' ? await summariesOf(sql, id, settings.breaks) : null;
     return {
