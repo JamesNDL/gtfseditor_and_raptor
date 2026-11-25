@@ -47,3 +47,34 @@ describe('analysisBodyOf: modes', () => {
     expect(refused?.message).toContain('tram');
   });
 });
+
+describe('analysisBodyOf: time mode (FR-21)', () => {
+  const timed = (settings: unknown): unknown => ({
+    baselineId: 1,
+    zoneId: 2,
+    poiIds: [3],
+    settings,
+  });
+
+  it('reads a body with no time mode as depart-at', () => {
+    expect(analysisBodyOf(timed({ departSecs: 28_800 })).settings.timeMode).toBe('depart');
+  });
+
+  it('takes arrive-by with its time', () => {
+    const { settings } = analysisBodyOf(timed({ timeMode: 'arriveBy', departSecs: 28_800 }));
+    expect(settings.timeMode).toBe('arriveBy');
+    expect(settings.departSecs).toBe(28_800);
+  });
+
+  it('takes depart-at when it is named', () => {
+    expect(analysisBodyOf(timed({ timeMode: 'depart' })).settings.timeMode).toBe('depart');
+  });
+
+  it('refuses any other time mode with a 400 naming the two', () => {
+    for (const timeMode of ['arrive', 'ARRIVEBY', 3, null]) {
+      const refused = refusal(timed({ timeMode }));
+      expect(refused?.statusCode).toBe(400);
+      expect(refused?.message).toContain('"depart" or "arriveBy"');
+    }
+  });
+});

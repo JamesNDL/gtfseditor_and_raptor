@@ -154,7 +154,7 @@ try {
   detail = await until(first, (d) => d.state === 'preparing', 'the first run starts preparing');
   assert.equal(detail.sampleCount, gridCount(square, 250));
   assert.equal(detail.sampleCount, 16);
-  assert.equal(detail.name, 'e2e run zone · 08:00 · Published day');
+  assert.equal(detail.name, 'e2e run zone · Depart 08:00 · Published day');
   assert.equal(detail.baselineId, baseline.id);
   assert.equal(detail.scenarioId, null);
   assert.equal(detail.zone.id, zone.id);
@@ -167,6 +167,9 @@ try {
   );
   assert.equal(detail.settings.spacingM, 250);
   assert.equal(detail.settings.departSecs, 8 * 3600, 'missing settings take the starting values');
+  assert.equal(detail.settings.timeMode, 'depart', 'no time mode is depart-at (FR-21)');
+  assert.equal(detail.timeMode, 'depart');
+  assert.equal(detail.timeSecs, 8 * 3600);
   const points = await db`
     select seq, i, j, lon, lat from analysis_points where analysis_id = ${first} order by seq`;
   assert.deepEqual(
@@ -189,7 +192,7 @@ try {
   const waiting = await get(`/api/analyses/${second}`);
   assert.equal(waiting.state, 'queued', 'a second analysis waits while one runs');
   assert.equal(waiting.scenarioName, 'e2e access');
-  assert.equal(waiting.name, 'e2e run zone renamed · 08:00 · e2e access');
+  assert.equal(waiting.name, 'e2e run zone renamed · Depart 08:00 · e2e access');
   assert.equal((await get(`/api/analyses/${first}`)).state, 'preparing');
   step('AC 6 a second analysis waits (queued) while one runs');
 

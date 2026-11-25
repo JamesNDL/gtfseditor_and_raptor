@@ -3,7 +3,8 @@
 // messages; then analysis-runs.e2e.mjs (making and running analyses), analysis-pairs.e2e.mjs (what
 // a run stores), analysis-progress.e2e.mjs (progress, cancel and restart),
 // analysis-results.e2e.mjs (the reads behind the results map), analysis-ride-paths.e2e.mjs (rides
-// drawn along their vehicles' paths), analysis-compare.e2e.mjs (comparing two analyses, and the
+// drawn along their vehicles' paths), analysis-arrive-by.e2e.mjs (arrive-by analyses),
+// analysis-compare.e2e.mjs (comparing two analyses, and the
 // exports) and analysis-zone-reshape.e2e.mjs. Run by `npm run test:e2e:fixture`, which passes
 // API, DATABASE_URL and FAKE_ROUTER.
 // Usage: node apps/api/test/analysis.e2e.mjs   (needs an API with the 0010 migration run)
@@ -219,6 +220,7 @@ await import('./analysis-progress.e2e.mjs');
 // ---- the reads behind the results map (AA-16) ---------------------------------------------------
 await import('./analysis-results.e2e.mjs');
 await import('./analysis-ride-paths.e2e.mjs');
+await import('./analysis-arrive-by.e2e.mjs');
 
 // ---- comparing two analyses and the exports (AA-22) ---------------------------------------------
 await import('./analysis-compare.e2e.mjs');

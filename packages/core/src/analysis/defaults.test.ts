@@ -11,6 +11,7 @@ const withChange = (change: Partial<AnalysisSettings>): AnalysisSettings => ({
 describe('DEFAULT_ANALYSIS_SETTINGS', () => {
   it('D34: holds the agreed starting values', () => {
     expect(DEFAULT_ANALYSIS_SETTINGS).toEqual({
+      timeMode: 'depart',
       departSecs: 28_800,
       spacingM: 250,
       maxWalkM: 800,
@@ -99,6 +100,12 @@ describe('settingsProblem', () => {
       'The departure time must be between 00:00 and 36:00.',
     );
     expect(settingsProblem(withChange({ departSecs: 36 * 3600 + 1 }))).not.toBeNull();
+  });
+
+  it('FR-21: names the arrive-by time when it is out of range', () => {
+    expect(settingsProblem(withChange({ timeMode: 'arriveBy', departSecs: -1 }))).toBe(
+      'The arrive-by time must be between 00:00 and 36:00.',
+    );
   });
 
   it('refuses no lines, or more than 8', () => {

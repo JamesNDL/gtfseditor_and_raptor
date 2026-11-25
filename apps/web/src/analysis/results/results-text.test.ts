@@ -44,14 +44,14 @@ describe('bandRanges and bandLabel (AC-FR-19.1)', () => {
 describe('settingsLine (AC-FR-19.1)', () => {
   it('reads like the architecture example for the published day and the starting settings', () => {
     expect(settingsLine({ scenarioName: null, settings: SETTINGS })).toBe(
-      'Published day · 08:00 · 250 m · walk 800 m · parking 5 min · traffic 1.4',
+      'Published day · Depart 08:00 · 250 m · walk 800 m · parking 5 min · traffic 1.4',
     );
   });
 
   it("names the scenario, and uses the traffic factor for the departure's part of the day", () => {
     const settings = { ...SETTINGS, departSecs: 12 * 3600 + 30 * 60, spacingM: 1000 };
     expect(settingsLine({ scenarioName: 'More buses', settings })).toBe(
-      'More buses · 12:30 · 1,000 m · walk 800 m · parking 5 min · traffic 1.2',
+      'More buses · Depart 12:30 · 1,000 m · walk 800 m · parking 5 min · traffic 1.2',
     );
   });
 });

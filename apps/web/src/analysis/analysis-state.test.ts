@@ -28,6 +28,8 @@ const item = (over: Partial<AnalysisListItem> = {}): AnalysisListItem => ({
   sampleCount: 300,
   createdAt: '2026-11-26T00:00:00Z',
   finishedAt: '2026-11-26T00:01:00Z',
+  timeMode: 'depart',
+  timeSecs: 8 * 3600,
   ...over,
 });
 

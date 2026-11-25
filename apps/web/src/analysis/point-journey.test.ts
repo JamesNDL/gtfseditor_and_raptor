@@ -41,7 +41,7 @@ const detail = (over: Partial<PointDetail> = {}): PointDetail => ({
   lat: -33.9,
   poiSeq: 0,
   status: 'ok',
-  pt: { ptSecs: 2000, walkSecs: 500, waitSecs: 300, rideSecs: 1200, rides: 2 },
+  pt: { ptSecs: 2000, walkSecs: 500, waitSecs: 300, rideSecs: 1200, earlyWaitSecs: 0, rides: 2 },
   legs: [
     { type: 'walk', secs: 300, metres: 400 },
     ride('333', 'bus', [151.21, -33.9], [151.25, -33.85]),
