@@ -53,18 +53,6 @@ function postgresStore(sql: Sql): MigrationStore {
         const rows = await tx<{ version: string }[]>`select version from schema_migrations`;
         return new Set(rows.map((row) => row.version));
       }),
-    hasInitialTables: async () => {
-      const [row] = await sql<
-        { found: boolean }[]
-      >`select to_regclass('baselines') is not null as found`;
-      return row?.found ?? false;
-    },
-    mark: async (version: string) => {
-      await sql.begin(async (tx) => {
-        await lock(tx);
-        await tx`insert into schema_migrations (version) values (${version}) on conflict do nothing`;
-      });
-    },
     apply: (migration: Migration) =>
       sql.begin(async (tx) => {
         await lock(tx);

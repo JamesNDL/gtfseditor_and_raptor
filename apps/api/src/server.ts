@@ -14,7 +14,8 @@ import { registerSimResultRoutes } from './sim/results-read.ts';
 const PORT = Number(process.env.PORT ?? 3001);
 
 const sql = connect();
-await migrate(sql);
+const ran = await migrate(sql);
+if (ran.length > 0) console.log(`Ran migrations ${ran.join(', ')}`);
 
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(compress, { threshold: 1024 });

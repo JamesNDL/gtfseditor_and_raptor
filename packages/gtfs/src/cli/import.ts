@@ -106,7 +106,8 @@ async function importDays(sql: Sql): Promise<boolean> {
 
 const sql = connect();
 try {
-  await migrate(sql);
+  const ran = await migrate(sql);
+  if (ran.length > 0) log(`Ran migrations ${ran.join(', ')}`);
   if (!(await importDays(sql))) process.exitCode = 1;
 } catch (err) {
   // A day that gained scenarios between the check above and its import.
