@@ -17,7 +17,7 @@ const db = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
 
 /** Every pair of one point of interest with its sample point, in sample point order. */
 const pairsOf = (id, poiSeq) => db`
-  select p.seq, p.i, p.j, p.lon, p.lat, r.status, r.pt_secs, r.walk_secs, r.wait_secs,
+  select p.seq, p.i, p.j, p.lon, p.lat, r.poi_seq, r.status, r.pt_secs, r.walk_secs, r.wait_secs,
          r.ride_secs, r.rides, r.legs, r.drive_secs, r.drive_metres, r.car_secs, r.ratio,
          st_x(o.geom) as poi_lon, st_y(o.geom) as poi_lat
   from analysis_points p
@@ -74,10 +74,14 @@ try {
     assert.equal(banded + summary.noService + summary.noRoad, detail.sampleCount);
     assert.equal(typeof summary.median, 'number');
   }
+  const near = await pairsOf(id, 0);
   const far = await pairsOf(id, 1);
-  const kinds = new Set(far.map((r) => r.status + (r.pt_secs === null ? ' none' : '')));
+  // Pairs with no road are only those near enough for a journey under 15 minutes, so the near
+  // point of interest has them; the far one has journeys over 15 minutes.
+  const kindOf = (r) => r.status + (r.pt_secs === null ? ' none' : '');
+  const kinds = new Set([...near, ...far].map(kindOf));
   for (const kind of ['ok', 'noService', 'noService none', 'noRoad']) {
-    assert.ok(kinds.has(kind), `the far point of interest has a pair that is ${kind}`);
+    assert.ok(kinds.has(kind), `the checks cover a pair that is ${kind}`);
   }
   step('AC 1, AC-FR-20.1 each point of interest has its summary; the counts add up');
 
@@ -134,14 +138,14 @@ try {
   step('AC 3 bands and lines for the breaks asked for, with their summary; bad breaks are 400');
 
   // ---- one pair (AC 4, AC-FR-15.1) -------------------------------------------------------------
-  const pick = (kind) => far.find((r) => r.status + (r.pt_secs === null ? ' none' : '') === kind);
+  const pick = (kind) => [...far, ...near].find((r) => kindOf(r) === kind);
   const expected = (row) => ({
     seq: row.seq,
     i: row.i,
     j: row.j,
     lon: row.lon,
     lat: row.lat,
-    poiSeq: 1,
+    poiSeq: row.poi_seq,
     status: row.status,
     pt:
       row.pt_secs === null
@@ -163,7 +167,7 @@ try {
   });
   for (const kind of ['ok', 'noService', 'noService none', 'noRoad']) {
     const row = pick(kind);
-    const answer = await send('GET', `/api/analyses/${id}/points/${row.seq}?poi=1`);
+    const answer = await send('GET', `/api/analyses/${id}/points/${row.seq}?poi=${row.poi_seq}`);
     assert.equal(answer.status, 200, JSON.stringify(answer.body));
     const { carPath, carPathMessage, ...rest } = answer.body;
     assert.deepEqual(rest, expected(row), `the ${kind} pair`);
@@ -178,7 +182,7 @@ try {
 
   const ok = pick('ok');
   await fake({ down: true });
-  const down = await send('GET', `/api/analyses/${id}/points/${ok.seq}?poi=1`);
+  const down = await send('GET', `/api/analyses/${id}/points/${ok.seq}?poi=${ok.poi_seq}`);
   await fake({ down: false });
   assert.equal(down.status, 200, JSON.stringify(down.body));
   const { carPath, carPathMessage, ...rest } = down.body;
