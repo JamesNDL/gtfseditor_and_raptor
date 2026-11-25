@@ -1,10 +1,12 @@
 package gtfseditor.router.gtfs;
 
+import gtfseditor.router.core.ArriveBy;
 import gtfseditor.router.core.Journey;
 import gtfseditor.router.core.JourneyChecker;
 import gtfseditor.router.core.Leg;
 import gtfseditor.router.core.Mode;
 import gtfseditor.router.core.Place;
+import gtfseditor.router.core.Preferences;
 import gtfseditor.router.core.Query;
 import gtfseditor.router.core.Result;
 import gtfseditor.router.core.Router;
@@ -21,13 +23,15 @@ import java.util.Set;
  *
  * <pre>
  * RouteCli &lt;feed.zip&gt; &lt;from&gt; &lt;to&gt; &lt;time&gt; [--date 20261117] [--snapshots &lt;folder&gt;] [--rides 8] [--walk 1200]
- *          [--avoid school_bus,ferry] [--change 120] [--water &lt;file&gt;]
+ *          [--avoid school_bus,ferry] [--change 120] [--water &lt;file&gt;] [--arrive-by]
  * RouteCli &lt;feed.zip&gt; --random 2000 [--area opal|all] [--within 25] [--threads 8] [--show 5] [--seed 1] [...]
  * RouteCli &lt;feed.zip&gt; --random 300 --dump &lt;file&gt; [...]
  * </pre>
  *
  * School buses are left out unless {@code --avoid} says otherwise; {@code --avoid none} leaves
  * nothing out. {@code --change} is the least time, in seconds, to change vehicles at one stop.
+ * {@code --arrive-by} takes the time as the time to arrive by, and plans the journey that leaves
+ * latest and still arrives then.
  *
  * <p>A place is a stop id, a station id, or {@code latitude,longitude}. A time is {@code HH:MM} or
  * {@code HH:MM:SS}; after midnight on the same service day, keep counting: {@code 24:30}.
@@ -53,6 +57,7 @@ public final class RouteCli {
         int show = 0;
         double within = 0;
         Path dump = null;
+        boolean arriveBy = false;
         int change = gtfseditor.router.core.Query.DEFAULT_CHANGE_SECS;
         Set<Mode> avoid = EnumSet.copyOf(Router.DEFAULT_AVOID);
         String[] plain = new String[4];
@@ -71,6 +76,7 @@ public final class RouteCli {
                 case "--show" -> show = Integer.parseInt(value(args, ++i));
                 case "--change" -> change = Integer.parseInt(value(args, ++i));
                 case "--dump" -> dump = Path.of(value(args, ++i));
+                case "--arrive-by" -> arriveBy = true;
                 case "--within" -> within = Double.parseDouble(value(args, ++i));
                 case "--avoid" -> {
                     avoid.clear(); // "--avoid none" leaves nothing out, school buses included
@@ -120,6 +126,16 @@ public final class RouteCli {
         Place to = place(t, plain[2]);
         int depart = time(plain[3]);
         Query query = router.query(from, to, depart, rides, walk).avoiding(avoid);
+        if (arriveBy) {
+            ArriveBy.route(router, query, depart, Preferences.defaults()); // to warm up, as below
+            Result result = ArriveBy.route(router, query, depart, Preferences.defaults());
+            Journey best = result.best();
+            System.out.printf("Arriving by %s: %s%n", clock(depart), best == null ? "no journey arrives in time"
+                    : "leave at " + clock(best.depart()) + ", early wait " + minutes(depart - best.arrive()));
+            print(System.out, t, best == null ? query : query.departingAt(best.depart()), result, describe(t, from),
+                    describe(t, to));
+            return;
+        }
         router.route(query); // once to warm up, so the time printed is not mostly start-up
         Result result = router.route(query);
         print(System.out, t, query, result, describe(t, from), describe(t, to));
@@ -229,7 +245,7 @@ public final class RouteCli {
     private static void usage(String problem) {
         System.err.println(problem);
         System.err.println("Usage: RouteCli <feed.zip> <from> <to> <time> [--date 20261117] [--snapshots <folder>]"
-                + " [--rides 8] [--walk 1200] [--avoid school_bus,ferry] [--change 120] [--water <file>]");
+                + " [--rides 8] [--walk 1200] [--avoid school_bus,ferry] [--change 120] [--water <file>] [--arrive-by]");
         System.err.println("       RouteCli <feed.zip> --random <count> [--area opal|all] [--within <km>] [--threads 8] [--show 5] [--seed 1]"
                 + " [--dump <file>]");
         System.exit(2);

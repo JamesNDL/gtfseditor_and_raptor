@@ -1,6 +1,6 @@
 # Journey router build plan (Java, RAPTOR, capacity aware)
 
-Written 13 Nov 2026. Phase 0 (the empty project) was built the same day; its findings are in section 14. Phase 1 (the timetable loader) was built on 15 Nov; its findings and measurements are in section 15. Phase 2 (the search) was built the same day; see section 16. Its results were then checked and improved for quality and speed on journeys inside the Opal area; see section 17, which replaces the speed figures in section 16. Its journeys were then compared with the TfNSW trip planner's; see section 18. Phase 3 (the service) was built on 17 Nov; see section 19. Phase 4 (capacity and bulk requests) was built the same day; see section 20. The benchmark harness, road routing and the website's use of the router are not built.
+Written 13 Nov 2026. Phase 0 (the empty project) was built the same day; its findings are in section 14. Phase 1 (the timetable loader) was built on 15 Nov; its findings and measurements are in section 15. Phase 2 (the search) was built the same day; see section 16. Its results were then checked and improved for quality and speed on journeys inside the Opal area; see section 17, which replaces the speed figures in section 16. Its journeys were then compared with the TfNSW trip planner's; see section 18. Phase 3 (the service) was built on 17 Nov; see section 19. Phase 4 (capacity and bulk requests) was built the same day; see section 20. Arrive-by (a backward search) was added on 26 Nov; see section 22. The benchmark harness, road routing and the website's use of the router are not built.
 
 ## 1. Summary
 
@@ -1001,3 +1001,56 @@ Free memory on the machine never went below about 1.9 GB.
 - **The foot profile**, and with it walking times for RAPTOR in place of straight lines (§7.5).
 - A time-of-day factor inside the router (§7.4); the access analysis applies one in the API.
 - The owner's `.env` named the public OSRM server when this was written. Pointing `ROUTER_URL` at `http://localhost:3002`, as `.env.example` now does, is the owner's step.
+
+## 22. Arrive-by (26 Nov 2026)
+
+Built for FR-21 of BRD `access-analysis` 1.1 ("If I want to arrive at Westfield for work at 8"). Decision D38 in `docs/architecture/system.md`. The router side only; the API and web app follow in a later ticket.
+
+### What it answers
+
+The latest departure from the start that still arrives at the end by a time, within the query's limits, and the journey that makes it. A request gives `arriveBy` in place of `depart` (see `services/router/README.md`). The journey has the forward answer's shape and its real `depart` and `arrive`, plus `arriveBy` and `earlyWait` (arriveBy less the arrival).
+
+### How
+
+Two steps (`ArriveBy.java`):
+
+1. **A backward search** (`BackwardSearch.java`, with `BackwardTimes.java`, `RunOnOffers.java` and `BackwardLinks.java`). RAPTOR run the other way, in rounds of rides, latest first. Each stop keeps the latest time to get off a vehicle there (from the walk to the end; or from a later boarding there less the time to change; or one walking link away, less the walk and never less than the time to change) and the latest time to board there. A round rides back along every pattern through a stop whose time to get off improved, from the highest such position, keeping the latest trip that reaches a stop ahead in time (a binary search on that stop's arrivals, which are in order as trips never overtake) and recording its departures behind. The walking links are used backwards (`BackwardLinks` groups them by the stop they lead to; `Router` used to keep them itself). The answer for a start is the latest boarding time at its first stops less the walk to each, or the walk of the whole way.
+2. **The forward search from that departure**, keeping its journeys that arrive in time and recommending the cheapest of those. The fastest always arrives in time; if it ever did not, the two searches would disagree, and the request fails with that message rather than giving a wrong answer.
+
+Rebuilding the legs from the backward search's own labels was not done: the forward search already builds journeys (with the "leave later" step and staying aboard), and its legs are what every caller reads, so the arrive-by answer is a forward answer by construction. The cost is one forward search per start, which is what a depart-at request costs anyway.
+
+**The same rules as forward.** The time to change at one stop or on foot, the longest walk between stops (`maxLinkSecs`), the most rides, the kinds of vehicle avoided, the walks to the first stop and from the last (the same `Access` lists, so the same 1.3 detour, 1.03 m/s and longest walk), and staying aboard a vehicle that runs on. For that last, boarding a trip at its first stop offers, to the next round, the trips whose vehicle runs on into it, or into an earlier trip of its pattern that leaves after this one's departure less the time to change; earlier ones are covered by getting off and boarding again. This relies on what the loader guarantees of a vehicle that runs on (from the same stop, and no sooner than it arrives), as the forward search does. **Loads are not looked at**: arrive-by needs capacity `off`.
+
+**No longest journey.** As for depart-at, the router has no limit on a journey's length; the access analysis applies its own (D34). A departure hours before the arrive-by time is returned as the answer.
+
+### Many starts, one end
+
+The access analysis asks for every sample point to one point of interest at one time. Arrive-by queries in a bulk request that share their end (the same walks from the last stops), time and limits share one backward search, which reads off each start's departure. The search stops looking at a stop once its time is no later than every start's best departure so far, so a single query prunes as the forward search does with its target. Forward bulk does not share searches between queries. Each arrive-by query still gets its own forward search for its legs.
+
+### How it was checked
+
+- `ArriveByTest`, on a hand-made network (`ArriveByNetwork`): the latest departure; a later bus that would arrive a minute late is not chosen, and one that arrives on the minute is; a change, with its legs in order; the time to change; a walk between rides; walking the whole way; nothing in time; the limits on rides, kinds of vehicle and longest walk; times past 24:00; staying aboard (on `TestTimetables.tiny()`, where only staying aboard makes it); one backward search for many starts.
+- `ArriveByPropertyTest`: AC-FR-21.2 on 7,500 random queries over the random timetables of `BruteForceTest`, with fixed seeds. The forward search leaving at the answer arrives in time, and leaving one second later does not (the BRD asks for 60 s; one second is stronger); no answer means leaving at 00:00 does not arrive in time either. Also 2,400 starts in groups of 12 sharing an end, each agreeing with its own search. Turning off staying aboard in the backward search makes both fail.
+- `ArriveByApiTest`: the request and answer over HTTP, one journey and bulk (mixed with depart-at queries), and the refusals.
+
+**Real data.** The published weekday (`data/exports/check/export.zip`), Mayfield (-32.897, 151.736) to Westfield Kotara (-32.940, 151.698), arriving by 08:00, walks up to 800 m, at most 4 rides (`route` with `-32.897,151.736 -32.940,151.698 08:00 --arrive-by --walk 800 --rides 4`):
+
+```
+Arriving by 08:00:00: leave at 07:16:43, early wait 12 min
+fastest: leave 07:16:43, arrive 07:47:40, 31 min, 2 rides, 1 change, 12 min walking, 3 min waiting
+    07:16:43 to 07:19:00  walk 108 m to Maitland Rd At Hanbury St
+    07:19:00 to 07:27:00  bus 140 to Newcastle Interchange, Stand B: Maitland Rd At Hanbury St to Maitland Rd Opp Beaumont St
+    07:27:00 to 07:31:45  walk 169 m to Hamilton Station, Platform 1
+    07:34:18 to 07:42:30  train CCN to Central Via Strathfield: Hamilton Station, Platform 1 to Kotara Station, Platform 1
+    07:42:30 to 07:47:40  walk 174 m to the destination
+```
+
+Leaving at 07:16:44 instead (depart-at) arrives at 08:15:10. The arrive-by query took 8.9 ms (backward and forward); the depart-at query from 07:16:43 alone took 6.3 ms. Loaded without the water file.
+
+**Speed in bulk.** 500 points on a grid over Newcastle (about 22 km north to south by 17 km) to Westfield Kotara on the published weekday, at most 4 rides, walks up to 800 m, 4 threads, three passes: arriving by 08:00 took 217 (the first pass, warming up), 62 and 41 ms; departing at 07:00 took 60, 59 and 54 ms. The one backward search for all 500 took 5 to 8 ms. Measured with a throwaway program, not kept.
+
+### Not done
+
+- Arrive-by with loads (`check` or `assign`) or refused boardings.
+- Alternatives that leave earlier with fewer changes: the answer is the forward search's journeys from the latest departure that arrive in time.
+- The API and web app (which count the time as `arriveBy - depart`).

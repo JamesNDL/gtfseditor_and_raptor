@@ -31,11 +31,9 @@ public final class Router {
     private final StopFinder finder;
     private final ThreadLocal<Search> searches;
 
-    // The walking links again, grouped by the stop they lead to.
-    private final int[] linkInOffset;
-    private final int[] linkInFrom;
-    private final int[] linkInSecs;
-    private final int[] linkInMetres;
+    // The walking links again, grouped by the stop they lead to, and the vehicles that run on.
+    private final BackwardLinks backward;
+    private final ThreadLocal<BackwardSearch> backwardSearches;
 
     // The stops of each station.
     private final int[] stationStopOffset;
@@ -67,27 +65,10 @@ public final class Router {
         this.finder = new StopFinder(timetable);
         this.searches = ThreadLocal.withInitial(() -> new Search(timetable, maxRides));
 
-        int stops = t.stopCount();
-        linkInOffset = new int[stops + 1];
-        for (int target : t.transferTargets) {
-            linkInOffset[target + 1]++;
-        }
-        for (int s = 0; s < stops; s++) {
-            linkInOffset[s + 1] += linkInOffset[s];
-        }
-        linkInFrom = new int[t.transferCount()];
-        linkInSecs = new int[t.transferCount()];
-        linkInMetres = new int[t.transferCount()];
-        int[] next = linkInOffset.clone();
-        for (int from = 0; from < stops; from++) {
-            for (int j = t.transferOffset[from]; j < t.transferOffset[from + 1]; j++) {
-                int slot = next[t.transferTargets[j]]++;
-                linkInFrom[slot] = from;
-                linkInSecs[slot] = t.transferSecs[j];
-                linkInMetres[slot] = t.transferMetres[j];
-            }
-        }
+        this.backward = BackwardLinks.of(timetable);
+        this.backwardSearches = ThreadLocal.withInitial(() -> new BackwardSearch(timetable, backward, maxRides));
 
+        int stops = t.stopCount();
         stationStopOffset = new int[t.stationCount() + 1];
         for (int station : t.stopStation) {
             if (station >= 0) {
@@ -186,6 +167,43 @@ public final class Router {
             }
         }
         return true;
+    }
+
+    /**
+     * The latest time a query may set off and still arrive by {@code arriveBy}, by a backward
+     * search; -1 if no journey within its limits does. The query's own departure time is not
+     * looked at, nor how full vehicles are. {@link ArriveBy} plans the journey itself.
+     */
+    public int latestDeparture(Query query, int arriveBy) {
+        return latestDepartures(List.of(query), arriveBy)[0];
+    }
+
+    /**
+     * {@link #latestDeparture} for many queries with one backward search. They must share their
+     * end (the same egress) and their limits: rides, kinds of vehicle, time to change and longest
+     * walk between stops.
+     *
+     * @throws IllegalArgumentException if they do not
+     */
+    public int[] latestDepartures(List<Query> queries, int arriveBy) {
+        if (queries.isEmpty()) {
+            return new int[0];
+        }
+        Query first = queries.get(0);
+        for (Query query : queries) {
+            if (!query.egress().equals(first.egress()) || Math.min(query.maxRides(), maxRides) != Math.min(first.maxRides(), maxRides)
+                    || !query.avoid().equals(first.avoid()) || query.changeSecs() != first.changeSecs()
+                    || query.maxLinkSecs() != first.maxLinkSecs()) {
+                throw new IllegalArgumentException("queries that share a backward search must share their end and limits");
+            }
+            for (Access access : query.access()) {
+                checkStop(access.stop());
+            }
+        }
+        for (Access egress : first.egress()) {
+            checkStop(egress.stop());
+        }
+        return backwardSearches.get().run(queries, arriveBy);
     }
 
     private void checkStop(int stop) {
@@ -308,8 +326,8 @@ public final class Router {
                 offer(reach, new Access(t.transferTargets[j], t.transferSecs[j], t.transferMetres[j]));
             }
         } else {
-            for (int j = linkInOffset[stop]; j < linkInOffset[stop + 1]; j++) {
-                offer(reach, new Access(linkInFrom[j], linkInSecs[j], linkInMetres[j]));
+            for (int j = backward.linkInOffset()[stop]; j < backward.linkInOffset()[stop + 1]; j++) {
+                offer(reach, new Access(backward.linkInFrom()[j], backward.linkInSecs()[j], backward.linkInMetres()[j]));
             }
         }
     }

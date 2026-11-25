@@ -503,11 +503,18 @@ Every ticket AA-1 to AA-24 is merged into `feature/access-analysis`. The design 
 - **Check**: `npm run test:access -- --fixture` draws and names with the tools and switches basemaps (`apps/web/test/access-editor.mjs`, `dragPlace` in `access-map.mjs`), saving `09-basemap-streets.png` to `14-reshape-zone.png`. `run-access-check.mjs` finds Vite as Node does, so it runs from a git worktree too.
 - Rough edges left: the hint beside the tool bar (when no tool is in use it says what can be dragged) can cover the top of the map; pressing a zone handle without moving it passes the click on to the map; there is no undo for a drag (drag it back).
 
+**Arrive-by in the journey router (26 Nov 2026, D38, BRD 1.1 FR-21, branch `feature/aa-arrive-by-router`).** The router side only; the API and web app come in a later ticket.
+- **Request:** `arriveBy` (seconds from the start of the service day, or `"HH:MM"`, up to 36:00) in place of `depart`, on `POST /v1/journeys` and on each query of `/v1/journeys/bulk`. Both or neither is a `400`. A bulk request may mix the two. Arrive-by needs capacity `off` and no `blocked` (a `400` otherwise), which is what §4.4 sends.
+- **Answer:** the same shape as a depart-at answer. Each arrive-by journey also has `arriveBy` and `earlyWait` (arriveBy less its arrival); the single answer and each bulk line echo `arriveBy`. `depart` and `arrive` are the journey's real times. No journey in time is `noJourney`, reason "Nothing gets there by that time on this service day."
+- **How:** a backward search finds the latest departure; the forward search from that departure plans the journey, so the legs are the forward search's own. The router has no longest-journey limit, as for depart-at: a departure hours before the arrive-by time is returned, and the API's longest journey (D34) then makes it `noService` as now. The API should count the time as `arriveBy - depart` (FR-21), not the journey's own duration.
+- **Bulk:** arrive-by queries with the same end, time and limits (every sample point to one point of interest at one time) share one backward search; each then gets its own forward search. On the published weekday, 500 points on a grid over Newcastle (about 22 km north to south by 17 km) to Westfield Kotara arriving by 08:00 took 41 to 62 ms on 4 threads, against 54 to 60 ms for the same 500 departing at 07:00; the one backward search for all 500 took 5 to 8 ms.
+
 ## 13. Change log
 
 | Version | Date | Change | BRD version |
 |---|---|---|---|
 | 1.0 | 25 Nov 2026 | First version; D14 to D34; approved for building under the owner's delegation | 1.0 |
 | 1.2 | 26 Nov 2026 | Map editor and basemaps (D35 to D37): §12 "Map editor" added | 1.0 |
+| 1.3 | 26 Nov 2026 | Arrive-by in the journey router (D38): §12 "Arrive-by in the journey router" added | 1.1 |
 | 1.1 | 26 Nov 2026 | Built (AA-1 to AA-24): §12 "As built" added; AAI-3, AAI-6, AAI-7 and AAI-9 resolved at close-out (AA-25); AAI-10 to AAI-13 added from the developers' notes; `runRoad`'s port fix noted in §3.2 | 1.0 |
 | 1.2 | 26 Nov 2026 | §12: rides drawn along their vehicles' paths (D39) | 1.0 |

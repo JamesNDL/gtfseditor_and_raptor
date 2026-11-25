@@ -81,6 +81,11 @@ public record Query(
         return new Query(access, egress, depart, maxRides, directWalkSecs, directWalkMetres, modes, changeSecs, maxLinkSecs);
     }
 
+    /** The same query setting off at another time. */
+    public Query departingAt(int time) {
+        return new Query(access, egress, time, maxRides, directWalkSecs, directWalkMetres, avoid, changeSecs, maxLinkSecs);
+    }
+
     /** The same query with a different least time to change at one stop. */
     public Query withChangeSecs(int secs) {
         return new Query(access, egress, depart, maxRides, directWalkSecs, directWalkMetres, avoid, secs, maxLinkSecs);
