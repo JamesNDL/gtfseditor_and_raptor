@@ -10,6 +10,7 @@ import {
   bandLabel,
   bandRanges,
   breaksText,
+  downloadLinks,
   ratioText,
   readBreaks,
   settingsLine,
@@ -126,5 +127,29 @@ describe('summaryRows and ratioText (AC-FR-20.1)', () => {
     expect(ratioText(summary.median)).toBe('1.46');
     expect(ratioText(2)).toBe('2');
     expect(ratioText(null)).toBe('None');
+  });
+});
+
+// AA-23 (FR-18, AC-FR-18.1): the three downloads, each a plain link to the API's export.
+describe('downloadLinks (AC-FR-18.1)', () => {
+  it('links the results CSV, the sample points and the lines on show', () => {
+    expect(downloadLinks(12, 1, [1, 1.5, 2])).toEqual([
+      expect.objectContaining({
+        label: 'Download results (CSV)',
+        href: '/api/analyses/12/export/results.csv',
+      }),
+      expect.objectContaining({
+        label: 'Sample points (GeoJSON)',
+        href: '/api/analyses/12/export/points.geojson',
+      }),
+      expect.objectContaining({
+        label: 'Lines (GeoJSON)',
+        href: '/api/analyses/12/export/lines.geojson?poi=1&breaks=1,1.5,2',
+      }),
+    ]);
+  });
+
+  it('says what each file holds', () => {
+    for (const link of downloadLinks(3, 0, [2])) expect(link.title.length).toBeGreaterThan(10);
   });
 });

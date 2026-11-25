@@ -4,7 +4,7 @@
 // zones and points of interest are kept here too, for the setup and the map.
 import type {
   AnalysisCreateBody,
-  AnalysisListItem,
+  AnalysisListEntry,
   PoiBody,
   PointOfInterest,
   Zone,
@@ -18,7 +18,7 @@ import { isAnalysisActive } from './analysis-state.ts';
 interface AnalysisList {
   /** The day the list is for, or null before it is first fetched. */
   baselineId: number | null;
-  items: AnalysisListItem[];
+  items: AnalysisListEntry[];
 }
 
 /** The day's analyses, newest first, as last fetched. */
@@ -29,10 +29,10 @@ export const useAnalysisRunning = (): boolean =>
   useAnalysisList((list) => list.items.some(isAnalysisActive));
 
 /** Fetches the chosen day's analyses into the list, and answers them. */
-export async function refreshAnalyses(): Promise<AnalysisListItem[]> {
+export async function refreshAnalyses(): Promise<AnalysisListEntry[]> {
   const { baselineId } = useStore.getState();
   if (baselineId === null) return [];
-  const items = await getJson<AnalysisListItem[]>(`/api/analyses?baseline=${baselineId}`);
+  const items = await getJson<AnalysisListEntry[]>(`/api/analyses?baseline=${baselineId}`);
   // A day chosen while this was on its way has its own list coming.
   if (useStore.getState().baselineId === baselineId)
     useAnalysisList.setState({ baselineId, items });

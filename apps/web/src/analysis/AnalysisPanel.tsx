@@ -115,7 +115,7 @@ export function AnalysisPanel() {
             </button>
           </div>
           {screen === 'setup' && <AnalysisSetup />}
-          {screen === 'results' && <AnalysisResults />}
+          {(screen === 'results' || screen === 'compare') && <AnalysisResults />}
         </>
       )}
     </div>

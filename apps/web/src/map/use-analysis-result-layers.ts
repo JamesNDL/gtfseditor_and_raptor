@@ -17,6 +17,7 @@ import {
 import { useAnalysisResults } from '../analysis/analysis-results.ts';
 import { useStore } from '../app/store.ts';
 import { MAP_PALETTE, type MapPalette } from '../app/theme.ts';
+import { useAnalysisCompareLayers } from './use-analysis-compare-layers.ts';
 import { useAnalysisPointLayers } from './use-analysis-point-layers.ts';
 
 const BANDS = 'aa-bands';
@@ -270,4 +271,6 @@ export function useAnalysisResultLayers(
   }, [mapRef, shown, detail, openId, poiSeq, results, theme]);
   // Called after the effect above, so the picked point's layers go on top of these.
   useAnalysisPointLayers(mapRef, whenLoaded, shown);
+  // The comparison takes the results' place on the map while it is shown (FR-17).
+  useAnalysisCompareLayers(mapRef, whenLoaded);
 }
