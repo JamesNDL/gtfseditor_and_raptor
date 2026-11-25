@@ -5,6 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 // MapLibre finds its worker relative to its own file, which bundlers move; hand it the bundled URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef, useState } from 'react';
+import { analysisMapClick } from '../analysis/analysis-map.ts';
 import {
   addClosurePoint,
   describePick,
@@ -41,6 +42,7 @@ import {
   vehicleFrames,
   waitingUntil,
 } from '../vehicles/vehicles.ts';
+import { useAnalysisLayers } from './use-analysis-layers.ts';
 import './map.css';
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -270,6 +272,8 @@ export function MapView({ onVehicleCount }: Props) {
 
     map.on('click', (e) => {
       const { open, close, openTimeline } = useStore.getState();
+      // The Access pane is drawing a zone or placing a point of interest: the click is its alone.
+      if (analysisMapClick(e.lngLat.lng, e.lngLat.lat, (p) => map.project(p).dist(e.point))) return;
       // A box for a simulation's area is being drawn, or has just been.
       if (useStore.getState().simDrawing || performance.now() - drawEndedRef.current < 400) return;
       // While a closure is being drawn, each click carries its line on.
@@ -1385,6 +1389,8 @@ export function MapView({ onVehicleCount }: Props) {
       window.removeEventListener('keydown', escape);
     };
   }, [simDrawing]);
+
+  useAnalysisLayers(mapRef, whenLoaded);
 
   // The results of a simulation run, drawn over the network: passengers on each stretch between
   // stops, or where the people who gain and lose time are. See docs/simulator-plan.md, section 18.
