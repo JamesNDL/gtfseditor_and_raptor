@@ -22,6 +22,7 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @gtfs-editor/api\" \"npm run dev -w @gtfs-editor/web\"",
     "test:e2e": "node apps/api/test/scenarios.e2e.mjs",
     "test:e2e:fixture": "node apps/api/test/run-e2e-fixture.mjs",
+    "test:import-replace": "node packages/gtfs/test/import-replace.e2e.mjs",
     "export:check": "node packages/gtfs/src/cli/export-check.ts",
     "test:ui": "node apps/web/test/ui-smoke.mjs",
     "test:sim": "node apps/api/test/sim.e2e.mjs",

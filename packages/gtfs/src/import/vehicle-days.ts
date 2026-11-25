@@ -1,14 +1,14 @@
 // Builds vehicle days for a baseline and writes them back to the database.
 import { buildVehicleDays, type ChainTrip, type RuleSet } from '@gtfs-editor/core';
-import type { Sql } from '../db.ts';
+import type { Tx } from '../db.ts';
 
 export async function importVehicleDays(
-  sql: Sql,
+  tx: Tx,
   baselineId: number,
   log: (m: string) => void,
 ): Promise<void> {
   const started = Date.now();
-  const rows = await sql`
+  const rows = await tx`
     select t.id, t.start_secs, t.end_secs, t.run_key, t.feed_block_id, t.vehicle_type_id,
            r.mode_id, r.agency_gtfs_id, m.rule_set,
            ST_X(coalesce(fp.geom, f.geom)) as first_lon, ST_Y(coalesce(fp.geom, f.geom)) as first_lat,
@@ -70,7 +70,7 @@ export async function importVehicleDays(
   const ids: number[] = [];
   for (let i = 0; i < dayRows.length; i += 2000) {
     const inserted =
-      await sql`insert into vehicle_days ${sql(dayRows.slice(i, i + 2000))} returning id`;
+      await tx`insert into vehicle_days ${tx(dayRows.slice(i, i + 2000))} returning id`;
     for (const row of inserted) ids.push(row.id);
   }
 
@@ -85,7 +85,7 @@ export async function importVehicleDays(
     }),
   );
   for (let i = 0; i < tripIds.length; i += 20000) {
-    await sql`
+    await tx`
       update trips t set vehicle_day_id = u.day_id, vehicle_day_seq = u.seq
       from unnest(${tripIds.slice(i, i + 20000)}::bigint[], ${dayIds.slice(i, i + 20000)}::bigint[], ${seqs.slice(i, i + 20000)}::int[])
         as u(trip_id, day_id, seq)

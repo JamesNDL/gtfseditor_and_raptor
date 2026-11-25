@@ -5,6 +5,12 @@ export const DEFAULT_DATABASE_URL = 'postgres://gtfs:gtfs@localhost:5433/gtfs_ed
 
 export type Sql = postgres.Sql;
 
+/** A transaction: everything run on it is committed together, or not at all. */
+export type Tx = postgres.TransactionSql;
+
+/** The shared connection or a transaction, for queries that may run on either. */
+export type Queryable = postgres.ISql;
+
 /** A value a query template takes: text, a number, an array, a fragment and so on. */
 export type QueryValue = postgres.ParameterOrFragment<never>;
 

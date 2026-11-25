@@ -19,7 +19,7 @@ const IMPORTER = 'packages/gtfs/src/cli/import.ts';
 const PORT = Number(process.env.E2E_PORT ?? 3101);
 const DB = process.env.E2E_DB ?? 'gtfs_e2e';
 const ADMIN_URL = process.env.E2E_ADMIN_URL ?? 'postgres://gtfs:gtfs@localhost:5433/postgres';
-if (!/^gtfs_(e2e|t3_)[a-z0-9_]*$/.test(DB) || DB === 'gtfs_editor')
+if (!/^gtfs_(e2e|t\d+_)[a-z0-9_]*$/.test(DB) || DB === 'gtfs_editor')
   throw new Error(`E2E_DB must be a throwaway database (gtfs_e2e...), not ${DB}`);
 const API = `http://localhost:${PORT}`;
 const databaseUrl = (() => {

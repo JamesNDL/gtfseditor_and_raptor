@@ -1,6 +1,6 @@
 // Builds a baseline (one service day) from the staged raw feed.
 import type { FeedVersion } from '../feed/feed-cache.ts';
-import type { Sql } from '../db.ts';
+import type { Tx } from '../db.ts';
 import { guardReplace, isoDate } from './replace-guard.ts';
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -29,15 +29,16 @@ export interface ImportBaselineOptions {
   replace?: boolean;
 }
 
+/** Replaces the day's baseline. Runs in the caller's transaction, so a failure deletes nothing (FR-8). */
 export async function importBaseline(
-  sql: Sql,
+  tx: Tx,
   feed: FeedVersion,
   date: string,
   log: (m: string) => void,
   options: ImportBaselineOptions = {},
 ): Promise<ImportedBaseline> {
   const iso = isoDate(date);
-  await guardReplace(sql, feed.id, date, options.replace ?? false, log);
+  await guardReplace(tx, feed.id, date, options.replace ?? false, log);
   const jsDate = new Date(`${iso}T00:00:00Z`);
   const weekday = WEEKDAYS[jsDate.getUTCDay()];
   const dayType = weekday === 'saturday' || weekday === 'sunday' ? weekday : 'weekday';
@@ -49,7 +50,7 @@ export async function importBaseline(
     timeZone: 'UTC',
   });
 
-  const [unmapped] = await sql`
+  const [unmapped] = await tx`
     select string_agg(distinct route_type, ', ') types from staging.routes
     where route_type::int not in (select route_type from route_type_modes)`;
   if (unmapped.types) {
@@ -58,25 +59,25 @@ export async function importBaseline(
     );
   }
 
-  await sql`delete from baselines where feed_id = ${feed.id} and service_date = ${iso}`;
-  const [{ id: b }] = await sql`
+  await tx`delete from baselines where feed_id = ${feed.id} and service_date = ${iso}`;
+  const [{ id: b }] = await tx`
     insert into baselines (feed_id, service_date, day_type, label)
     values (${feed.id}, ${iso}, ${dayType}, ${label}) returning id`;
 
   const step = async (name: string, statement: string) => {
     const started = Date.now();
-    const result = await sql.unsafe(statement);
+    const result = await tx.unsafe(statement);
     // Keep planner statistics current: a freshly inserted baseline is invisible to the planner
     // until analysed, and it then picks nested loops over hundreds of thousands of rows.
     const inserted = /^\s*(?:with[\s\S]*?\)\s*)?insert into (\w+)/i.exec(statement);
-    if (inserted) await sql.unsafe(`analyze ${inserted[1]}`);
+    if (inserted) await tx.unsafe(`analyze ${inserted[1]}`);
     log(
       `  ${name}: ${(result.count ?? 0).toLocaleString()} rows in ${((Date.now() - started) / 1000).toFixed(1)}s`,
     );
   };
 
   // `b`, `date` and `weekday` are validated above, so they are safe to inline.
-  await sql.unsafe(`drop table if exists staging.day_trips`);
+  await tx.unsafe(`drop table if exists staging.day_trips`);
   await step(
     'trips running on the day',
     `create unlogged table staging.day_trips as
@@ -162,11 +163,11 @@ export async function importBaseline(
      join trips t on t.baseline_id = ${b} and t.gtfs_id = st.trip_id
      join stops s on s.baseline_id = ${b} and s.gtfs_id = st.stop_id`,
   );
-  await sql.unsafe(
+  await tx.unsafe(
     `analyze trips; analyze stop_times; analyze stops; analyze shapes; analyze routes`,
   );
 
-  await sql.unsafe(`drop table if exists staging.day_seq`);
+  await tx.unsafe(`drop table if exists staging.day_seq`);
   await step(
     'trip stop sequences',
     `create unlogged table staging.day_seq as
@@ -202,7 +203,7 @@ export async function importBaseline(
      where q.trip_id = t.id and t.baseline_id = ${b} and p.baseline_id = ${b}
        and p.key = md5(t.route_id || '|' || coalesce(t.direction_id, -1) || '|' || coalesce(t.shape_id, -1) || '|' || q.stop_ids::text)`,
   );
-  await sql.unsafe(`drop table staging.day_seq; drop table staging.day_trips`);
+  await tx.unsafe(`drop table staging.day_seq; drop table staging.day_trips`);
 
   await step(
     'map lines',

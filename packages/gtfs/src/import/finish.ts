@@ -1,12 +1,9 @@
 // Records a finished baseline's counts and marks it ready to open.
-import type { Sql } from '../db.ts';
+import type { Tx } from '../db.ts';
 
 /** Stores the baseline's counts (trips, stop times, vehicle days and so on) and marks it ready. */
-export async function finishBaseline(
-  sql: Sql,
-  baselineId: number,
-): Promise<Record<string, unknown>> {
-  const [{ stats }] = await sql`
+export async function finishBaseline(tx: Tx, baselineId: number): Promise<Record<string, unknown>> {
+  const [{ stats }] = await tx`
     select jsonb_build_object(
       'trips', (select count(*) from trips where baseline_id = ${baselineId}),
       'stopTimes', (select count(*) from stop_times st join trips t on t.id = st.trip_id where t.baseline_id = ${baselineId}),
@@ -20,6 +17,6 @@ export async function finishBaseline(
       'firstDeparture', (select min(start_secs) from trips where baseline_id = ${baselineId}),
       'lastArrival', (select max(end_secs) from trips where baseline_id = ${baselineId})
     ) as stats`;
-  await sql`update baselines set stats = ${sql.json(stats)}, ready = true where id = ${baselineId}`;
+  await tx`update baselines set stats = ${tx.json(stats)}, ready = true where id = ${baselineId}`;
   return stats;
 }
