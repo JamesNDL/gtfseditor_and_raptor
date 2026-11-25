@@ -53,8 +53,8 @@ class GraphHopperRoadsTest {
         assertTrue(path.length >= 2, "a path of at least two points");
         assertTrue(metresTo(path[0], from) < 50, "the path starts near the asked start");
         assertTrue(metresTo(path[path.length - 1], to) < 50, "the path ends near the asked end");
-        // Along the streets it is at least the sum of the sides (about 300 m and 321 m).
-        assertTrue(route.metres() > 600, "along the streets, not straight across: " + route.metres());
+        // Along the streets it is the sum of the two sides (about 300 m each), not the 424 m diagonal.
+        assertTrue(route.metres() > 550, "along the streets, not straight across: " + route.metres());
         assertEquals(1, route.legs().size());
         assertEquals(route.metres(), route.legs().getFirst().metres(), 0.01);
         assertEquals(2, route.snapped().size());
@@ -84,7 +84,7 @@ class GraphHopperRoadsTest {
         double legSeconds = route.legs().get(0).seconds() + route.legs().get(1).seconds();
         assertEquals(route.metres(), legMetres, 0.01);
         assertEquals(route.seconds(), legSeconds, 0.01);
-        assertEquals(321, route.legs().get(0).metres(), 30, "first leg along the top row");
+        assertEquals(300, route.legs().get(0).metres(), 30, "first leg along the top row");
         assertEquals(300, route.legs().get(1).metres(), 30, "second leg down the east column");
         assertEquals(3, route.snapped().size());
     }
@@ -96,18 +96,18 @@ class GraphHopperRoadsTest {
 
         assertEquals(RoadRoute.Status.OK, east.status());
         assertEquals(RoadRoute.Status.OK, west.status());
-        assertEquals(321, east.metres(), 30, "east along the one-way street");
-        // West has to go round by another row: at least 321 m plus two 100 m sides.
+        assertEquals(300, east.metres(), 30, "east along the one-way street");
+        // West has to go round by another row: about 300 m plus two 100 m sides.
         assertTrue(west.metres() > 450, "west goes round: " + west.metres());
     }
 
     @Test
     void neverUsesTheFootway() {
-        // The footway joins these two corners directly (about 440 m); by road it is about 621 m.
+        // The footway joins these two corners directly (about 424 m); by road it is about 600 m.
         RoadRoute route = roads.route(List.of(corner(3, 0), corner(0, 3)), false);
 
         assertEquals(RoadRoute.Status.OK, route.status());
-        assertTrue(route.metres() > 600, "by road, not the footway: " + route.metres());
+        assertTrue(route.metres() > 550, "by road, not the footway: " + route.metres());
     }
 
     @Test
