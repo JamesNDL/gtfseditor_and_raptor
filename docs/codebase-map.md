@@ -8,7 +8,7 @@ A GTFS timetable editor and passenger simulator for NSW. It has a React web app,
 - The router: `docs/router-plan.md` and `services/router/README.md`
 - The simulator: `docs/simulator-plan.md`
 - What the words mean: `docs/glossary.md`
-- Requirements: `docs/brd/` (one per feature), each with its design in `docs/architecture/<same name>.md`. The first is `trustworthy-edits` (BRD 1.1 and its design approved 23 Nov 2026). Its planned files are listed under "Planned for trustworthy-edits" below.
+- Requirements: `docs/brd/` (one per feature), each with its design in `docs/architecture/<same name>.md`. The first is `trustworthy-edits` (BRD 1.1 and its design approved 23 Nov 2026). Its planned files are listed under "Planned for trustworthy-edits" below. The second is `access-analysis` (BRD 1.0 and its design, 25 Nov 2026), listed under "Planned for access-analysis".
 
 ## Running, building and testing
 
@@ -275,3 +275,25 @@ packages/gtfs/
 | `apps/web/src/catalogue/TurnaroundSettings.tsx` | Minimum turnaround per mode |
 
 Rule this work depends on: **an edit changes only rows it made itself**, apart from the tag that removes an earlier row (`docs/architecture/system.md` §5.3, issue I7).
+
+## Planned for access-analysis
+
+**Status: planned**, not built. From `docs/architecture/access-analysis.md` §6, which has the full list; decisions D14 to D34 in `docs/architecture/system.md`. Tickets AA-1 to AA-26 in `docs/project/access-analysis-tickets.xlsx`, built on the branch `feature/access-analysis`.
+
+| Part | Purpose |
+|---|---|
+| `services/router/router-road/` | Road routing with GraphHopper behind `RoadRouter`: `GraphHopperRoads.java` (route, table, nearest), `RoadGraphBuilder.java` and `RoadImport.java` (the `roadImport` task). Test map `src/test/resources/mini-roads.osm`. |
+| `services/router/router-server/.../RoadApi.java`, `OsrmApi.java` | `POST /v1/road/route`, `POST /v1/road/table`, and the OSRM-shaped `GET /route|table|nearest/v1/driving/…` that `ROUTER_URL` points at. Settings `ROUTER_ROAD`, `ROUTER_ROAD_GRAPH`, `ROUTER_ROAD_SNAP_METRES`, `ROUTER_ROAD_TABLE_LIMIT`; road-only process `npm run router:road` (port 3003). |
+| `services/router/tools/osmium/Dockerfile` | osmium from Debian's package, used by `npm run road:data` to cut the Opal area |
+| `packages/gtfs/src/cli/road-data.ts`, `src/road/road-data-plan.ts` | `npm run road:data`: Australia extract → Opal area cut → road graph in `data/router/road/opal` |
+| `packages/gtfs/sql/migrations/0010_access_analysis.sql` | `analysis_zones`, `points_of_interest`, `analyses`, `analysis_pois`, `analysis_points`, `analysis_results` |
+| `packages/core/src/analysis/` | Pure logic: `local-metres`, `polygon` (inside, crossing check), `grid` (sample points), `limits`, `defaults`, `ratio` (traffic factor, car time, access ratio, status, time split), `summary`, `contours` (marching triangles), `compare` |
+| `packages/core/src/api/analysis.ts` | Types shared by the web app and the API |
+| `apps/api/src/analysis/` | Zone and point-of-interest routes, analyses (create, queue, run, cancel), the drives and journeys steps, typed router clients, result reads, compare and export |
+| `apps/api/src/sim/router-client.ts`, `timetables.ts` | Moved out of `sim.ts` (AA-13): the router call, the timetable key, the water file, loading a timetable. Used by `sim.ts` and the analysis. |
+| `apps/api/test/analysis.e2e.mjs`, `fake-router.mjs`, `roads.e2e.mjs` | The analysis e2e (in `test:e2e:fixture`, against the fake router); `npm run test:roads` against a real road router |
+| `apps/web/src/analysis/` | The Access pane: `AnalysisPanel.tsx`, `analysis-api.ts`, `analysis-state.ts`, `analysis-map.ts` (map clicks), `analysis-colours.ts`, `setup/` (zone, points of interest, settings, run), `results/` (results, legend, one sample point, compare), `analysis.css` |
+| `apps/web/src/map/use-analysis-layers.ts`, `use-analysis-result-layers.ts` | The zone and points of interest; bands, lines, sample points, one point's journey, the comparison |
+| `apps/web/test/access-check.mjs`, `run-access-check.mjs` | `npm run test:access`: the owner's check in a headless browser, on a throwaway stack, with screenshots |
+
+Rule this work depends on: the router never reads the database; the API joins the two routers' answers and stores them.

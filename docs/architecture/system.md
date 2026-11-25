@@ -240,7 +240,7 @@ flowchart LR
 | D2 | before Nov 2026 (PLAN.md) | Clash rules run on the server only | Shared with the browser in `packages/core`; server only | One source of truth; the rules need the database. PLAN.md:46 records the change. |
 | D3 | 22 Nov 2026 | The copied rows are the source of truth. Edits are not stored in a form that can be replayed, and rebasing onto a new feed is future work. | Store each edit's parameters now; accept as built | Owner accepted as built |
 | D4 | Nov 2026 (router-plan) | The journey router is a separate Java service that reads the editor's GTFS export | In Node; a separate service | Speed targets; a clean boundary (the router never reads the database) |
-| D5 | before Nov 2026 | Road paths come from an outside OSRM server | Valhalla with OSM in the database (the original plan); OSRM API | Nothing to host yet. A routing server of our own is still planned. |
+| D5 | before Nov 2026 | Road paths come from an outside OSRM server. **Superseded by D16** (25 Nov 2026) once access-analysis FR-13 is built. | Valhalla with OSM in the database (the original plan); OSRM API | Nothing to host yet. A routing server of our own is still planned. |
 | D6 | 22 Nov 2026 | The vehicle catalogue ships with placeholders, and real NSW vehicle types remain the aim | Placeholders as the design; placeholders for now | Owner: the placeholders are as built and the aim stands |
 | D7 | 22 Nov 2026 | Lint with oxlint, not ESLint | ESLint with typescript-eslint; oxlint; Biome | typescript-eslint does not support TypeScript 7 |
 | D8 | 23 Nov 2026 | Organise code by feature folders: one folder per part of the product, plus `shared/`, with the conventions in `CLAUDE.md` and `docs/codebase-map.md` | By kind (`components/`, `hooks/`, `routes/`…); by feature | What changes together lives together, and it matches how `sim/`, `timeline/` and `inspector/` already work. By kind spreads one feature over five folders. Moved to in stages (`docs/refactor-plan.md` stage 2). |
@@ -250,6 +250,32 @@ flowchart LR
 | D12 | 23 Nov 2026 | `import --replace` runs as one database transaction; packs are written after the commit | One transaction; build beside the old day and swap | The smallest change, and Postgres keeps showing the old day to readers until the commit |
 | D13 | 23 Nov 2026 | Coding standards gaps become tickets; all new code meets the standards in section 14 now | Tickets with strict new code; record only; fix all first | Fixes land without a week's delay, and the gaps stop growing |
 
+Decisions D14 to D34 come from BRD `access-analysis` 1.0 and were taken by the architect on 25 Nov 2026 under the owner's delegation (the owner may reopen any). The full reasons are in `docs/architecture/access-analysis.md` §1. D5 is superseded by D16 once FR-13 is built.
+
+| # | Date | Decision | Options considered | Reason |
+|---|---|---|---|---|
+| D14 | 25 Nov 2026 | Road routing is GraphHopper 11.1 embedded in `router-road` behind a `RoadRouter` interface: car profile, speed-up index on, no turn costs | GraphHopper embedded; OSRM in Docker; Valhalla in Docker | One Java service; licence and features checked in router-plan §14; the interface allows another engine later |
+| D15 | 25 Nov 2026 | `ROUTER_ROAD` = `auto` (default), `on`, `off`, `only`; road-only is the same jar on port 3003 (`npm run router:road`, 512 MB); the graph is memory-mapped; the main router's heap goes to 1 GB | Always on; a setting; a separate service only | A5 and NFR-2 with no code change between the two ways of running |
+| D16 | 25 Nov 2026 | The router answers `POST /v1/road/route`, `POST /v1/road/table`, and OSRM-shaped `route`, `table` and `nearest` at its root, so `ROUTER_URL=http://localhost:3002` needs no change to `roads.ts`; the code default for `ROUTER_URL` stays "unset means none" | Root OSRM paths; a prefix; a new client in `roads.ts` | FR-13 "no other change"; tests that unset `ROUTER_URL` stay unaffected. Supersedes D5 when built. |
+| D17 | 25 Nov 2026 | Many drives at once are repeated speed-up-index routes over the thread pool; `/v1/road/table` replaces the planned `/v1/road/bulk` | Repeated routes; a one-to-many search on GraphHopper internals | No open-source matrix (router-plan §14); fast enough for NFR-1 |
+| D18 | 25 Nov 2026 | Road data: Geofabrik Australia, cut to the Opal area box with osmium in a Docker image built from Debian's package, built by `npm run road:data` into `data/router/road/opal`; tests use a hand-made `.osm` file | Whole Australia; osmium cut; third-party osmium image | A quarter of the import memory; no stranger's image; tests need no `data/` |
+| D19 | 25 Nov 2026 | A point more than 500 m from a road is "no road" | No limit; fixed; a setting (chosen, default 500) | BRD edge case |
+| D20 | 25 Nov 2026 | An access analysis runs in the API process like sim runs: one at a time, resumed at start, results written per batch | In the API; on the router | Only the API sees both routers and the database; batches survive the dev API's restarts |
+| D21 | 25 Nov 2026 | Public transport times come from `/v1/journeys/bulk` (capacity off, summary) in batches of 500, on a timetable loaded as sim runs load one, cut to a box round the zone and points of interest widened by 15 km; the router client and timetable loading move out of `sim.ts` first | Single requests; bulk; a simulation run | Speed and progress (NFR-1); reuse of tested code |
+| D22 | 25 Nov 2026 | Car times: one `/v1/road/table` per point of interest per 1,000 sample points | One big table; single routes | Progress and cancel within seconds |
+| D23 | 25 Nov 2026 | Public transport time is arrival minus the asked departure; the first wait counts as waiting | The journey's own duration | FR-11 "leaving at the departure time" |
+| D24 | 25 Nov 2026 | Six new tables in `0010_access_analysis.sql`; 0002 to 0009 are left to `trustworthy-edits` | Next free number | Two branches add migrations at once; the runner allows gaps and refuses duplicates |
+| D25 | 25 Nov 2026 | Zones and points of interest are global; an analysis copies them when made | Per baseline; global | Places do not change with the timetable; finished analyses never change |
+| D26 | 25 Nov 2026 | Sample points are cell centres of a square grid in local metres from the zone's south-west corner, with the flat-earth factors of `roads.ts`; each keeps its column and row | Hexagons; round-coordinate grid | Deterministic; simple lines and comparison |
+| D27 | 25 Nov 2026 | Lines and bands of equal ratio by our own marching triangles in `packages/core`, leaving out squares with a missing corner | d3-contour 4.0.2; marching squares | d3-contour cannot leave out missing values (FR-12); no library needed |
+| D28 | 25 Nov 2026 | Lines are worked out by the API on request | In the browser | One place for the map and the export |
+| D29 | 25 Nov 2026 | Web: an "Access" left pane in `apps/web/src/analysis/`, one app-store field, layers in `map/use-analysis-layers.ts` and `use-analysis-result-layers.ts` | A modal; a pane | Like the Simulation pane; `store.ts` and `MapView.tsx` barely grow |
+| D30 | 25 Nov 2026 | Each pair's journey legs (summary) are stored at run time; the car path is asked for on click | Ask again on click; store | Reopening and sameness (FR-16, NFR-4) |
+| D31 | 25 Nov 2026 | Two analyses compare when their copied zone outline and spacing are the same and both have the point of interest | Same zone id | Points must line up |
+| D32 | 25 Nov 2026 | The fixture e2e runs analyses against a fake router written in Node | Skip without routers | Real coverage of the job with no Java |
+| D33 | 25 Nov 2026 | Developers may run Gradle on the access analysis router tickets, one Gradle build at a time | Owner-run only | The owner asked for the epic to be built overnight |
+| D34 | 25 Nov 2026 | Starting values: walk 800 m, longest journey 120 min, 3 changes, all modes but school buses, parking 5 min, traffic 1.0/1.4/1.2/1.4/1.0, spacing 250 m, lines at 1, 1.5, 2, 3, 4, departure 08:00 | | BRD Q1, Q2 and the router's settled walking rules |
+
 ## 11. Issues and discrepancies
 
 ### Open
@@ -258,6 +284,8 @@ flowchart LR
 |---|---|---|---|
 | I6 | Coding standards gaps (section 14): no check for unused variables or parameters; 20 uses of `any` and 32 `as never` casts; 28 files over 300 lines and no file length check. Decided by D13. | `tsconfig.base.json`, `.oxlintrc.json`, `apps/*/src`, `packages/*/src` | Project manager (tickets) |
 | I7 | The copy-on-write rule "an edit changes only rows it made, apart from the tag that removes an earlier row" holds in the code sampled but is not enforced or written down in the code. D11 depends on it. | `apps/api/src/scenarios/` | Developer (a check for every edit kind, BRD `trustworthy-edits` step 3) |
+| I8 | Java files over 300 lines (`RouterServer.java` 723, `Simulations.java` 677, `JourneyApi.java` 659, `Timetables.java` 374). Section 14's short-file rule is written for TypeScript, and T-19's check covers only `apps/` and `packages/`. Should the rule and its check cover `services/router`? (access-analysis AAI-2) | `services/router/router-server/` | Owner |
+| I9 | NFR-5 of `access-analysis` ("no coordinates sent outside the machine") is read as routing requests only; basemap tiles still come from OpenFreeMap, and their addresses say which part of the map is viewed (access-analysis AAI-5) | `apps/web/src/app/theme.ts` | Owner, then BA |
 
 ### Resolved: fixed in the code
 
@@ -320,6 +348,7 @@ Open questions: the 16 router-plan questions (each has a default), and the delet
 | 23 Nov 2026 | I5 resolved: the importer honours `PACKS_DIR`. The importer also takes a feed on disk (`FEED_PATH`), and `npm run test:e2e:fixture` runs the scenario e2e suite on a small test feed. | Ticket T-3: e2e tests without the real data or the dev servers. |
 | 23 Nov 2026 | File paths updated for the feature-folder moves | Stage 2 of `docs/refactor-plan.md` (tickets T-6, T-7) |
 | 23 Nov 2026 | Added D10 to D13, the copy-on-write rule in 5.3, issues I6 and I7, and section 14 (project structure and coding standards); pointed to the glossary and BRDs | Design of BRD `trustworthy-edits` v1.0 (`docs/architecture/trustworthy-edits.md`) |
+| 25 Nov 2026 | Added D14 to D34, marked D5 superseded by D16, added issues I8 and I9. The context and component sections are updated when the work is built (AA-25), not before. | Design of BRD `access-analysis` v1.0 (`docs/architecture/access-analysis.md`) |
 
 ## 14. Project structure and coding standards
 
