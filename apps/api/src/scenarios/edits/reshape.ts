@@ -30,7 +30,8 @@ import {
   type Avoid,
   type PathMethod,
 } from '../../routing/roads.ts';
-import { visible, type Scenario } from '../engine.ts';
+import { cloneTrips, visible, type Scenario, type Tx } from '../engine.ts';
+import { NEW_LINE, SKIP_PENALTY } from './assumptions.ts';
 import { stopVisible } from '../stops-visible.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from '../../routing/timings.ts';
 import { fail } from '../../http.ts';
@@ -714,3 +715,60 @@ export const describeNewStretches = (plan: ReshapePlan) => {
   if (!plan.learned && !plan.estimated) return 'new path ' + describeMethod(plan.pathMethod);
   return `new path ${describeMethod(plan.pathMethod)}; run times: ${describeTimes(plan.timed, 'the new stretches take')}`;
 };
+
+export const reshapeDeps: ReshapeDeps = {
+  cloneTrips,
+  newLine: NEW_LINE,
+  skipPenalty: SKIP_PENALTY,
+};
+
+export interface ReshapeBody {
+  patternId: number;
+  stopIds: number[];
+  followRoads?: boolean;
+  direct?: boolean;
+  bothWays?: boolean;
+}
+export const reshapeOptions = (body: ReshapeBody) => ({
+  followRoads: body.followRoads !== false,
+  direct: body.direct === true,
+  platformIndex: 0,
+});
+
+/**
+ * Gives one of a line's stop patterns a new list of stops and rebuilds every trip that uses it:
+ * extending, cutting short, re-routing, adding or removing a stop. Unless told otherwise the
+ * line's other direction is changed to match.
+ */
+export async function editReshape(tx: Tx, sc: Scenario, seq: number, body: ReshapeBody) {
+  const options = reshapeOptions(body);
+  const plan = await planReshape(
+    tx,
+    sc,
+    Number(body.patternId),
+    body.stopIds ?? [],
+    options,
+    reshapeDeps,
+  );
+  const other =
+    body.bothWays === false ? null : await planOtherWay(tx, sc, plan, options, reshapeDeps);
+  const done = await applyReshape(tx, sc, seq, plan, 0, reshapeDeps);
+  const idMap = { ...done.idMap };
+  let otherNote = '';
+  if (other && 'plan' in other) {
+    const back = await applyReshape(tx, sc, seq, other.plan, 1, reshapeDeps);
+    Object.assign(idMap, back.idMap);
+    otherNote = `. The other direction changed to match: ${describeStops(other.plan)}, ${back.trips} trip${back.trips === 1 ? '' : 's'}, ${describeChange(back.changeSecs)}`;
+  } else if (other && 'reason' in other) {
+    otherNote = `. The other direction is unchanged: ${other.reason}`;
+  }
+  const stretches = describeNewStretches(plan);
+  const towards = plan.stops[plan.stops.length - 1].name
+    .replace(/,.*$/, '')
+    .replace(/ Station$/, '');
+  return {
+    summary: `${plan.routeName} towards ${towards}: ${describeStops(plan)} on ${done.trips} trip${done.trips === 1 ? '' : 's'}, ${describeChange(done.changeSecs)}${stretches ? `; ${stretches}` : ''}${otherNote}`,
+    idMap,
+    routeId: plan.routeId,
+  };
+}
