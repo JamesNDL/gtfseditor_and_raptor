@@ -1,6 +1,7 @@
-// Runs the scenario e2e suite against the small test feed, with no real data and no dev servers:
-// makes a throwaway database, imports packages/gtfs/test/fixtures/mini-feed into it, starts an API
-// of its own on a spare port, runs scenarios.e2e.mjs against it, and then always stops the API,
+// Runs the scenario and access analysis e2e suites against the small test feed, with no real data
+// and no dev servers: makes a throwaway database, imports packages/gtfs/test/fixtures/mini-feed
+// into it, starts an API of its own on a spare port, runs scenarios.e2e.mjs and then
+// analysis.e2e.mjs against it, and then always stops the API,
 // drops the database and removes the temporary folder (also on Ctrl+C).
 // On the way it checks that the packs went to PACKS_DIR, and that re-importing a day that has a
 // scenario is refused and keeps the scenario.
@@ -225,10 +226,20 @@ try {
   await waitForApi(api);
   await checkReimportRefused(env);
 
-  say('running the scenario checks');
-  const { code } = await run('apps/api/test/scenarios.e2e.mjs', [], { ...env, API });
-  failed = code !== 0;
-  if (failed) console.error(`[fixture ${elapsed()}] the scenario checks failed (code ${code})`);
+  // Each suite runs even if the one before failed, so one run shows every failure.
+  const suites = [
+    ['scenario', 'apps/api/test/scenarios.e2e.mjs'],
+    ['analysis', 'apps/api/test/analysis.e2e.mjs'],
+  ];
+  let anyFailed = false;
+  for (const [name, script] of suites) {
+    say(`running the ${name} checks`);
+    const { code } = await run(script, [], { ...env, API });
+    if (code === 0) continue;
+    anyFailed = true;
+    console.error(`[fixture ${elapsed()}] the ${name} checks failed (code ${code})`);
+  }
+  failed = anyFailed;
 } catch (err) {
   console.error(`[fixture ${elapsed()}] ${err?.stack ?? err}`);
 } finally {
