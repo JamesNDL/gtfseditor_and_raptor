@@ -169,6 +169,8 @@ try {
             walkSecs: row.walk_secs,
             waitSecs: row.wait_secs,
             rideSecs: row.ride_secs,
+            // A depart-at analysis has no early wait (FR-21).
+            earlyWaitSecs: 0,
             rides: row.rides,
           },
     legs: row.legs && row.legs.map(withStraightPath),
