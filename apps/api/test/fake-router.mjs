@@ -10,10 +10,18 @@
 //             of its source is a multiple of 11 (that source has no road). A route is two points.
 //   timetables 404 until a PUT, then ready with the version asked for.
 //
-// A test steers it with POST /fake/control {down?, road?, hold?}:
+// A test steers it with POST /fake/control {down?, road?, hold?, bulkAnswers?, tableAnswers?,
+// bulkError?, resetCounts?}:
 //   down  true: every other request has its connection dropped, as if the router were stopped.
 //   road  false: health says the road side is not available.
 //   hold  true: timetables stay loading until it is set false again.
+//   bulkAnswers, tableAnswers  a number: answer that many more bulk journey (or road table)
+//         requests, then hold the next ones until it is raised or set to null (no limit).
+//   bulkError  words: bulk journey requests are refused with 400 and these words; null to stop.
+//   resetCounts  true: the counts below start again from 0.
+// GET /fake/state gives {lastBulk, counts}: the last bulk journey request as sent, and how many
+// requests, journey queries and drive sources have been answered (a request held and then given
+// up by the caller is not counted).
 // Usage: import { startFakeRouter } from './fake-router.mjs', or `node fake-router.mjs [port]`.
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -73,8 +81,10 @@ function journeyLine(query) {
   return { id, status: 'ok', journey };
 }
 
-function bulk(res, body) {
+function bulk(res, body, counts) {
   const queries = body.queries ?? [];
+  counts.bulkRequests++;
+  counts.journeys += queries.length;
   res.writeHead(200, { 'content-type': 'application/x-ndjson' });
   let ok = 0;
   for (const query of queries) {
@@ -94,8 +104,10 @@ function bulk(res, body) {
   res.end(`${JSON.stringify({ summary })}\n`);
 }
 
-function table(res, body) {
+function table(res, body, counts) {
   const { sources = [], destinations = [] } = body;
+  counts.tableRequests++;
+  counts.drives += sources.length * destinations.length;
   const noRoad = sources.map((s) => multipleOf(s.lon, 11));
   const grid = (perMetre) =>
     sources.map((s, i) =>
@@ -131,17 +143,49 @@ function route(res, body) {
 
 /** Starts the fake router. Resolves with its address and a function that stops it. */
 export async function startFakeRouter(port = 0) {
-  const control = { down: false, road: true, hold: false };
+  const control = {
+    down: false,
+    road: true,
+    hold: false,
+    bulkAnswers: null,
+    tableAnswers: null,
+    bulkError: null,
+  };
+  const zeroCounts = () => ({ bulkRequests: 0, journeys: 0, tableRequests: 0, drives: 0 });
+  let counts = zeroCounts();
+  let lastBulk = null;
   /** Timetable id to the version last asked for. */
   const timetables = new Map();
 
-  function answer(req, res, text) {
+  /**
+   * Waits while `control[key]` is 0, then takes one from it if it is a number. False when the
+   * caller went away meanwhile, so the request is not answered and not counted.
+   */
+  async function allowed(key, res) {
+    const gone = () => res.destroyed || !res.socket || res.socket.destroyed;
+    while (control[key] === 0) {
+      if (gone()) return false;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (gone()) return false;
+    if (typeof control[key] === 'number') control[key]--;
+    return true;
+  }
+
+  async function answer(req, res, text) {
     const body = text ? JSON.parse(text) : {};
     const { pathname } = new URL(req.url, 'http://fake');
     const timetable = /^\/v1\/timetables\/([^/]+)$/.exec(pathname);
     if (req.method === 'POST' && pathname === '/fake/control') {
-      for (const key of Object.keys(control)) if (key in body) control[key] = Boolean(body[key]);
+      for (const key of ['down', 'road', 'hold'])
+        if (key in body) control[key] = Boolean(body[key]);
+      for (const key of ['bulkAnswers', 'tableAnswers', 'bulkError'])
+        if (key in body) control[key] = body[key];
+      if (body.resetCounts) counts = zeroCounts();
       return json(res, 200, control);
+    }
+    if (req.method === 'GET' && pathname === '/fake/state') {
+      return json(res, 200, { lastBulk, counts });
     }
     if (control.down) return req.socket.destroy();
     if (req.method === 'GET' && pathname === '/v1/health') {
@@ -157,8 +201,16 @@ export async function startFakeRouter(port = 0) {
       if (control.hold) return json(res, 200, { id: timetable[1], building: { version } });
       return json(res, 200, { id: timetable[1], status: 'ready', version });
     }
-    if (req.method === 'POST' && pathname === '/v1/journeys/bulk') return bulk(res, body);
-    if (req.method === 'POST' && pathname === '/v1/road/table') return table(res, body);
+    if (req.method === 'POST' && pathname === '/v1/journeys/bulk') {
+      lastBulk = body;
+      if (control.bulkError !== null) return json(res, 400, { error: control.bulkError });
+      if (await allowed('bulkAnswers', res)) bulk(res, body, counts);
+      return;
+    }
+    if (req.method === 'POST' && pathname === '/v1/road/table') {
+      if (await allowed('tableAnswers', res)) table(res, body, counts);
+      return;
+    }
     if (req.method === 'POST' && pathname === '/v1/road/route') return route(res, body);
     // Anything else, such as the OSRM-shaped road requests, is not known: roads.ts falls back.
     return json(res, 404, { error: `the fake router does not answer ${req.method} ${pathname}` });
@@ -168,11 +220,7 @@ export async function startFakeRouter(port = 0) {
     let text = '';
     req.on('data', (chunk) => (text += chunk));
     req.on('end', () => {
-      try {
-        answer(req, res, text);
-      } catch (err) {
-        json(res, 400, { error: String(err?.message ?? err) });
-      }
+      answer(req, res, text).catch((err) => json(res, 400, { error: String(err?.message ?? err) }));
     });
   });
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));

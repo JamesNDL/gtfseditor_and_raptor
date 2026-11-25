@@ -1,11 +1,13 @@
 // Running access analyses in this API process, one at a time, in a queue (D20, docs/architecture/
 // access-analysis.md §4.4). An analysis left queued, preparing or running when the API stopped is
-// driven again when it starts. Cancel sets a flag that the run checks between steps; a cancelled
-// or failed run deletes its results.
-import type { AnalysisProgress, AnalysisState } from '@gtfs-editor/core';
+// driven again when it starts, from the first pair not yet finished. Cancel sets a flag that the
+// run checks between steps and batches; a cancelled or failed run deletes its results.
+import type { AnalysisProgress, AnalysisSettings, AnalysisState } from '@gtfs-editor/core';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import type { Scenario } from '../scenarios/engine.ts';
 import { ensureTimetable, timetableKey, type Box } from '../sim/timetables.ts';
+import { runDrives, type AfterBatch } from './run-drives.ts';
+import { runJourneys } from './run-journeys.ts';
 
 /** The states of an analysis that is still to finish. */
 export const ACTIVE_STATES: readonly AnalysisState[] = ['queued', 'preparing', 'running'];
@@ -37,6 +39,7 @@ interface RunRow {
   baselineId: number | null;
   scenarioId: number | null;
   scenarioName: string | null;
+  settings: AnalysisSettings;
 }
 
 /** A box's edges in degrees, before it is widened. */
@@ -88,9 +91,20 @@ async function scenarioOf(sql: Sql, row: RunRow): Promise<Scenario | null> {
   return scenario;
 }
 
+/** Adds one pending result row per pair (sample point and point of interest), unless it has them. */
+async function addPendingPairs(sql: Sql, id: number): Promise<void> {
+  await sql`
+    insert into analysis_results (analysis_id, point_seq, poi_seq, status)
+    select ${id}, p.seq, o.seq, 'pending'
+    from analysis_points p cross join analysis_pois o
+    where p.analysis_id = ${id} and o.analysis_id = ${id}
+      and not exists (select 1 from analysis_results where analysis_id = ${id})
+    on conflict do nothing`;
+}
+
 /**
- * Takes an analysis from wherever it has got to through to the end. Safe to call again after the
- * API restarts. AA-15 adds the drives and the journeys after the timetable.
+ * Takes an analysis from wherever it has got to through to the end: the timetable, the drives,
+ * then the journeys. Safe to call again after the API restarts: only unfinished pairs are worked.
  */
 async function driveAnalysis(
   sql: Sql,
@@ -101,7 +115,7 @@ async function driveAnalysis(
   try {
     const [row] = await sql<RunRow[]>`
       select state, baseline_id as "baselineId", scenario_id as "scenarioId",
-             scenario_name as "scenarioName"
+             scenario_name as "scenarioName", settings
       from analyses where id = ${id}`;
     if (!row || !ACTIVE_STATES.includes(row.state)) return;
     if (cancelled()) throw new Cancelled();
@@ -131,6 +145,22 @@ async function driveAnalysis(
         where id = ${id}`;
     });
     if (cancelled()) throw new Cancelled();
+
+    // 2. The drives, then the journeys, batch by batch, with progress after each (FR-10).
+    await addPendingPairs(sql, id);
+    await sql`
+      update analyses set state = 'running', progress = ${progressJson({ stage: 'drives' })}::text::jsonb
+      where id = ${id}`;
+    const afterBatch =
+      (stage: 'drives' | 'journeys'): AfterBatch =>
+      async (done, total) => {
+        if (cancelled()) throw new Cancelled();
+        await sql`
+          update analyses set progress = ${progressJson({ stage, done, total })}::text::jsonb
+          where id = ${id}`;
+      };
+    await runDrives(sql, id, row.settings, afterBatch('drives'));
+    await runJourneys(sql, id, key.id, row.settings, afterBatch('journeys'));
 
     await sql`
       update analyses set state = 'done', finished_at = now(), progress = '{}', error = null
