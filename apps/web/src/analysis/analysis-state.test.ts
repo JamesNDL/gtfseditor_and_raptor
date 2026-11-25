@@ -50,6 +50,8 @@ describe('defaultAnalysisView', () => {
     expect(view).toEqual({
       screen: 'list',
       drawing: null,
+      drawingClosed: false,
+      drawingProblem: null,
       placingPoi: null,
       movingPoiId: null,
       setup: {
