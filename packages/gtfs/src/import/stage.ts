@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import type { FeedVersion } from '../feed-cache.ts';
+import type { FeedVersion } from '../feed/feed-cache.ts';
 import type { Sql } from '../db.ts';
 
 const REQUIRED = [

@@ -1,0 +1,123 @@
+.form {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.form .form-wide {
+  grid-column: 1 / -1;
+}
+
+.form .day-select {
+  width: 100%;
+  color: var(--text);
+}
+
+.colour {
+  padding: 2px;
+  height: 31px;
+}
+
+/* adding a stop that does not exist yet */
+.new-stop-link {
+  display: block;
+  margin: 4px 0 12px;
+}
+
+.new-stop {
+  border: 1px solid var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+/* The start and end times of a closure that lasts part of the day. */
+.closure-times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.closure-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+/* A closure's list of lines: each with what happens to it and the parts it is split into. */
+
+.closure-choice {
+  flex: none;
+  width: auto;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.closure-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.closure-part {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.closure-part:hover {
+  border-color: var(--accent);
+}
+
+.closure-part.dropped {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.side-dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+.reshape-preview .stale {
+  opacity: 0.55;
+}
+
+/* The line the pointer is on, in the closure's list or on the map. */
+.closure-lines li.focus {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow:
+    -8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent),
+    8px 0 0 color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.closure-only {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 13px;
+}

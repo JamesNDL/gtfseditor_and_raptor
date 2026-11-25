@@ -1,10 +1,10 @@
 // Platform occupancy: one row per platform, a bar for each train's stay.
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useMemo } from 'react';
-import { useApi } from '../api.ts';
-import { applyEdit } from '../scenario.ts';
+import { useApi } from '../shared/api-client.ts';
+import { applyEdit } from '../scenarios/scenario-client.ts';
 import { stepAt, stepColor, useTripColours } from '../sim/loads.ts';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 import {
   COLORS,
   fitText,

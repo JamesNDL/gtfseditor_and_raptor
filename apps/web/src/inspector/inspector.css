@@ -1,0 +1,198 @@
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  justify-content: space-between;
+}
+
+.rows.clickable .row:hover {
+  background: var(--surface-2);
+}
+
+.row-end {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.time {
+  flex: none;
+  width: 104px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.time .muted {
+  font-weight: 400;
+}
+
+.between {
+  padding: 1px 8px 1px 20px;
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 2px dotted var(--border);
+  margin-left: 14px;
+}
+
+.badge-button:hover .badge {
+  filter: brightness(1.15);
+}
+
+.chart-plot {
+  position: relative;
+}
+
+.chart-bar {
+  fill: var(--series-1);
+}
+
+.chart-bar.hover {
+  fill: #6da7ec;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-dasharray: 2 3;
+}
+
+.chart-axis {
+  stroke: var(--border);
+}
+
+.chart-label {
+  fill: var(--muted);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stop-link {
+  text-align: left;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 3px;
+}
+
+.stop-link:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+/* editing controls in the inspector */
+.edit-tools {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-tools h3 {
+  margin: 0;
+}
+
+.edit-hint {
+  margin: -2px 0 0;
+}
+
+.edit-number {
+  width: 64px;
+}
+
+.form-preview {
+  margin: 0 0 8px;
+}
+
+/* before-and-after */
+.chart-before {
+  fill: none;
+  stroke: var(--before);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 2;
+}
+
+.bands {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bands th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 4px 4px;
+}
+
+.bands td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--hairline);
+}
+
+.bands .n {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* schedule tools */
+.grow-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.platform-change {
+  margin-left: 6px;
+}
+
+.platform-select {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+}
+
+/* Deleting a station, a stop or a platform (the station panel) */
+.platform-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.platform-row .row {
+  flex: 1;
+  min-width: 0;
+}
+
+.struck {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.delete-preview {
+  border: 1px solid var(--danger-text);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.delete-preview .actions {
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.deleted-note {
+  border: 1px solid var(--border);
+}
+
+.deleted-note p {
+  margin: 0 0 6px;
+}

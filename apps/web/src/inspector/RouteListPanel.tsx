@@ -1,5 +1,5 @@
-import { useStore } from '../store.ts';
-import { Badge, fmt } from './parts.tsx';
+import { useStore } from '../app/store.ts';
+import { Badge, fmt } from '../shared/ui/parts.tsx';
 
 /** Shown when a click lands on several overlapping lines. */
 export function RouteListPanel({ ids }: { ids: number[] }) {

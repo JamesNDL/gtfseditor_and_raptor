@@ -1,9 +1,10 @@
-import { currentSelection, useStore } from '../store.ts';
+import { currentSelection, useStore } from '../app/store.ts';
 import { RouteListPanel } from './RouteListPanel.tsx';
 import { RoutePanel } from './RoutePanel.tsx';
 import { StationPanel } from './StationPanel.tsx';
 import { TripPanel } from './TripPanel.tsx';
 import { VehicleDayPanel } from './VehicleDayPanel.tsx';
+import './inspector.css';
 
 export function Inspector() {
   const selection = useStore(currentSelection);

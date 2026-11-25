@@ -1,7 +1,7 @@
 // How full each vehicle is through the day in the chosen run, for colouring vehicles on the map
 // and trips in the timelines. It is large and read every frame, so it lives outside React.
 import { useEffect, useState } from 'react';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 import { FULL_STEPS, fetchResults, type VehicleLoads } from './results.ts';
 
 interface TripLoad {

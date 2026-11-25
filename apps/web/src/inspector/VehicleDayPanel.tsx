@@ -1,9 +1,9 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { Fragment } from 'react';
-import { useApi, type VehicleDayDetail } from '../api.ts';
-import { VehicleTypePicker } from '../FleetPanel.tsx';
-import { useStore } from '../store.ts';
-import { Badge, duration, fmt, Loading, shortStop, Tag, Tile } from './parts.tsx';
+import { useApi, type VehicleDayDetail } from '../shared/api-client.ts';
+import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
+import { useStore } from '../app/store.ts';
+import { Badge, duration, fmt, Loading, shortStop, Tag, Tile } from '../shared/ui/parts.tsx';
 
 export function VehicleDayPanel({ vehicleDayId }: { vehicleDayId: number }) {
   const day = useApi<VehicleDayDetail>(`/api/vehicle-days/${vehicleDayId}`);

@@ -1,11 +1,11 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
-import { getJson, useApi, type TripDetail, type TripSummary } from '../api.ts';
-import { clock } from '../clock.ts';
+import { getJson, useApi, type TripDetail, type TripSummary } from '../shared/api-client.ts';
+import { clock } from '../shared/clock.ts';
 import { TripPassengers } from '../sim/SimFigures.tsx';
-import { useStore } from '../store.ts';
-import { applyEdit } from '../scenario.ts';
-import { Badge, duration, fmt, Loading, shortStop, Tag } from './parts.tsx';
+import { useStore } from '../app/store.ts';
+import { applyEdit } from '../scenarios/scenario-client.ts';
+import { Badge, duration, fmt, Loading, shortStop, Tag } from '../shared/ui/parts.tsx';
 import { TripEditTools } from './TripEditTools.tsx';
 
 /** Re-renders when the simulation clock moves into a different minute. */

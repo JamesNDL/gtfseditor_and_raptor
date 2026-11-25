@@ -1,0 +1,101 @@
+/* ----------------------------------------------------------------- timeline */
+.tl-panel {
+  position: absolute;
+  left: 324px;
+  right: 14px;
+  bottom: 118px;
+  z-index: 8;
+  height: max(280px, 42vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Leave the inspector its column when both are open. */
+.app.inspector-open .tl-panel {
+  right: 468px;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-tabs {
+  margin: 0;
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.timeline-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.timeline-select {
+  max-width: 300px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.timeline-window {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+
+.timeline-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.timeline-canvas-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.timeline-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.timeline-tooltip {
+  display: none;
+  bottom: auto;
+  transform: none;
+  max-width: 320px;
+  white-space: normal;
+}
+
+.timeline-message {
+  padding: 24px 18px;
+}
+
+.timeline-hint {
+  padding: 4px 12px 6px;
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep the line badge visible when the timeline header is short of room. */
+.timeline-context .badge {
+  flex: none;
+}
+
+.timeline-select {
+  flex: 0 10 auto;
+}

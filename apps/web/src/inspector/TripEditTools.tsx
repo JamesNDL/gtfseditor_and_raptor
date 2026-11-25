@@ -1,10 +1,10 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useState } from 'react';
-import { useApi, type TripDetail } from '../api.ts';
-import { VehicleTypePicker } from '../FleetPanel.tsx';
-import { applyEdit } from '../scenario.ts';
-import { useStore } from '../store.ts';
-import { Tag } from './parts.tsx';
+import { useApi, type TripDetail } from '../shared/api-client.ts';
+import { VehicleTypePicker } from '../catalogue/CataloguePanel.tsx';
+import { applyEdit } from '../scenarios/scenario-client.ts';
+import { useStore } from '../app/store.ts';
+import { Tag } from '../shared/ui/parts.tsx';
 
 const NUDGES = [-300, -60, 60, 300];
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { applyEdit, undo } from '../scenario.ts';
-import { useStore } from '../store.ts';
-import { Badge, fmt } from './parts.tsx';
+import { applyEdit, undo } from '../scenarios/scenario-client.ts';
+import { useStore } from '../app/store.ts';
+import { Badge, fmt } from '../shared/ui/parts.tsx';
 
-/** What the server says a deletion would do (apps/api/src/delete-stop.ts). */
+/** What the server says a deletion would do (apps/api/src/scenarios/edits/delete-stop.ts). */
 interface DeletePreview {
   what: 'station' | 'stop' | 'platform';
   label: string;

@@ -1,11 +1,11 @@
 import { formatSecs } from '@gtfs-editor/core';
 import { useEffect, useState } from 'react';
-import { useApi } from '../api.ts';
-import { clock } from '../clock.ts';
+import { useApi } from '../shared/api-client.ts';
+import { clock } from '../shared/clock.ts';
 import { StationPassengers } from '../sim/SimFigures.tsx';
-import { useStore } from '../store.ts';
+import { useStore } from '../app/store.ts';
 import { DeletedNote, DeletePreviewCard, type Deletion } from './DeleteStop.tsx';
-import { Badge, fmt, Loading, Tag, Tile } from './parts.tsx';
+import { Badge, fmt, Loading, Tag, Tile } from '../shared/ui/parts.tsx';
 
 interface StationSummary {
   id: number;

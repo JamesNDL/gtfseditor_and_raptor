@@ -15,7 +15,7 @@ import postgres from 'postgres';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
 const FEED = path.join(ROOT, 'packages/gtfs/test/fixtures/mini-feed');
-const IMPORTER = 'packages/gtfs/src/import-cli.ts';
+const IMPORTER = 'packages/gtfs/src/cli/import.ts';
 const PORT = Number(process.env.E2E_PORT ?? 3101);
 const DB = process.env.E2E_DB ?? 'gtfs_e2e';
 const ADMIN_URL = process.env.E2E_ADMIN_URL ?? 'postgres://gtfs:gtfs@localhost:5433/postgres';
