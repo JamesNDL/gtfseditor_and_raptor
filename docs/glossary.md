@@ -8,6 +8,15 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 
 ---
 
+**Access analysis** (proposed, BRD `access-analysis`): a comparison, over a zone, of how long trips to chosen points of interest take by public transport and by car, shown as a map of access ratios. One analysis is run on one timetable (the published day or a scenario) at one departure time.
+- *Also known as*: analysis (in code, `analyses` table).
+- *Business rules*: it runs in the background and can be cancelled. At most 10,000 sample points and 10 points of interest. It copies its zone and points of interest when made, so later changes to them do not change it. Running it twice on the same timetable gives the same results.
+- *Related*: Zone, Point of interest, Sample point, Access ratio.
+
+**Access ratio** (proposed, BRD `access-analysis`): the public transport time divided by the car time, for one sample point and one point of interest. 1 means public transport takes as long as driving; 2 means twice as long.
+- *Business rules*: the public transport time is door to door from the asked departure time (walking, waiting, riding and changing). The car time is the road router's driving time times the traffic factor, plus the parking allowance. A pair with no service or no road has no access ratio.
+- *Related*: Access analysis, Traffic factor, Parking allowance, No service.
+
 **Baseline**: one published day of the TfNSW timetable, imported once and never changed. Every scenario starts from one.
 - *Also known as*: the published timetable, a day. Not the same as a *feed*, which is the whole download from TfNSW covering many days.
 - *In code*: `baselines` table; `packages/gtfs/src/import/baseline.ts`.
@@ -68,6 +77,12 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 **Mode**: the kind of service: train, metro, light rail, ferry, bus or coach.
 - *In code*: `modes` table.
 
+**No service** (proposed, BRD `access-analysis`): a sample point with no public transport journey to a point of interest within the analysis's limits (longest walk, longest journey, most changes, modes allowed). It has no access ratio and is left out of the lines of equal ratio.
+- *Related*: **No road** (a sample point more than 500 m from a drivable road, so with no car time; also left out of the lines), Access ratio, Sample point.
+
+**Parking allowance** (proposed, BRD `access-analysis`): minutes added to every car time in an access analysis, for parking and walking from the car. 5 minutes unless changed.
+- *Related*: Access ratio, Traffic factor.
+
 **Part**: one side of a line split by a closure, run as a line of its own and named after the original with the side added (B1 becomes B1-N and B1-S).
 - *In code*: a scenario route whose `extra` holds `variantOf` and `side`.
 - *Related*: Closure, Line.
@@ -85,15 +100,30 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *In code*: a row in `stops` under a station.
 - *Related*: Station, Stop.
 
+**Point of interest** (proposed, BRD `access-analysis`): a place people need to reach, such as a hospital or a shopping centre, placed on the map and named. It is saved and can be reused, moved, renamed and deleted, and may lie outside the zone.
+- *Also known as*: POI (in code, `points_of_interest` table).
+- *Business rules*: it has a kind and a source, so that a dataset can supply them later; today every one is drawn by hand.
+- *Related*: Access analysis, Zone.
+
 **Ripple**: what else moves when one trip is retimed: nothing else, the later trips of the same vehicle, or the later trips of the line.
 - *In code*: `ripple` on the shift edit in `apps/api/src/scenarios/scenarios.ts`.
 - *Business rules*: today "the line" moves only trips in the same direction, and "the vehicle" moves every later trip by the full amount. BRD `trustworthy-edits` makes both choices options.
 - *Related*: Minimum turnaround, Vehicle day.
 
+**Road router** (proposed, BRD `access-analysis`): the part of the journey router that plans drives along OpenStreetMap roads, and answers the editor's road requests in place of the public OSRM server.
+- *Also known as*: the address in `ROUTER_URL`. Not the same as the journey router's public transport side (`ROUTER_SERVICE_URL`), though both run in the same Java service unless the road side runs on its own.
+- *In code*: `services/router/router-road` (planned).
+- *Business rules*: driving times are free-flow (no traffic). OpenStreetMap is credited wherever its results are shown.
+- *Related*: Traffic factor, Access ratio.
+
 **Run time**: the time a vehicle takes from leaving one stop to arriving at the next.
 - *Business rules*: for new stretches it is learned from published trips where three or more run between the two stops; otherwise from the speed of nearby services of the same mode; otherwise from the mode's typical speed. Never faster than the mode can go.
 - *In code*: `apps/api/src/routing/timings.ts`; speed limits in `packages/core/src/limits.ts`.
 - *Related*: Part of the day, Estimate.
+
+**Sample point** (proposed, BRD `access-analysis`): one point of the even grid laid over a zone, from which trips to each point of interest are timed.
+- *Business rules*: points are laid at the chosen spacing in metres, and only those inside the zone are kept. They are not weighted by population.
+- *Related*: Zone, Access analysis.
 
 **Scenario**: a "what if" version of a baseline: the baseline plus a list of edits. Scenarios never affect each other.
 - *In code*: `scenarios` table; changed trips are new rows owned by the scenario and the originals are marked replaced.
@@ -122,6 +152,9 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *In code*: `patterns` table.
 - *Related*: Line, Trip.
 
+**Traffic factor** (proposed, BRD `access-analysis`): the number a free-flow driving time is multiplied by to allow for traffic, set for each part of the day. Starting values: 1.0 before 06:30 and after 19:00, 1.4 in the morning and evening peaks, 1.2 in the middle of the day.
+- *Related*: Part of the day, Access ratio, Parking allowance.
+
 **Trip**: one run of a vehicle along a line from its first stop to its last.
 - *In code*: `trips` table. Each scenario change makes a new trip row with a new id; the published id is kept before the `~`.
 - *Related*: Call, Vehicle day, Stop pattern.
@@ -140,3 +173,7 @@ Started 23 Nov 2026 from `PLAN.md`, `docs/architecture/system.md` and the code.
 - *In code*: `vehicle_types` table; `apps/api/src/catalogue/routes.ts`.
 - *Business rules*: every trip resolves to exactly one type: trip, then vehicle day, then line, then mode. Capacities are placeholders until set. Changes in the catalogue apply to every scenario at once (to confirm).
 - *Related*: Vehicle day.
+
+**Zone** (proposed, BRD `access-analysis`): an area drawn on the map as a polygon and named, over which an access analysis lays its sample points. Saved and reusable; it can be renamed and deleted.
+- *Business rules*: an outline that crosses itself is refused. 3 to 200 corners.
+- *Related*: Sample point, Access analysis. Not the same as a simulation's area, which is a box.

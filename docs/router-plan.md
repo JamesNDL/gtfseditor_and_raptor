@@ -36,7 +36,7 @@ These facts come from reading the code and querying the local database (read onl
 | A stop a trip runs through without stopping is kept in its stop times with `pickup_type = 1` and `drop_off_type = 1`. | `scenarios.ts` (`editSkipStop`) |
 | There are 7,031 pathways. Only 987 join two platforms directly; the rest pass through entrances and walkway nodes. All have a traversal time. | database |
 | A full weekday export takes two to four minutes, about five on the development machine. | `PLAN.md` |
-| Vehicle capacities are placeholders (for example a bus is 45 seated, 20 standing). Vehicle types are shared by all scenarios and edited in place. | `schema.sql`, `apps/api/src/fleet.ts` |
+| Vehicle capacities are placeholders (for example a bus is 45 seated, 20 standing). Vehicle types are shared by all scenarios and edited in place. | `packages/gtfs/sql/migrations/0001_initial.sql`, `apps/api/src/fleet.ts` |
 | The editor calls three OSRM endpoints through `ROUTER_URL`: `route/v1/driving`, `table/v1/driving` and `nearest/v1/driving`. | `apps/api/src/roads.ts` |
 | A scenario's `head` number does not identify its contents. After an undo, the next edit reuses the same number for different contents. | `applyEdit` in `scenarios.ts` |
 | The development machine has 15.8 GB of memory and 12 logical cores. When I checked, 1.7 GB was free. | system query |

@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ROUTER_URL` is the OSRM road router. `ROUTER_SERVICE_URL` is our Java journey router. They are different things.
 - Times are seconds since the start of the service day and can go past 24:00.
 - Put logic that needs no database in `packages/core`, with unit tests beside it (`*.test.ts`).
+- The database schema is the numbered migrations in `packages/gtfs/sql/migrations/`. Each runs once, at the first API start or import after it lands, and is recorded in `schema_migrations`. A schema change is a new file with the next free number (`NNNN_<what>.sql`); never edit a merged one, `0001_initial.sql` included.
 
 ## Where code goes
 

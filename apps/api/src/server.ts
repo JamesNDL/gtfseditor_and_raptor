@@ -7,14 +7,15 @@ import { registerBaselineRoutes } from './network/baselines.ts';
 import { registerInspectorRoutes } from './network/inspector.ts';
 import { registerMapDataRoutes } from './network/map-data.ts';
 import { registerTimelineRoutes } from './network/timelines.ts';
-import { registerScenarioRoutes } from './scenarios/scenarios.ts';
+import { registerScenarioRoutes } from './scenarios/routes.ts';
 import { registerSimRoutes } from './sim/sim.ts';
 import { registerSimResultRoutes } from './sim/results-read.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
 const sql = connect();
-await migrate(sql);
+const ran = await migrate(sql);
+if (ran.length > 0) console.log(`Ran migrations ${ran.join(', ')}`);
 
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(compress, { threshold: 1024 });
