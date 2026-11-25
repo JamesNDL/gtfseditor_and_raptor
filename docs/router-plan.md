@@ -279,8 +279,9 @@ Base path `/v1`. JSON throughout. Stop and trip ids are GTFS ids (`gtfs_id` in t
 | `POST /v1/timetables/{id}/loads` | Create a named load state (empty, or from an uploaded CSV). |
 | `GET /v1/timetables/{id}/loads/{name}` | Summary, or the full loads as CSV. |
 | `DELETE /v1/timetables/{id}/loads/{name}` | Discard. |
-| `POST /v1/road/route` | One driving (or walking) route. |
-| `POST /v1/road/bulk` | Many road routes; results streamed. |
+| `POST /v1/road/route` | One driving route (car only; walking was not built, section 21). |
+| `POST /v1/road/table` | Driving times and distances from many starting points to many ends, in one answer. Replaced the streamed `POST /v1/road/bulk` first planned here (decision D17 of `docs/architecture/access-analysis.md`; section 21). |
+| `GET /route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…` | The editor's three road requests, in OSRM's own shape, at the root rather than under `/v1` (section 7.5; section 21). |
 
 ### 8.2 Single journey
 
@@ -905,3 +906,94 @@ Not the benchmark of section 10.2, which is phase 5. One bulk request each on th
 - A bulk request is answered while the caller waits. Jobs (submit, poll, download) are phase 8.
 - The Docker image is still not built or run.
 - One suspicion not followed up, in the search without loads: when a vehicle runs on twice in a row (three trips in one block), the search may offer staying aboard a trip the passenger could not have been on. The brute-force check has not caught it in 10,000 queries, and the weekday has no block of more than two trips.
+
+## 21. Phase 6 findings (road routing) (25 Nov 2026)
+
+Phase 6 is built for driving, as tickets AA-1 to AA-6 of the access analysis epic. The design is `docs/architecture/access-analysis.md` §3 (decisions D14 to D19 there).
+
+- **AA-1:** the `router-road` module. GraphHopper 11.1 embedded behind a small `RoadRouter` interface; car profile only, no turn costs, speed-up index on. Builds a graph from an `.osm.pbf` (`:router-road:roadImport`, writing `road-graph.json` beside it), opens it memory-mapped, plans one drive. A point more than 500 m from a drivable road gets `noRoad`.
+- **AA-2:** many drives at once (one speed-up-index drive per pair, spread over a pool of threads) and up to 3 other routes between two points.
+- **AA-3:** `POST /v1/road/route` and `POST /v1/road/table` on the router; `road` in `/v1/health`; the settings `ROUTER_ROAD` (`auto`, `on`, `off`, `only`), `ROUTER_ROAD_GRAPH`, `ROUTER_ROAD_SNAP_METRES` and `ROUTER_ROAD_TABLE_LIMIT`; the road-only process (`npm run router:road`, 512 MB heap). The main router's heap went from 768 MB to 1 GB.
+- **AA-4:** the editor's three road requests (`/route/v1/driving/…`, `/table/v1/driving/…`, `/nearest/v1/driving/…`) answered in OSRM's own shape, so `ROUTER_URL` can point at the router with no change to `roads.ts`.
+- **AA-5:** `npm run road:data`: cuts the Australia extract to the Opal area with osmium (in a small Docker image built from Debian's package) and builds the graph into `data/router/road/opal`, swapping it in only when the build succeeds.
+- **AA-6:** `npm run test:roads`, which sends the editor's requests, as `roads.ts` builds them, to `ROUTER_URL`.
+
+### How it was checked
+
+`npm run test:roads` against the main router with roads on (port 3102) and against the road-only process: 7 checks, all passing on both.
+
+```
+ok  ROUTER_URL names this machine (localhost)
+ok  route Mayfield to the city: 7.2 min, 5656 m, 168 points
+ok  route through three stops has a leg between each
+ok  route with alternatives=3: 2 route(s)
+ok  table of 5 points: 5 by 5 distances
+ok  nearest road to Mayfield: 151.73601, -32.89701
+ok  POST /v1/road/table 100 by 3: 300 values, 300 with a time
+```
+
+With the weekday timetable loaded beside the roads, `/v1/health` gave `"timetables": ["m1"]` and `"road": {"available": true, "builtFrom": "opal.osm.pbf", "mode": "on"}`.
+
+### Measured
+
+On the development machine (12 processor threads, 16 GB, about 3 GB free at the start), with VS Code and another developer agent working on TypeScript at the same time, so timings are rough. Working set and private bytes are from `Get-Process`; heap from `jcmd GC.heap_info`, committed / in use.
+
+**Building the road data** (`npm run road:data`, 25 Nov, 23:43):
+
+| Item | Measured | Estimate (§7.3; architecture §3.4) |
+|---|---|---|
+| Whole command | 166 s | |
+| Cut to the Opal area (osmium) | about 2 minutes | 2 to 5 minutes |
+| `data/osm/opal.osm.pbf` | 102,432,006 bytes (98 MB) | 150 to 300 MB |
+| Graph build | 31 s (`road-graph.json`); Gradle task 56 s in all | 5 to 15 minutes |
+| Memory while building | Java's working set peaked at about 2,075 MB; GraphHopper reported 1,566 MB heap, 757 MB in use | up to 2 GB heap (2 to 4 GB for NSW with walking) |
+| Graph on disk (`data/router/road/opal`) | 56 MB: 478,835 nodes, 578,309 edges, 383,759 shortcuts | 300 to 700 MB (0.5 to 1.5 GB for NSW with walking) |
+| Area covered | 150.0044, -34.7842 to 151.8595, -32.5221 | asked for 150.10, -34.75 to 151.85, -32.70; osmium keeps roads that cross the edge whole |
+
+**Serving.** The main router (`npm run router:dev`, 1 GB heap, `ROUTER_ROAD=on`) and the road-only process (`npm run router:road`, 512 MB heap). Each measured in this order: idle; after `test:roads`; after two 5,000 × 1 tables; for the main router, after loading the weekday timetable, then after a 5,000-journey bulk request; last, after a forced full garbage collection.
+
+| Moment | Main router: working set / private | Main router: heap | Road-only: working set / private | Road-only: heap |
+|---|---|---|---|---|
+| Idle, nothing loaded | 116 / 155 MB | 29 / 23 MB | 117 / 161 MB | 30 / 23 MB |
+| After `test:roads` | 127 / 165 MB | 31 / 23 MB | 150 / 184 MB | 32 / 22 MB |
+| After two 5,000 × 1 tables | 730 / 760 MB | 597 / 253 MB | 565 / 592 MB | 426 / 238 MB |
+| Weekday timetable loaded (3.2 s; 87 MB) | 734 / 763 MB | 613 / 267 MB | (refused: roads only) | |
+| After a 5,000-journey bulk request | 753 / 789 MB | 617 / 413 MB | | |
+| After a full garbage collection | 736 / 770 MB | 617 / 341 MB | 162 / 186 MB | 54 / 11 MB |
+| Highest working set seen | 762 MB | | 565 MB | |
+
+Free memory on the machine never went below about 1.9 GB.
+
+**One 5,000 × 1 table.** 5,000 starting points on a 100 × 50 grid over Newcastle (latitude -32.86 to -32.98, longitude 151.66 to 151.80) to Newcastle city centre (-32.9270, 151.7720), 10 threads:
+
+| Router | Run 1 (wall / router's own) | Run 2 |
+|---|---|---|
+| Main, roads only loaded | 1,157 / 1,017 ms | 1,026 / 980 ms |
+| Main, weekday timetable loaded too | 883 / 785 ms | 838 / 805 ms |
+| Road-only | 998 / 869 ms | 938 / 897 ms |
+
+3,918 points got a time (median 11.4 minutes, longest 42.4); 1,082 were more than 500 m from a road (the grid's east side is sea, harbour and the Kooragang wetlands), so got `null`. That is 5,000 to 6,000 drives a second, or about 2 ms per drive on each thread, as §7.3 expected.
+
+**For comparison, public transport (NFR-1).** The same 5,000 points to the same place, leaving at 08:00, as one `/v1/journeys/bulk` request on the weekday timetable, capacity `off`: 1,956 ms wall, 1.853 s in the router, 2,698 a second. 3,986 found a journey, 1,014 none (the same sea and wetland points, and points more than 1,200 m from a stop).
+
+### What this means for memory (NFR-2, A5)
+
+- **The graph is small and the heap is what matters.** At 56 MB the memory-mapped graph costs little file cache. The live heap is small too (341 MB with the weekday timetable and roads, 11 MB road-only), but a big table makes short-lived objects fast, and the garbage collector lets the heap grow to about 600 MB in the main router (430 MB road-only) before it tidies up. It gives the memory back to Windows only slowly, or not at all in the main router.
+- **The main router with roads on, at 1 GB, fits** beside the dev servers on this machine; the road-only process is not needed. The A5 fallback still works with no code change.
+- Not tried: a table near the 100,000-pair limit on the road-only process's 512 MB heap. The access analysis asks 1,000 pairs at a time (D22), so it will not meet that.
+
+### What differs from the plan
+
+- **The area is the Opal area, not NSW** (D18), and only the car profile is built, with no turn costs (D14). That is why the import took 31 s rather than several minutes, and the graph is 56 MB rather than 0.5 to 1.5 GB (§7.3).
+- **`/v1/road/table` replaced `/v1/road/bulk`** (§8.1, D17). It answers in one JSON object, not a stream: rows are starting points, columns ends, `null` where there is no way or no road.
+- **`/v1/road/route` takes no `depart` and no stop ids** (§8.4). It gives the free-flow time only; the access analysis is to apply its time-of-day factors (D34) in the API, not the router. It takes `via` points instead, and its answer gives the snap distances.
+- **The OSRM-shaped endpoints are at the root**, not under `/v1`, so that `roads.ts` works unchanged (D16).
+- **Up to 3 other routes are offered, not always 3.** Between Mayfield and the city, 3 were asked for and 2 came back: GraphHopper finds only those it judges different enough.
+- **`npm run router:road` ignores `ROUTER_PORT`.** The `runRoad` Gradle task sets `ROUTER_PORT=3003` itself, which overrides the one given, so the road-only process for these measurements ran on 3003, not the 3103 the ticket asked for. This needs a fix (use 3003 only when `ROUTER_PORT` is not set).
+
+### Not done in phase 6
+
+- **Avoiding an area** (§7.5): no "avoid this area" option yet, so `routedAround` in `roads.ts` still searches for a detour by trial.
+- **The foot profile**, and with it walking times for RAPTOR in place of straight lines (§7.5).
+- A time-of-day factor inside the router (§7.4); the access analysis will apply one in the API.
+- The owner's `.env` still names the public OSRM server. Pointing `ROUTER_URL` at `http://localhost:3002` is the owner's step.
