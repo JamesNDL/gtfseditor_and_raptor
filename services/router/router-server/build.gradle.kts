@@ -29,3 +29,6 @@ tasks.named<JavaExec>("run") {
 tasks.withType<Test>().configureEach {
     maxHeapSize = "512m"
 }
+
+// The road tests use router-road's hand-made map (mini-roads.osm) rather than a copy of it.
+the<SourceSetContainer>()["test"].resources.srcDir(project(":router-road").file("src/test/resources"))
