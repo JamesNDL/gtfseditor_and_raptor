@@ -1,7 +1,8 @@
 // End-to-end check of the access analysis API against a running API (FR-4, FR-5): zones and points
 // of interest saved, listed, renamed, moved and deleted, and bad bodies refused with plain-English
 // messages; then analysis-runs.e2e.mjs (making and running analyses), analysis-pairs.e2e.mjs (what
-// a run stores) and analysis-progress.e2e.mjs (progress, cancel and restart). Run by
+// a run stores), analysis-progress.e2e.mjs (progress, cancel and restart) and
+// analysis-results.e2e.mjs (the reads behind the results map). Run by
 // `npm run test:e2e:fixture`, which passes API, DATABASE_URL and FAKE_ROUTER.
 // Usage: node apps/api/test/analysis.e2e.mjs   (needs an API with the 0010 migration run)
 import assert from 'node:assert/strict';
@@ -212,5 +213,8 @@ await import('./analysis-runs.e2e.mjs');
 // ---- runs: what each pair stores, progress, cancel and restart (AA-15) ------------------------
 await import('./analysis-pairs.e2e.mjs');
 await import('./analysis-progress.e2e.mjs');
+
+// ---- the reads behind the results map (AA-16) ---------------------------------------------------
+await import('./analysis-results.e2e.mjs');
 
 console.log('all analysis checks passed');
