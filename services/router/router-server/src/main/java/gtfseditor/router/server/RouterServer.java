@@ -113,6 +113,11 @@ public final class RouterServer implements AutoCloseable {
             config.routes.get("/v1/simulations/{id}/files/{name}", this::simulationFile);
             config.routes.delete("/v1/simulations/{id}", this::deleteSimulation);
             road.register(config.routes);
+            OsrmApi osrm = new OsrmApi(road);
+            config.routes.get("/route/v1/driving/{coordinates}", osrm::route);
+            config.routes.get("/table/v1/driving/{coordinates}", osrm::table);
+            config.routes.get("/nearest/v1/driving/{coordinates}", osrm::nearest);
+            config.jetty.modifyHttpConfiguration(http -> http.setRequestHeaderSize(OsrmApi.REQUEST_BYTES));
             config.routes.exception(ApiException.class,
                     (e, ctx) -> ctx.status(e.status()).json(error(e.getMessage())));
             config.routes.exception(JsonProcessingException.class,
