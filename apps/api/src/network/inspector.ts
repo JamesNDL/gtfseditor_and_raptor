@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@gtfs-editor/gtfs/db';
 import { int, notFound } from '../http.ts';
-import { scenarioOf, visible } from '../scenarios/scenarios.ts';
+import { scenarioOf, visible } from '../scenarios/engine.ts';
 
 export function registerInspectorRoutes(app: FastifyInstance, sql: Sql) {
   // ---------------------------------------------------------------------------

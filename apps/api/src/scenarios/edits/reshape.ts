@@ -30,8 +30,8 @@ import {
   type Avoid,
   type PathMethod,
 } from '../../routing/roads.ts';
-import { visible, type Scenario } from '../scenarios.ts';
-import { stopVisible } from '../stops.ts';
+import { visible, type Scenario } from '../engine.ts';
+import { stopVisible } from '../stops-visible.ts';
 import { describeTimes, sectionTime, stopDwell, type SectionTime } from '../../routing/timings.ts';
 import { fail } from '../../http.ts';
 
