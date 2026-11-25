@@ -62,7 +62,8 @@ Status is **existing** for everything listed unless marked otherwise. Issues fou
 | `src/scenarios/edits/` one file per kind | `set-vehicle.ts`, `create-line.ts`, `line-frequency.ts`, `set-vehicle-type.ts`, `shift.ts`, `delete.ts`, `delete-line.ts`, `duplicate.ts`, `skip-stop.ts`, `headway.ts`, `add-stop.ts`, `set-platform.ts`, `replan.ts`, `move-to-vehicle.ts`, `add-trip.ts`, `add-call.ts`: each holds `editX` and its exported body type | engine, vehicles, describe, wording, platforms, stops-visible, assumptions | the kind's `editX` | e2e |
 | `src/scenarios/edits/assumptions.ts`, `deps.ts` | `SKIP_PENALTY` and `NEW_LINE`, figures assumed where the timetable has nothing to learn from; the helpers handed to closures and deleting a stop (`closureDeps`, `deleteStopDeps`) | engine, vehicles, clashes, reshape | `deps.ts` | e2e |
 | `src/scenarios/edits/reshape.ts` | `reshape` edits (`editReshape`, `ReshapeBody`), and reshape planning and applying (`planReshape`, `applyReshape`), also used by closures and the preview | routing, core/edits/reshape | `planReshape` | `core/edits/reshape.test.ts`, e2e |
-| `src/scenarios/edits/closure.ts` | `close` edits: whole line, drawn cut, road, part of the day | reshape | `planClosure` | e2e |
+| `src/scenarios/edits/closure.ts` | `close` edits (`editClose`): whole line, drawn cut, road, part of the day. Re-exports `CloseBody` and `ClosureDeps` | reshape, closure/ | `editClose` | e2e |
+| `src/scenarios/edits/closure/` | The closure's parts: `plan.ts` (`planClosure`: the closed area, the lines that cross it, and what happens to each; over 300 lines until it is split in a later ticket), `routes.ts` (`closureRoutes`: the preview and the closures a scenario has made), `types.ts` (`CloseBody`, `ClosureDeps` and the plan's types), `wording.ts` (names, times and counts in the label and summary) | reshape, routing, engine | `planClosure` | e2e |
 | `src/scenarios/edits/delete-stop.ts` | `deleteStop` edits and the preview | core/edits/delete-stop | `planDeleteStop` | `core/edits/delete-stop.test.ts`, e2e |
 | `src/routing/roads.ts` | Road paths through OSRM (`ROUTER_URL`), including getting round a closure (`routedAround`) | outside OSRM | `roadPath` | e2e |
 | `src/routing/tracks.ts` | Train, tram and ferry paths over an in-memory station-link graph built from published patterns | database | `trackPath` | e2e |
@@ -222,6 +223,7 @@ apps/api/src/
       create-line.ts, line-frequency.ts, reshape.ts, set-vehicle.ts, set-vehicle-type.ts,
       shift.ts, delete.ts, delete-line.ts, duplicate.ts, skip-stop.ts, headway.ts,
       add-stop.ts (from stops.ts), delete-stop.ts, closure.ts (from closures.ts),
+      closure/ (plan.ts, routes.ts, types.ts, wording.ts),
       set-platform.ts, replan.ts, move-to-vehicle.ts, add-trip.ts, add-call.ts (from schedule.ts)
   catalogue/        routes.ts: the vehicle catalogue routes (was fleet.ts)
   export/           routes.ts (was export.ts)
