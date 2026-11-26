@@ -1,11 +1,14 @@
 // The setup's zone (FR-4, AC-FR-4.1): the saved zones to pick from, rename or delete. Zones are
 // drawn and reshaped on the map with the tool bar (D36). Zones belong to no day, so the same list
-// shows on every day (D25).
-import { useEffect } from 'react';
+// shows on every day (D25); it shows those near the map's view and the picked one (D41).
+import { useEffect, useState } from 'react';
 import { useStore } from '../../app/store.ts';
 import { deleteZone, refreshZones, renameZone, usePlaces } from '../analysis-api.ts';
 import { forgetZone, pickZone } from '../analysis-state.ts';
 import { isMapBusy } from '../map-work.ts';
+import { useMapBounds } from '../../shared/map-bounds.ts';
+import { HiddenPlaces } from './HiddenPlaces.tsx';
+import { nearbyZones } from './nearby-places.ts';
 import { PlaceRow } from './PlaceRow.tsx';
 
 const showError = (e: Error): void => usePlaces.setState({ zoneError: e.message });
@@ -17,6 +20,9 @@ export function ZonePicker() {
   const busy = useStore((s) => isMapBusy(s.analysis.work));
   const set = useStore((s) => s.set);
   const view = () => useStore.getState().analysis;
+  const bounds = useMapBounds((s) => s.bounds);
+  const [showAll, setShowAll] = useState(false);
+  const { shown, hidden } = nearbyZones(zones ?? [], bounds, zoneId, showAll);
 
   useEffect(() => {
     usePlaces.setState({ zoneError: null });
@@ -29,9 +35,9 @@ export function ZonePicker() {
       {error && <p className="error-text small">{error}</p>}
       {zones === null ? (
         <p className="muted small">Loading the zones…</p>
-      ) : zones.length > 0 ? (
+      ) : shown.length > 0 ? (
         <ul className="analysis-places">
-          {zones.map((zone) => (
+          {shown.map((zone) => (
             <PlaceRow
               key={zone.id}
               name={zone.name}
@@ -50,6 +56,13 @@ export function ZonePicker() {
           ))}
         </ul>
       ) : null}
+      <HiddenPlaces
+        hidden={hidden}
+        one="zone"
+        many="zones"
+        showAll={showAll}
+        onToggle={() => setShowAll(!showAll)}
+      />
       <p className="muted small analysis-map-hint">
         {zones?.length === 0 ? 'No zones yet. ' : ''}Use Draw zone (Z) on the map to draw one round
         the area to analyse. Drag a picked zone's corners to reshape it.

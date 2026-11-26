@@ -4,7 +4,7 @@
 |---|---|
 | Date | 25 Nov 2026 |
 | Status | **Approved** (the owner asked for it to be taken as approved, 25 Nov 2026) |
-| Version | 1.1 |
+| Version | 1.2 |
 | Owner | Project owner |
 | Source | The owner's description and answers, 25 Nov 2026 |
 
@@ -41,6 +41,7 @@
 | 0.1 | 25 Nov 2026 | Created from the owner's description and four rounds of questions | New feature | FR-1 to FR-20, NFR-1 to NFR-6 added | |
 | 1.0 | 25 Nov 2026 | Approved as written; Q1, Q2 and A5, A7 taken as stated | The owner asked for it to be taken as approved and built overnight | none | Owner |
 | 1.1 | 26 Nov 2026 | Arrive-by added (FR-21), with a backward search in the journey router and the early wait counted; drawing and editing on the map made editor-like (tool bar, name box on the map, drag to move and reshape); basemap choice added (FR-22) | The owner's first hands-on check: "If I want to arrive at Westfield for work at 8"; drawing "doesn't feel right"; the map "doesn't let me see where certain buildings are" | FR-21, FR-22 added; FR-4, FR-5, FR-6, FR-9, FR-11, FR-15 changed | Owner |
+| 1.2 | 26 Nov 2026 | The setup lists only the saved zones and points of interest near where the map is looking, plus the ones picked; the rest are a Show all away | The owner: "I don't need Newcastle points and zones in my Dee Why analysis" | FR-4, FR-5 changed; AC-FR-4.4 added | Owner |
 
 ---
 
@@ -83,7 +84,7 @@ The project owner, for their own planning and for maps and figures that go into 
 
 **Zones and points of interest**
 
-- **FR-4 A zone can be drawn, named, saved and reused.** The owner picks the zone tool from a tool bar on the map, clicks the corners, finishes the outline, and names it in a box that appears on the map above it. It can be picked again for later analyses. A zone can be renamed, reshaped by dragging its corners, and deleted. Reshaping a zone changes no analysis already run (each keeps its own copy).
+- **FR-4 A zone can be drawn, named, saved and reused.** The owner picks the zone tool from a tool bar on the map, clicks the corners, finishes the outline, and names it in a box that appears on the map above it. It can be picked again for later analyses. A zone can be renamed, reshaped by dragging its corners, and deleted. Reshaping a zone changes no analysis already run (each keeps its own copy). The setup lists the saved zones and points of interest near where the map is looking, plus any already picked; the others are left out of the list until the owner asks to show all.
 - **FR-5 Points of interest can be placed, named, saved and reused.** The owner picks the point tool from the tool bar on the map, clicks the map to place a point of interest, and names it in a box that appears on the map above it. Points of interest are saved and can be picked for later analyses, moved, renamed and deleted. A point of interest may lie outside the zone.
 
 **Running an analysis**
@@ -187,6 +188,7 @@ Success:
 - **AC-FR-21.2** Given the same sample point, point of interest and timetable, then the arrive-by journey found leaves no earlier than a depart-at search would need to arrive by 08:00 (no later departure arrives in time).
 - **AC-FR-21.3** Given an arrive-by analysis, then its settings, legend, export and comparison say "arrive by" and the time, and an arrive-by analysis and a depart-at analysis are not offered for comparison as if they were alike without saying so.
 - **AC-FR-22.1** Given the map, when Streets, Satellite, Dark or Light is chosen, then the basemap changes, the network and analysis layers stay on top, the credit changes, and the choice is kept after a reload.
+- **AC-FR-4.4** Given saved zones and points of interest around Newcastle and the map looking at Dee Why, when a new analysis is set up, then the lists show only those around Dee Why with a count of the others, and Show all lists every one.
 - **AC-FR-4.3** Given a saved zone, when a corner is dragged, then the zone's outline is saved with the new corner, and analyses already run keep their old outline.
 - **AC-NFR-1.1** Given 5,000 sample points and 3 points of interest on the development machine, then the analysis finishes within 5 minutes.
 - **AC-NFR-3.1** Given settings that would make 10,001 sample points, then Run is refused with the reason.

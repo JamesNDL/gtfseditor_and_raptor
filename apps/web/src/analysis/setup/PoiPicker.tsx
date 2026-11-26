@@ -1,11 +1,15 @@
 // The setup's points of interest (FR-5, AC-FR-5.1): the saved ones to tick, rename or delete.
 // They are placed, moved and renamed on the map with the tool bar (D36). Points of interest
-// belong to no day (D25) and may lie outside the zone.
-import { useEffect } from 'react';
+// belong to no day (D25) and may lie outside the zone. The list shows those near the map's view
+// and the picked ones (D41).
+import { useEffect, useState } from 'react';
 import { useStore } from '../../app/store.ts';
 import { deletePoi, refreshPois, renamePoi, usePlaces } from '../analysis-api.ts';
 import { forgetPoi, togglePoi } from '../analysis-state.ts';
 import { isMapBusy } from '../map-work.ts';
+import { useMapBounds } from '../../shared/map-bounds.ts';
+import { HiddenPlaces } from './HiddenPlaces.tsx';
+import { nearbyPois } from './nearby-places.ts';
 import { PlaceRow } from './PlaceRow.tsx';
 
 const showError = (e: Error): void => usePlaces.setState({ poiError: e.message });
@@ -17,6 +21,9 @@ export function PoiPicker() {
   const busy = useStore((s) => isMapBusy(s.analysis.work));
   const set = useStore((s) => s.set);
   const view = () => useStore.getState().analysis;
+  const bounds = useMapBounds((s) => s.bounds);
+  const [showAll, setShowAll] = useState(false);
+  const { shown, hidden } = nearbyPois(pois ?? [], bounds, poiIds, showAll);
 
   useEffect(() => {
     usePlaces.setState({ poiError: null });
@@ -29,9 +36,9 @@ export function PoiPicker() {
       {error && <p className="error-text small">{error}</p>}
       {pois === null ? (
         <p className="muted small">Loading the points of interest…</p>
-      ) : pois.length > 0 ? (
+      ) : shown.length > 0 ? (
         <ul className="analysis-places">
-          {pois.map((poi) => (
+          {shown.map((poi) => (
             <PlaceRow
               key={poi.id}
               name={poi.name}
@@ -50,6 +57,13 @@ export function PoiPicker() {
           ))}
         </ul>
       ) : null}
+      <HiddenPlaces
+        hidden={hidden}
+        one="point of interest"
+        many="points of interest"
+        showAll={showAll}
+        onToggle={() => setShowAll(!showAll)}
+      />
       <p className="muted small analysis-map-hint">
         {pois?.length === 0 ? 'No points of interest yet. ' : ''}Use Place point of interest (P) on
         the map to add the places people travel to, such as a hospital. Drag a pin to move it.
