@@ -14,6 +14,7 @@ import {
   togglePart,
 } from '../editing/builder.ts';
 import { clock } from '../shared/clock.ts';
+import { useMapBounds } from '../shared/map-bounds.ts';
 import { SIDE_COLORS, useStore } from '../app/store.ts';
 import { fmt } from '../shared/ui/parts.tsx';
 import { loadTripLoads, peakText, stepAt, stepColor, stepLabel, tripLoads } from '../sim/loads.ts';
@@ -161,6 +162,9 @@ export function MapView({ onVehicleCount }: Props) {
         north: b.getNorth(),
         east: b.getEast(),
       };
+      // The Access pane lists the saved places near what is on screen (D41).
+      const { south, west, north, east } = mapView.bounds;
+      useMapBounds.setState({ bounds: { south, west, north, east } });
     };
     map.on('moveend', noteBounds);
     map.once('load', noteBounds);
@@ -1178,11 +1182,16 @@ export function MapView({ onVehicleCount }: Props) {
 
   // While a line is being closed or its route changed, the rest of the network fades into the
   // background: grey and faint, with its vehicles barely there. What is being edited keeps its colours.
+  // The same happens while an access analysis shows one sample point's journey, so its route stands
+  // out in busy areas.
   const editing = useStore(
     (s) =>
       s.closing !== null ||
       (s.builder !== null && !!s.builder.reshape) ||
-      (s.simRunId !== null && s.simMap.layer !== 'none'),
+      (s.simRunId !== null && s.simMap.layer !== 'none') ||
+      (s.leftPane === 'analysis' &&
+        s.analysis.screen === 'results' &&
+        s.analysis.pointSeq !== null),
   );
   useEffect(() => {
     const map = mapRef.current;
